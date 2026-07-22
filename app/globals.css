@@ -127,6 +127,15 @@ h1 em, .analyzer h2 em { color: var(--lime); font-style: normal; }
 .photo-area button small { color: #9db0c5; }
 .camera-icon { width: 76px; height: 55px; display: grid; place-items: center; border: 2px solid var(--lime); border-radius: 13px; color: var(--lime); font-size: 13px; font-weight: 950; letter-spacing: .08em; }
 .photo-area img { width: 100%; height: 100%; min-height: 430px; max-height: 600px; object-fit: contain; background: #061525; }
+.photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.photo-slot { position: relative; min-height: 330px; border-radius: 14px; background: var(--navy); overflow: hidden; display: grid; place-items: center; }
+.photo-slot img { width: 100%; height: 330px; object-fit: contain; background: #061525; }
+.photo-side { position: absolute; z-index: 3; top: 14px; left: 14px; padding: 7px 9px; border-radius: 7px; background: rgba(3,13,25,.84); color: white; font-size: 10px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+.add-photo { border: 0; background: transparent; color: white; display: grid; justify-items: center; gap: 8px; padding: 45px 18px 20px; position: relative; z-index: 1; }
+.add-photo b { font-size: 17px; text-transform: capitalize; }
+.add-photo small { color: #9db0c5; }
+.change-photo { position: absolute; z-index: 3; right: 12px; bottom: 12px; padding: 9px 11px; border: 0; border-radius: 7px; background: white; color: var(--navy); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.photo-requirement { margin: 3px 0; padding: 11px 13px; border-radius: 9px; background: #fff7dc; color: #60470c; font-size: 12px; line-height: 1.45; }
 .scan-corner { position: absolute; width: 42px; height: 42px; border-color: var(--lime); border-style: solid; z-index: 2; }
 .top-left { top: 22px; left: 22px; border-width: 3px 0 0 3px; }
 .top-right { top: 22px; right: 22px; border-width: 3px 3px 0 0; }
@@ -144,7 +153,12 @@ h1 em, .analyzer h2 em { color: var(--lime); font-style: normal; }
 .report-score span { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
 .report-score b { font-size: 42px; letter-spacing: -.06em; }
 .report-score small { font-size: 14px; }
+.report-rejected-mark { border-radius: 14px; padding: 18px; background: #fff0ea; color: #8d2b19; display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+.report-rejected-mark b { font-size: 20px; text-transform: uppercase; }
+.report-rejected-mark span { font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.report-card.rejected { border: 2px solid #ef9b85; }
 .report-copy > p:not(.kicker) { color: var(--muted); line-height: 1.55; }
+.observations { grid-column: 1 / -1; margin: 0; padding: 15px 18px 15px 34px; border-radius: 10px; background: #eef6ff; color: #163858; font-size: 13px; line-height: 1.55; }
 .report-card ol { grid-column: 1 / -1; list-style: none; padding: 0; margin: 0; }
 .report-card li { display: grid; grid-template-columns: 45px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); line-height: 1.45; }
 .report-card li span { color: var(--blue); font-weight: 950; }
@@ -185,6 +199,7 @@ footer p { color: #91a6bc; font-size: 12px; font-weight: 800; text-transform: up
 .height-input { display: flex; align-items: center; border: 2px solid var(--navy); border-radius: 12px; overflow: hidden; }
 .height-input input { width: 100%; min-height: 60px; border: 0; padding: 0 16px; outline: 0; color: var(--navy); font-size: 27px; font-weight: 900; }
 .height-input span { padding-right: 18px; color: var(--muted); font-size: 13px; font-weight: 850; }
+.height-help { margin: 7px 2px 14px; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .measure-display { margin: 25px 0 12px; padding: 27px 22px; border-radius: 15px; background: var(--navy); color: white; text-align: center; overflow: hidden; }
 .measure-display b { display: block; margin: 20px 0 10px; color: var(--lime); font-size: 62px; letter-spacing: -.07em; }
 .measure-display b small { font-size: 19px; letter-spacing: 0; }
@@ -210,6 +225,7 @@ footer p { color: #91a6bc; font-size: 12px; font-weight: 800; text-transform: up
 .manual-distance input { width: 100%; min-height: 64px; border: 2px solid var(--navy); border-radius: 11px; padding: 0 15px; color: var(--navy); font-size: 28px; font-weight: 900; outline: 0; }
 .source-modal { display: grid; gap: 12px; }
 .source-modal h2 { margin-bottom: 10px; }
+.source-help { margin: -2px 0 8px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .source-choice { width: 100%; border: 1px solid var(--line); border-radius: 13px; padding: 17px; background: white; display: grid; grid-template-columns: 58px 1fr; column-gap: 15px; align-items: center; text-align: left; }
 .source-choice:hover { border-color: var(--blue); background: #f5f8ff; }
 .source-choice > span { grid-row: 1 / 3; width: 54px; height: 48px; display: grid; place-items: center; border-radius: 9px; background: var(--navy); color: var(--lime); font-size: 11px; font-weight: 950; letter-spacing: .08em; }
@@ -262,6 +278,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .throw-list small { display: none; }
   .card-title { align-items: center; }
   .photo-area, .photo-area img { min-height: 330px; }
+  .photo-grid { grid-template-columns: 1fr; }
+  .photo-slot, .photo-slot img { min-height: 300px; height: 300px; }
   .report-card { grid-template-columns: 1fr; padding: 22px; }
   .report-score { min-height: 125px; }
   .install-section { padding: 64px 20px; gap: 30px; }

@@ -37,4 +37,18 @@ test("includes all three browser-friendly measuring tools", async () => {
   assert.match(page, /Allow location & set launch point/);
   assert.match(page, /error\.PERMISSION_DENIED/);
   assert.match(page, /error\.TIMEOUT/);
+  assert.match(page, /heightDraft/);
+  assert.match(page, /You can erase the current number and type any height/);
+});
+
+test("requires two airplane photos and can reject invalid images", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /top photo/);
+  assert.match(page, /bottom photo/);
+  assert.match(page, /inspectPlanePhoto/);
+  assert.match(page, /I can’t verify a paper airplane/);
+  assert.match(page, /Non-airplane photos will be rejected instead of scored/);
+  assert.match(page, /It wobbles side to side/);
+  assert.match(page, /It spirals or corkscrews/);
+  assert.doesNotMatch(page, /Math\.max\(55/);
 });

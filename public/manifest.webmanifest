@@ -8,10 +8,10 @@
   "theme_color": "#091d36",
   "icons": [
     {
-      "src": "/flight-lab-icon.png",
+      "src": "/flight-lab-icon-v2.png",
       "sizes": "1024x1024",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

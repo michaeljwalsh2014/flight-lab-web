@@ -5,10 +5,22 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type PlaneRecord = { id: number; name: string; createdAt: string };
 type ThrowRecord = { id: number; planeId: number; distance: number; createdAt: string };
-type FlightBehavior = "straight" | "dives" | "stalls" | "left" | "right";
+type FlightBehavior = "straight" | "dives" | "stalls" | "left" | "right" | "wobbles" | "spirals" | "short" | "flips";
 type MeasureStage = "ready" | "locating" | "walking";
 type MeasureMethod = "choose" | "pace" | "gps" | "manual";
-type PhotoReport = { symmetry: number; headline: string; detail: string; steps: string[] };
+type PhotoSide = "top" | "bottom";
+type PlanePhoto = { url: string; name: string };
+type ImageSignals = {
+  recognizable: boolean;
+  reason: string;
+  symmetry: number;
+  outline: number;
+  foldVisibility: number;
+  texture: number;
+};
+type PhotoReport =
+  | { kind: "rejected"; headline: string; detail: string; steps: string[] }
+  | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[] };
 
 const behaviorTips: Record<FlightBehavior, string> = {
   straight: "Your flight is stable. Make one small change at a time, then test it with three throws.",
@@ -16,7 +28,139 @@ const behaviorTips: Record<FlightBehavior, string> = {
   stalls: "Flatten the rear wing edges a little or add a tiny paper clip to the nose to move weight forward.",
   left: "Line up both wings, then bend the left rear edge down a tiny amount to correct the turn.",
   right: "Line up both wings, then bend the right rear edge down a tiny amount to correct the turn.",
+  wobbles: "Check that both wings are equally stiff and that the center crease is sharp from nose to tail.",
+  spirals: "Flatten both wings, then make sure one wingtip is not curled more than the other.",
+  short: "Open the wings slightly wider and use a smooth, level release instead of throwing harder.",
+  flips: "Add a tiny bit of nose weight or flatten any upturned rear edges before the next test.",
 };
+
+const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
+
+function inspectPlanePhoto(url: string) {
+  return new Promise<ImageSignals>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const size = 160;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return reject(new Error("Photo analysis is unavailable in this browser."));
+
+      const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+      const width = image.naturalWidth * scale;
+      const height = image.naturalHeight * scale;
+      context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+      const pixels = context.getImageData(0, 0, size, size).data;
+      const luminance = new Float32Array(size * size);
+      const border: number[][] = [];
+
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const index = (y * size + x) * 4;
+        const red = pixels[index];
+        const green = pixels[index + 1];
+        const blue = pixels[index + 2];
+        luminance[y * size + x] = red * .299 + green * .587 + blue * .114;
+        if (x < 7 || x >= size - 7 || y < 7 || y >= size - 7) border.push([red, green, blue]);
+      }
+
+      const background = [0, 1, 2].map((channel) => border.reduce((sum, pixel) => sum + pixel[channel], 0) / border.length);
+      const backgroundNoise = Math.sqrt(border.reduce((sum, pixel) => {
+        const distance = Math.hypot(pixel[0] - background[0], pixel[1] - background[1], pixel[2] - background[2]);
+        return sum + distance * distance;
+      }, 0) / border.length);
+      const threshold = clamp(backgroundNoise * 1.35 + 32, 34, 92);
+      const mask = new Uint8Array(size * size);
+      let foreground = 0;
+      let minX = size;
+      let maxX = 0;
+      let minY = size;
+      let maxY = 0;
+
+      for (let y = 5; y < size - 5; y++) for (let x = 5; x < size - 5; x++) {
+        const index = (y * size + x) * 4;
+        const distance = Math.hypot(pixels[index] - background[0], pixels[index + 1] - background[1], pixels[index + 2] - background[2]);
+        if (distance > threshold) {
+          mask[y * size + x] = 1;
+          foreground++;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      }
+
+      const coverage = foreground / (size * size);
+      if (!foreground || coverage < .035 || coverage > .72) {
+        return resolve({ recognizable: false, reason: "I could not separate one plane from the background. Put it on a plain, contrasting surface with the whole outline visible.", symmetry: 0, outline: 0, foldVisibility: 0, texture: 100 });
+      }
+
+      const boxWidth = Math.max(1, maxX - minX + 1);
+      const boxHeight = Math.max(1, maxY - minY + 1);
+      const centerX = (minX + maxX) / 2;
+      const halfWidth = Math.floor(boxWidth / 2);
+      let mismatches = 0;
+      let compared = 0;
+      for (let y = minY; y <= maxY; y++) for (let offset = 0; offset <= halfWidth; offset++) {
+        const left = Math.round(centerX - offset);
+        const right = Math.round(centerX + offset);
+        if (left < 0 || right >= size) continue;
+        const leftMask = mask[y * size + left];
+        const rightMask = mask[y * size + right];
+        if (leftMask || rightMask) {
+          compared++;
+          if (leftMask !== rightMask) mismatches++;
+        }
+      }
+      const symmetry = Math.round(clamp(100 - (mismatches / Math.max(1, compared)) * 100, 0, 100));
+
+      const rowWidth = (from: number, to: number) => {
+        let total = 0;
+        let rows = 0;
+        for (let y = Math.round(from); y <= Math.round(to); y++) {
+          let count = 0;
+          for (let x = minX; x <= maxX; x++) count += mask[y * size + x];
+          total += count;
+          rows++;
+        }
+        return total / Math.max(1, rows);
+      };
+      const topWidth = rowWidth(minY, minY + boxHeight * .22);
+      const wingWidth = rowWidth(minY + boxHeight * .38, minY + boxHeight * .78);
+      const taper = clamp((wingWidth - topWidth) / boxWidth, 0, 1);
+      const aspect = boxWidth / boxHeight;
+      const aspectSignal = 1 - clamp(Math.abs(aspect - 1.05) / 1.05, 0, 1);
+      const outline = Math.round(clamp(taper * 115 + aspectSignal * 28, 0, 100));
+
+      let textureTotal = 0;
+      let textureSamples = 0;
+      let foldTotal = 0;
+      let foldSamples = 0;
+      for (let y = minY + 1; y < maxY; y++) for (let x = minX + 1; x < maxX; x++) {
+        const position = y * size + x;
+        if (!mask[position]) continue;
+        textureTotal += Math.abs(luminance[position] - luminance[position - 1]) + Math.abs(luminance[position] - luminance[position - size]);
+        textureSamples += 2;
+        if (Math.abs(x - centerX) <= 2) {
+          const wingOffset = Math.max(5, Math.round(boxWidth * .16));
+          const left = luminance[y * size + clamp(Math.round(centerX - wingOffset), 0, size - 1)];
+          const right = luminance[y * size + clamp(Math.round(centerX + wingOffset), 0, size - 1)];
+          foldTotal += Math.abs(luminance[position] - (left + right) / 2);
+          foldSamples++;
+        }
+      }
+      const texture = Math.round(clamp((textureTotal / Math.max(1, textureSamples)) / 255 * 100, 0, 100));
+      const foldVisibility = Math.round(clamp((foldTotal / Math.max(1, foldSamples)) / 55 * 100, 0, 100));
+      const recognizable = symmetry >= 42 && outline >= 38 && texture <= 31 && aspect >= .55 && aspect <= 2.05;
+      let reason = "The pointed nose and two-wing outline are visible.";
+      if (symmetry < 42 || outline < 38 || aspect < .55 || aspect > 2.05) reason = "This does not have the centered pointed nose and two-wing outline I expect from a paper airplane.";
+      else if (texture > 31) reason = "This looks too textured or visually busy to verify as folded paper. Use a plain surface and even light.";
+      resolve({ recognizable, reason, symmetry, outline, foldVisibility, texture });
+    };
+    image.onerror = () => reject(new Error("I could not read that photo. Try taking it again."));
+    image.src = url;
+  });
+}
 
 function distanceInFeet(start: GeolocationCoordinates, end: GeolocationCoordinates) {
   const radians = (degrees: number) => (degrees * Math.PI) / 180;
@@ -43,13 +187,14 @@ export default function Home() {
   const [locationDenied, setLocationDenied] = useState(false);
   const [measureError, setMeasureError] = useState("");
   const [heightInches, setHeightInches] = useState(60);
+  const [heightDraft, setHeightDraft] = useState("60");
   const [stepCount, setStepCount] = useState(0);
   const [motionCounterOn, setMotionCounterOn] = useState(false);
   const [manualFeet, setManualFeet] = useState("");
   const [manualInches, setManualInches] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoName, setPhotoName] = useState("");
+  const [photoTarget, setPhotoTarget] = useState<PhotoSide>("top");
+  const [photos, setPhotos] = useState<Record<PhotoSide, PlanePhoto | null>>({ top: null, bottom: null });
   const [behavior, setBehavior] = useState<FlightBehavior>("straight");
   const [report, setReport] = useState<PhotoReport | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -60,6 +205,7 @@ export default function Home() {
   const lastStepAt = useRef(0);
   const motionArmed = useRef(true);
   const motionListener = useRef<((event: DeviceMotionEvent) => void) | null>(null);
+  const photoUrls = useRef(new Set<string>());
   const strideFeet = Math.max(1.25, Math.min(3.25, heightInches * 0.413 / 12));
 
   useEffect(() => {
@@ -71,7 +217,10 @@ export default function Home() {
         setThrows(savedThrows);
         setActivePlaneId(savedPlanes[0]?.id ?? null);
         const savedHeight = Number(window.localStorage.getItem("flight-lab-v3-height"));
-        if (savedHeight >= 36 && savedHeight <= 96) setHeightInches(savedHeight);
+        if (savedHeight >= 36 && savedHeight <= 96) {
+          setHeightInches(savedHeight);
+          setHeightDraft(String(savedHeight));
+        }
       } catch {
         window.localStorage.removeItem("flight-lab-v2-planes");
         window.localStorage.removeItem("flight-lab-v2-throws");
@@ -86,8 +235,8 @@ export default function Home() {
   useEffect(() => () => {
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
     if (motionListener.current) window.removeEventListener("devicemotion", motionListener.current);
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-  }, [photoUrl]);
+    photoUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = useMemo(() => throws.filter((item) => item.planeId === activePlaneId), [throws, activePlaneId]);
@@ -266,53 +415,93 @@ export default function Home() {
     saveMeasurement(total);
   }
 
+  function updateHeightDraft(value: string) {
+    setHeightDraft(value);
+    const nextHeight = Number(value);
+    if (nextHeight >= 36 && nextHeight <= 96) setHeightInches(nextHeight);
+  }
+
+  function commitHeight() {
+    const nextHeight = clamp(Number(heightDraft) || heightInches, 36, 96);
+    setHeightInches(nextHeight);
+    setHeightDraft(String(nextHeight));
+  }
+
+  function openPhotoSource(side: PhotoSide) {
+    setPhotoTarget(side);
+    setSourceOpen(true);
+  }
+
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-    setPhotoUrl(URL.createObjectURL(file));
-    setPhotoName(file.name || "New plane photo");
+    const current = photos[photoTarget];
+    if (current) {
+      URL.revokeObjectURL(current.url);
+      photoUrls.current.delete(current.url);
+    }
+    const url = URL.createObjectURL(file);
+    photoUrls.current.add(url);
+    setPhotos((previous) => ({ ...previous, [photoTarget]: { url, name: file.name || `${photoTarget} view` } }));
     setReport(null);
     setSourceOpen(false);
+    event.target.value = "";
   }
 
   async function analyzePhoto() {
-    if (!photoUrl) { setSourceOpen(true); return; }
+    if (!photos.top) { openPhotoSource("top"); return; }
+    if (!photos.bottom) { openPhotoSource("bottom"); return; }
     setAnalyzing(true);
-    const symmetry = await new Promise<number>((resolve) => {
-      const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 96;
-        canvas.height = 96;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        if (!context) return resolve(82);
-        context.drawImage(image, 0, 0, 96, 96);
-        const pixels = context.getImageData(0, 0, 96, 96).data;
-        let difference = 0;
-        let samples = 0;
-        for (let y = 10; y < 86; y += 2) for (let x = 7; x < 48; x += 2) {
-          const left = (y * 96 + x) * 4;
-          const right = (y * 96 + (95 - x)) * 4;
-          const leftLight = pixels[left] * .3 + pixels[left + 1] * .59 + pixels[left + 2] * .11;
-          const rightLight = pixels[right] * .3 + pixels[right + 1] * .59 + pixels[right + 2] * .11;
-          difference += Math.abs(leftLight - rightLight);
-          samples++;
-        }
-        resolve(Math.max(55, Math.min(96, Math.round(100 - (difference / samples) * .38))));
-      };
-      image.onerror = () => resolve(82);
-      image.src = photoUrl;
-    });
-    await new Promise((resolve) => window.setTimeout(resolve, 650));
-    const balanced = symmetry >= 78;
-    setReport({
-      symmetry,
-      headline: balanced ? "Strong wing balance" : "Fold alignment needs attention",
-      detail: balanced ? "The left and right sides look visually consistent in this photo." : "The photo shows a noticeable left-to-right difference. Re-crease the center fold and compare both wing edges.",
-      steps: [behaviorTips[behavior], balanced ? "Try widening both wings by 1 cm for more glide." : "Line up both wingtips and make the rear edges the same height.", "Measure three new throws and compare the average."],
-    });
-    setAnalyzing(false);
+    setReport(null);
+    try {
+      const [top, bottom] = await Promise.all([inspectPlanePhoto(photos.top.url), inspectPlanePhoto(photos.bottom.url)]);
+      const failedView = !top.recognizable ? { name: "top", signal: top } : !bottom.recognizable ? { name: "bottom", signal: bottom } : null;
+      if (failedView) {
+        setReport({
+          kind: "rejected",
+          headline: "I can’t verify a paper airplane",
+          detail: `The ${failedView.name} photo did not pass the plane-shape check. ${failedView.signal.reason}`,
+          steps: ["Use a plain floor or table that contrasts with the paper.", "Point the airplane nose toward the top of the photo.", "Keep the entire nose, both wingtips, and tail inside the frame."],
+        });
+        return;
+      }
+
+      const averageSymmetry = Math.round((top.symmetry + bottom.symmetry) / 2);
+      const averageOutline = Math.round((top.outline + bottom.outline) / 2);
+      const averageFold = Math.round((top.foldVisibility + bottom.foldVisibility) / 2);
+      const score = Math.round(clamp(averageSymmetry * .55 + averageOutline * .3 + averageFold * .15, 0, 100));
+      const weakerView = top.symmetry <= bottom.symmetry ? "top" : "bottom";
+      const viewGap = Math.abs(top.symmetry - bottom.symmetry);
+      const observations = [
+        `Top view: ${top.symmetry}% left-to-right wing match.`,
+        `Bottom view: ${bottom.symmetry}% left-to-right wing match.`,
+        averageFold >= 42 ? "The center fold is visible enough to compare both sides." : "The center fold is faint; brighter, more even lighting will improve the next scan.",
+      ];
+      const photoAdvice = averageSymmetry < 74
+        ? `The ${weakerView} view shows the bigger mismatch. Place both wingtips together and re-crease the wing that sits farther from the center line.`
+        : viewGap >= 14
+          ? `The top and bottom views disagree. Check the underside tabs and center pocket for a fold that is pulling one wing out of position.`
+          : averageOutline < 68
+            ? "The wing outline tapers unevenly. Match the two trailing edges before changing the elevator bends."
+            : "Both views show a consistent outline. Keep the folds as they are and change only one rear edge at a time.";
+      setReport({
+        kind: "analysis",
+        score,
+        headline: averageSymmetry >= 82 && viewGap < 12 ? "Both views look well matched" : "A specific fold needs attention",
+        detail: `${photoAdvice} This recommendation comes from the measured outline and fold contrast in your two photos.`,
+        observations,
+        steps: [photoAdvice, behaviorTips[behavior], "Make that one change, then measure three throws and compare the new average."],
+      });
+    } catch (error) {
+      setReport({
+        kind: "rejected",
+        headline: "I couldn’t read those photos",
+        detail: error instanceof Error ? error.message : "Try taking both photos again in brighter light.",
+        steps: ["Retake the top and bottom views.", "Keep the full plane inside the frame.", "Use even light without a strong shadow."],
+      });
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   function closeMeasure() {
@@ -366,14 +555,33 @@ export default function Home() {
       </section>
 
       <section className="analyzer" id="analyzer">
-        <div className="analyzer-intro"><p className="kicker">Camera feature</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Take a new top-down picture or choose one from your photo library. Flight Lab checks left-to-right balance and combines it with the way the plane flew.</p><div className="photo-guides"><span>01 Flat surface</span><span>02 Camera overhead</span><span>03 Whole plane visible</span></div></div>
+        <div className="analyzer-intro"><p className="kicker">Two-view camera check</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Add one top photo and one bottom photo. Flight Lab first checks that each picture has a paper-airplane outline, then compares wing shape, fold contrast, and the way the last flight behaved.</p><div className="photo-guides"><span>01 Plain contrasting surface</span><span>02 Nose pointing up</span><span>03 Whole plane visible</span></div></div>
         <div className="scanner-card">
-          <input ref={cameraRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePhoto} aria-label="Take a photo of your paper airplane" />
-          <input ref={libraryRef} className="sr-only" type="file" accept="image/*" onChange={handlePhoto} aria-label="Choose a photo of your paper airplane" />
-          <div className={`photo-area ${photoUrl ? "has-photo" : ""}`}>{photoUrl ? <img src={photoUrl} alt="Selected paper airplane" /> : <button type="button" onClick={() => setSourceOpen(true)}><span className="camera-icon" aria-hidden="true">CAM</span><b>Add a plane photo</b><small>Take a picture or choose from your library</small></button>}<span className="scan-corner top-left" /><span className="scan-corner top-right" /><span className="scan-corner bottom-left" /><span className="scan-corner bottom-right" /></div>
-          {photoUrl && <div className="scanner-controls"><div className="file-row"><span>{photoName}</span><button type="button" onClick={() => setSourceOpen(true)}>Change photo</button></div><label htmlFor="behavior">What happened on the last flight?</label><select id="behavior" value={behavior} onChange={(event) => setBehavior(event.target.value as FlightBehavior)}><option value="straight">It flew mostly straight</option><option value="dives">It dives nose-first</option><option value="stalls">It climbs, then stalls</option><option value="left">It turns left</option><option value="right">It turns right</option></select><button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing}>{analyzing ? "Analyzing photo…" : "Analyze my plane"}</button></div>}
+          <input ref={cameraRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePhoto} aria-label={`Take the ${photoTarget} photo of your paper airplane`} />
+          <input ref={libraryRef} className="sr-only" type="file" accept="image/*" onChange={handlePhoto} aria-label={`Choose the ${photoTarget} photo of your paper airplane`} />
+          <div className="photo-grid">
+            {(["top", "bottom"] as PhotoSide[]).map((side) => <div className={`photo-slot ${photos[side] ? "has-photo" : ""}`} key={side}>
+              <span className="photo-side">{side === "top" ? "1 · Top view" : "2 · Bottom view"}</span>
+              {photos[side] ? <><img src={photos[side]?.url} alt={`${side} view of the selected paper airplane`} /><button className="change-photo" type="button" onClick={() => openPhotoSource(side)}>Change {side} photo</button></> : <button className="add-photo" type="button" onClick={() => openPhotoSource(side)}><span className="camera-icon" aria-hidden="true">CAM</span><b>Add {side} photo</b><small>{side === "top" ? "Lay the plane normally" : "Flip the plane over"}</small></button>}
+              <span className="scan-corner top-left" /><span className="scan-corner top-right" /><span className="scan-corner bottom-left" /><span className="scan-corner bottom-right" />
+            </div>)}
+          </div>
+          <div className="scanner-controls">
+            <label htmlFor="behavior">What happened on the last flight?</label>
+            <select id="behavior" value={behavior} onChange={(event) => setBehavior(event.target.value as FlightBehavior)}>
+              <option value="straight">It flew mostly straight</option><option value="dives">It dives nose-first</option><option value="stalls">It climbs, then stalls</option><option value="left">It drifts or turns left</option><option value="right">It drifts or turns right</option><option value="wobbles">It wobbles side to side</option><option value="spirals">It spirals or corkscrews</option><option value="short">It glides smoothly but lands short</option><option value="flips">It flips over or flies upside down</option>
+            </select>
+            {!photos.top || !photos.bottom ? <p className="photo-requirement">Add both views before analysis. Non-airplane photos will be rejected instead of scored.</p> : null}
+            <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photos.top || !photos.bottom}>{analyzing ? "Checking both photos…" : "Analyze both views"}</button>
+          </div>
         </div>
-        {report && <article className="report-card" aria-live="polite"><div className="report-score"><span>Photo balance signal</span><b>{report.symmetry}<small>/100</small></b></div><div className="report-copy"><p className="kicker">Analysis complete</p><h3>{report.headline}</h3><p>{report.detail}</p></div><ol>{report.steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol><p className="prototype-note">This prototype uses on-device image balance. Confirm every suggestion with repeated test throws.</p></article>}
+        {report && <article className={`report-card ${report.kind === "rejected" ? "rejected" : ""}`} aria-live="polite">
+          {report.kind === "analysis" ? <div className="report-score"><span>Two-view fold score</span><b>{report.score}<small>/100</small></b></div> : <div className="report-rejected-mark"><b>Not scored</b><span>Plane not verified</span></div>}
+          <div className="report-copy"><p className="kicker">{report.kind === "analysis" ? "Analysis complete" : "Photo check stopped"}</p><h3>{report.headline}</h3><p>{report.detail}</p></div>
+          {report.kind === "analysis" && <ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul>}
+          <ol>{report.steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol>
+          <p className="prototype-note">Analysis runs on this device and uses the visible outline, symmetry, texture, and fold contrast in both photos. Confirm advice with repeated throws.</p>
+        </article>}
       </section>
 
       <section className="install-section" id="install">
@@ -402,7 +610,7 @@ export default function Home() {
           <p className="method-intro">Pick the method that fits where you are flying.</p>
           <div className="method-grid">
             <button className="method-choice recommended" type="button" onClick={() => chooseMeasureMethod("pace")}><span>STEP</span><b>Walk & count</b><small>Best indoors and for normal throws. Uses your steps—no location permission.</small><em>Recommended</em></button>
-            <button className="method-choice" type="button" onClick={() => chooseMeasureMethod("gps")}><span>GPS</span><b>Outdoor GPS</b><small>Best outside for long throws with a clear sky view.</small></button>
+            <button className="method-choice" type="button" onClick={() => chooseMeasureMethod("gps")}><span>GPS</span><b>Outdoor GPS · experimental</b><small>Only useful outside for throws longer than the accuracy shown by your device.</small></button>
             <button className="method-choice" type="button" onClick={() => chooseMeasureMethod("manual")}><span>RULER</span><b>Tape or Measure app</b><small>Most precise. Enter a reading from a tape or another measuring tool.</small></button>
           </div>
         </>}
@@ -411,8 +619,9 @@ export default function Home() {
 
         {measureMethod === "pace" && <>
           {measureStage === "ready" ? <>
-            <label className="measure-label" htmlFor="height">Your height</label>
-            <div className="height-input"><input id="height" type="number" min="36" max="96" inputMode="decimal" value={heightInches} onChange={(event) => setHeightInches(Math.max(36, Math.min(96, Number(event.target.value) || 36)))} /><span>inches</span></div>
+            <label className="measure-label" htmlFor="height">Type your height</label>
+            <div className="height-input"><input id="height" type="number" min="36" max="96" inputMode="decimal" value={heightDraft} onChange={(event) => updateHeightDraft(event.target.value)} onBlur={commitHeight} aria-describedby="height-help" /><span>inches</span></div>
+            <p className="height-help" id="height-help">You can erase the current number and type any height from 36 to 96 inches.</p>
             <p className="measurement-explainer">Flight Lab estimates each normal step at {strideFeet.toFixed(2)} feet. Stand at the launch line, tap Start, then walk normally to the plane.</p>
             <button className="analyze-button" type="button" onClick={startPaceMeasuring}>Start at launch line</button>
           </> : <>
@@ -426,13 +635,13 @@ export default function Home() {
 
         {measureMethod === "gps" && <>
           <div className={`measure-display ${measureStage === "walking" ? "active" : ""}`}><div className="measure-line"><span /><i /></div><b>{liveDistance.toFixed(1)} <small>ft</small></b><p>{measureStage === "ready" ? "Stand at the launch line outdoors." : measureStage === "locating" ? "Finding your starting point…" : "Walk straight to where the plane first touched down."}</p></div>
-          {measureStage === "ready" && !measureError && <div className="permission-callout"><b>Safari will ask for location access</b><p>Tap the button below, then choose <strong>Allow</strong>. Flight Lab only uses your location while measuring this throw.</p></div>}
+          {measureStage === "ready" && !measureError && <div className="permission-callout"><b>GPS is not recommended for normal paper-airplane throws</b><p>Location can be wrong by 15–50 feet, especially on a Wi-Fi-only iPad. Use this only outdoors for a long throw, then choose <strong>Allow</strong> when Safari asks.</p></div>}
           {locationAccuracy !== null && <p className={`accuracy ${locationAccuracy > 15 ? "weak" : ""}`}>Location accuracy: about ±{Math.round(locationAccuracy)} ft{locationAccuracy > 15 ? " · Step measure will be better here" : ""}</p>}
           {measureError && <p className="measure-error">{measureError}</p>}
           {locationDenied && <div className="permission-help"><b>On the iPad:</b><span>Open this website&apos;s Page Menu → More → Website Settings → Location → Ask.</span></div>}
           <button className="analyze-button" type="button" onClick={measureStage === "walking" ? finishGpsMeasuring : startMeasuring} disabled={measureStage === "locating"}>{measureStage === "walking" ? "Mark landing point & save" : measureStage === "locating" ? "Waiting for Safari…" : locationDenied ? "Try location again" : "Allow location & set launch point"}</button>
           {measureError && <button className="gps-fallback" type="button" onClick={() => chooseMeasureMethod("pace")}>Use Walk & count instead</button>}
-          <p className="sensor-note">GPS can drift by several feet. Use it outdoors for longer throws and check the accuracy shown above.</p>
+          <p className="sensor-note">If the accuracy number is larger than the throw, the GPS result cannot be trusted. Switch to Walk & count or manual measurement.</p>
         </>}
 
         {measureMethod === "manual" && <>
@@ -443,7 +652,7 @@ export default function Home() {
         </>}
       </section></div>}
 
-      {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">Plane photo</p><h2 id="source-title">How do you want to add it?</h2><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take a photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose from photo library</b><small>Select a photo you already took</small></button></section></div>}
+      {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">{photoTarget} view</p><h2 id="source-title">Add the {photoTarget} photo</h2><p className="source-help">Use a plain surface, point the nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take {photoTarget} photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose {photoTarget} photo</b><small>Select a photo you already took</small></button></section></div>}
     </main>
   );
 }

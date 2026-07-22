@@ -8,7 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "Flight Lab — Throw. Measure. Improve.";
-  const description = "Measure paper airplane throws in feet from any phone or iPad, track averages, analyze a plane photo, and get practical improvement tips.";
+  const description = "Measure paper airplane throws, compare top and bottom photos, reject non-plane images, and get fold-specific improvement tips.";
 
   return {
     metadataBase: new URL(origin),
@@ -23,20 +23,20 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     icons: {
       icon: "/favicon.svg",
-      apple: "/flight-lab-icon.png",
+      apple: "/flight-lab-icon-v2.png",
     },
     openGraph: {
       title,
       description,
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og.png`, width: 1738, height: 908, alt: "Flight Lab paper airplane performance app" }],
+      images: [{ url: `${origin}/og-v2.png`, width: 1731, height: 909, alt: "Flight Lab two-view paper airplane analyzer" }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [`${origin}/og.png`],
+      images: [`${origin}/og-v2.png`],
     },
   };
 }
