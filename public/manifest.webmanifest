@@ -1,0 +1,17 @@
+{
+  "name": "Flight Lab — Paper Airplane Tracker",
+  "short_name": "Flight Lab",
+  "description": "Measure paper airplane throws, track averages, and improve each design.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#091d36",
+  "theme_color": "#091d36",
+  "icons": [
+    {
+      "src": "/flight-lab-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

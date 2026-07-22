@@ -8,12 +8,23 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "Flight Lab — Throw. Measure. Improve.";
-  const description = "Create paper airplane designs, walk to measure each throw in feet, analyze a plane photo, and get practical improvement tips.";
+  const description = "Measure paper airplane throws in feet from any phone or iPad, track averages, analyze a plane photo, and get practical improvement tips.";
 
   return {
     metadataBase: new URL(origin),
     title,
     description,
+    manifest: "/manifest.webmanifest",
+    applicationName: "Flight Lab",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: "Flight Lab",
+    },
+    icons: {
+      icon: "/favicon.svg",
+      apple: "/flight-lab-icon.png",
+    },
     openGraph: {
       title,
       description,

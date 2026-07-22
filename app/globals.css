@@ -152,7 +152,16 @@ h1 em, .analyzer h2 em { color: var(--lime); font-style: normal; }
 
 footer { min-height: 120px; padding: 0 7vw; background: var(--navy); color: white; display: flex; align-items: center; justify-content: space-between; }
 footer p { color: #91a6bc; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
-.modal-backdrop { position: fixed; inset: 0; z-index: 20; padding: 20px; background: rgba(3,13,25,.78); display: grid; place-items: center; }
+.install-section { padding: 80px 7vw; display: grid; grid-template-columns: .9fr 1.1fr; gap: 60px; align-items: center; background: white; border-top: 1px solid var(--line); }
+.install-section h2 { max-width: 650px; margin: 0; font-size: clamp(38px, 4.5vw, 68px); line-height: .96; letter-spacing: -.06em; text-transform: uppercase; }
+.install-section > div > p:not(.kicker) { max-width: 620px; color: var(--muted); line-height: 1.65; font-size: 16px; }
+.install-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.install-steps li { min-height: 190px; padding: 25px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--line); }
+.install-steps li:last-child { border: 0; }
+.install-steps span { color: var(--blue); font-size: 12px; font-weight: 950; letter-spacing: .1em; }
+.install-steps b { margin-top: auto; font-size: 19px; }
+.install-steps small { color: var(--muted); line-height: 1.45; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; padding: 20px; background: rgba(3,13,25,.78); display: grid; place-items: center; overflow-y: auto; }
 .record-modal { width: min(480px, 100%); background: white; border-radius: 20px; padding: 36px; position: relative; box-shadow: 0 30px 100px rgba(0,0,0,.35); }
 .record-modal h2, .measure-modal h2, .source-modal h2 { margin: 0; font-size: 34px; letter-spacing: -.05em; text-transform: uppercase; }
 .record-modal > p:not(.kicker) { color: var(--muted); line-height: 1.55; }
@@ -161,7 +170,21 @@ footer p { color: #91a6bc; font-size: 12px; font-weight: 800; text-transform: up
 .distance-input input { width: 100%; min-height: 68px; border: 0; outline: 0; font-size: 34px; font-weight: 900; color: var(--navy); background: transparent; }
 .distance-input span { color: var(--muted); font-weight: 900; }
 .name-input { width: 100%; min-height: 58px; margin: 9px 0 12px; padding: 0 16px; border: 2px solid var(--navy); border-radius: 11px; color: var(--navy); font-size: 19px; font-weight: 800; }
-.measure-modal, .source-modal { width: min(540px, 100%); background: white; border-radius: 20px; padding: 36px; position: relative; box-shadow: 0 30px 100px rgba(0,0,0,.35); }
+.measure-modal, .source-modal { width: min(620px, 100%); background: white; border-radius: 20px; padding: 36px; position: relative; box-shadow: 0 30px 100px rgba(0,0,0,.35); margin: auto; }
+.method-intro, .measurement-explainer { color: var(--muted); line-height: 1.55; }
+.method-grid { margin-top: 22px; display: grid; gap: 11px; }
+.method-choice { width: 100%; min-height: 96px; border: 1px solid var(--line); border-radius: 14px; padding: 17px; background: white; display: grid; grid-template-columns: 62px 1fr auto; grid-template-rows: auto auto; column-gap: 15px; align-items: center; text-align: left; position: relative; }
+.method-choice:hover { border-color: var(--blue); background: #f5f8ff; }
+.method-choice > span { grid-row: 1 / 3; width: 58px; min-height: 52px; display: grid; place-items: center; border-radius: 10px; background: var(--navy); color: var(--lime); font-size: 10px; font-weight: 950; letter-spacing: .06em; }
+.method-choice b { font-size: 17px; }
+.method-choice small { color: var(--muted); line-height: 1.35; }
+.method-choice em { grid-column: 3; grid-row: 1 / 3; padding: 6px 8px; border-radius: 6px; background: var(--lime); color: var(--navy); font-size: 9px; font-weight: 950; font-style: normal; text-transform: uppercase; letter-spacing: .06em; }
+.method-choice.recommended { border: 2px solid var(--blue); }
+.method-back { margin: 15px 0 2px; padding: 8px 0; border: 0; background: transparent; color: var(--blue); font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+.measure-label { display: block; margin: 18px 0 7px; font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: .08em; }
+.height-input { display: flex; align-items: center; border: 2px solid var(--navy); border-radius: 12px; overflow: hidden; }
+.height-input input { width: 100%; min-height: 60px; border: 0; padding: 0 16px; outline: 0; color: var(--navy); font-size: 27px; font-weight: 900; }
+.height-input span { padding-right: 18px; color: var(--muted); font-size: 13px; font-weight: 850; }
 .measure-display { margin: 25px 0 12px; padding: 27px 22px; border-radius: 15px; background: var(--navy); color: white; text-align: center; overflow: hidden; }
 .measure-display b { display: block; margin: 20px 0 10px; color: var(--lime); font-size: 62px; letter-spacing: -.07em; }
 .measure-display b small { font-size: 19px; letter-spacing: 0; }
@@ -172,7 +195,19 @@ footer p { color: #91a6bc; font-size: 12px; font-weight: 800; text-transform: up
 .measure-line i { right: 0; }
 .measure-display.active .measure-line { border-color: var(--lime); box-shadow: 0 3px 10px rgba(200,243,75,.25); }
 .accuracy, .sensor-note { color: var(--muted); font-size: 11px; line-height: 1.45; text-align: center; }
+.accuracy.weak { padding: 9px 11px; border-radius: 8px; background: #fff4d9; color: #74500a; font-weight: 800; }
 .measure-error { padding: 10px 12px; border-radius: 8px; background: #fff0eb; color: #a43819; font-size: 12px; line-height: 1.45; }
+.permission-callout { margin: 12px 0; padding: 12px 14px; border: 1px solid #b9d8ff; border-radius: 10px; background: #eff7ff; color: #163858; }
+.permission-callout b { display: block; margin-bottom: 3px; font-size: 13px; }
+.permission-callout p { margin: 0; font-size: 12px; line-height: 1.45; }
+.permission-help { display: grid; gap: 3px; margin: 10px 0; padding: 12px 14px; border-radius: 10px; background: #fff8e5; color: #60470c; font-size: 12px; line-height: 1.45; }
+.gps-fallback { width: 100%; margin-top: 8px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 850; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.step-controls { display: grid; grid-template-columns: 70px 1fr; gap: 10px; margin: 13px 0; }
+.step-controls button { min-height: 60px; border: 2px solid var(--navy); border-radius: 11px; background: white; color: var(--navy); font-size: 27px; font-weight: 950; }
+.step-controls .add-step { background: var(--lime); font-size: 16px; letter-spacing: .04em; }
+.manual-distance { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+.manual-distance label { display: grid; gap: 7px; color: var(--navy); font-size: 11px; font-weight: 950; text-transform: uppercase; letter-spacing: .06em; }
+.manual-distance input { width: 100%; min-height: 64px; border: 2px solid var(--navy); border-radius: 11px; padding: 0 15px; color: var(--navy); font-size: 28px; font-weight: 900; outline: 0; }
 .source-modal { display: grid; gap: 12px; }
 .source-modal h2 { margin-bottom: 10px; }
 .source-choice { width: 100%; border: 1px solid var(--line); border-radius: 13px; padding: 17px; background: white; display: grid; grid-template-columns: 58px 1fr; column-gap: 15px; align-items: center; text-align: left; }
@@ -199,6 +234,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .analyzer { grid-template-columns: 1fr; row-gap: 40px; }
   .analyzer-intro { position: static; }
   .report-card { grid-column: 1; }
+  .install-section { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
@@ -228,6 +264,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .photo-area, .photo-area img { min-height: 330px; }
   .report-card { grid-template-columns: 1fr; padding: 22px; }
   .report-score { min-height: 125px; }
+  .install-section { padding: 64px 20px; gap: 30px; }
+  .install-steps { grid-template-columns: 1fr; }
+  .install-steps li { min-height: 120px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .method-choice { grid-template-columns: 55px 1fr; }
+  .method-choice em { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 4px; }
   footer { padding: 28px 20px; flex-direction: column; gap: 20px; justify-content: center; }
   .record-modal, .measure-modal, .source-modal { padding: 29px 22px; }
 }
