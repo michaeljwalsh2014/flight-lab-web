@@ -3,7 +3,8 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type PlaneRecord = { id: number; name: string; createdAt: string };
+type PlanePreset = "dart" | "glider" | "custom";
+type PlaneRecord = { id: number; name: string; createdAt: string; image?: string; preset?: PlanePreset };
 type ThrowRecord = { id: number; planeId: number; distance: number; createdAt: string };
 type FlightBehavior = "straight" | "dives" | "stalls" | "left" | "right" | "wobbles" | "spirals" | "short" | "flips";
 type MeasureStage = "ready" | "locating" | "walking";
@@ -20,7 +21,44 @@ type ImageSignals = {
 };
 type PhotoReport =
   | { kind: "rejected"; headline: string; detail: string; steps: string[] }
-  | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[] };
+  | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[]; estimatedRange: string; aiNote: string };
+
+type DetectedObject = { class: string; score: number; bbox: [number, number, number, number] };
+type ObjectDetector = { detect: (image: HTMLImageElement, maxResults?: number, minimumScore?: number) => Promise<DetectedObject[]> };
+
+const planePresets: Array<{ id: Exclude<PlanePreset, "custom">; name: string; image: string; description: string; baseline: number }> = [
+  { id: "dart", name: "Paper Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
+  { id: "glider", name: "Wide Glider", image: "/plane-presets/glider.png", description: "Broad wings for a slower, stable glide", baseline: 25 },
+];
+
+const definitelyNotPlanes = new Set(["person", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "car", "motorcycle", "bus", "train", "truck", "bottle", "cup", "cell phone", "laptop", "teddy bear"]);
+let detectorPromise: Promise<ObjectDetector> | null = null;
+
+async function getObjectDetector() {
+  if (!detectorPromise) {
+    detectorPromise = (async () => {
+      const tensorflow = await import("@tensorflow/tfjs");
+      await tensorflow.ready();
+      const coco = await import("@tensorflow-models/coco-ssd");
+      return coco.load({ base: "lite_mobilenet_v2", modelUrl: "/models/coco-ssd/model.json" });
+    })();
+  }
+  return detectorPromise;
+}
+
+function loadImage(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("I could not read that photo. Try taking it again."));
+    image.src = url;
+  });
+}
+
+async function detectObjects(url: string) {
+  const [detector, image] = await Promise.all([getObjectDetector(), loadImage(url)]);
+  return detector.detect(image, 8, .46);
+}
 
 const behaviorTips: Record<FlightBehavior, string> = {
   straight: "Your flight is stable. Make one small change at a time, then test it with three throws.",
@@ -151,10 +189,9 @@ function inspectPlanePhoto(url: string) {
       }
       const texture = Math.round(clamp((textureTotal / Math.max(1, textureSamples)) / 255 * 100, 0, 100));
       const foldVisibility = Math.round(clamp((foldTotal / Math.max(1, foldSamples)) / 55 * 100, 0, 100));
-      const recognizable = symmetry >= 42 && outline >= 38 && texture <= 31 && aspect >= .55 && aspect <= 2.05;
-      let reason = "The pointed nose and two-wing outline are visible.";
-      if (symmetry < 42 || outline < 38 || aspect < .55 || aspect > 2.05) reason = "This does not have the centered pointed nose and two-wing outline I expect from a paper airplane.";
-      else if (texture > 31) reason = "This looks too textured or visually busy to verify as folded paper. Use a plain surface and even light.";
+      const recognizable = aspect >= .25 && aspect <= 4;
+      let reason = "The photo has a clear subject that can be measured for folds and wing balance.";
+      if (!recognizable) reason = "I could not isolate the full object. Move farther back and keep the whole plane inside the photo.";
       resolve({ recognizable, reason, symmetry, outline, foldVisibility, texture });
     };
     image.onerror = () => reject(new Error("I could not read that photo. Try taking it again."));
@@ -179,6 +216,8 @@ export default function Home() {
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
   const [planeModalOpen, setPlaneModalOpen] = useState(false);
   const [newPlaneName, setNewPlaneName] = useState("");
+  const [newPlaneImage, setNewPlaneImage] = useState(planePresets[0].image);
+  const [newPlanePreset, setNewPlanePreset] = useState<PlanePreset>("dart");
   const [measureOpen, setMeasureOpen] = useState(false);
   const [measureMethod, setMeasureMethod] = useState<MeasureMethod>("choose");
   const [measureStage, setMeasureStage] = useState<MeasureStage>("ready");
@@ -198,8 +237,10 @@ export default function Home() {
   const [behavior, setBehavior] = useState<FlightBehavior>("straight");
   const [report, setReport] = useState<PhotoReport | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState("");
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  const planePhotoRef = useRef<HTMLInputElement>(null);
   const startPosition = useRef<GeolocationCoordinates | null>(null);
   const watchId = useRef<number | null>(null);
   const lastStepAt = useRef(0);
@@ -244,13 +285,44 @@ export default function Home() {
   const best = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : 0;
 
   function addPlane() {
-    const name = newPlaneName.trim();
-    if (!name) return;
-    const plane = { id: Date.now(), name, createdAt: "Just now" };
+    const presetName = planePresets.find((preset) => preset.id === newPlanePreset)?.name;
+    const name = newPlaneName.trim() || presetName || "My Plane";
+    const plane: PlaneRecord = { id: Date.now(), name, createdAt: "Just now", image: newPlaneImage, preset: newPlanePreset };
     setPlanes((current) => [...current, plane]);
     setActivePlaneId(plane.id);
     setNewPlaneName("");
+    setNewPlaneImage(planePresets[0].image);
+    setNewPlanePreset("dart");
     setPlaneModalOpen(false);
+  }
+
+  function choosePlanePreset(preset: typeof planePresets[number]) {
+    setNewPlanePreset(preset.id);
+    setNewPlaneImage(preset.image);
+    if (!newPlaneName.trim() || planePresets.some((item) => item.name === newPlaneName)) setNewPlaneName(preset.name);
+  }
+
+  async function handlePlanePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const temporaryUrl = URL.createObjectURL(file);
+    try {
+      const image = await loadImage(temporaryUrl);
+      const maximum = 640;
+      const scale = Math.min(1, maximum / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) return;
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      setNewPlaneImage(canvas.toDataURL("image/jpeg", .78));
+      setNewPlanePreset("custom");
+      if (!newPlaneName.trim() || planePresets.some((item) => item.name === newPlaneName)) setNewPlaneName("My Plane");
+    } finally {
+      URL.revokeObjectURL(temporaryUrl);
+      event.target.value = "";
+    }
   }
 
   function openMeasure() {
@@ -453,7 +525,29 @@ export default function Home() {
     if (!photos.bottom) { openPhotoSource("bottom"); return; }
     setAnalyzing(true);
     setReport(null);
+    setAnalysisStage("Loading the on-device AI model…");
     try {
+      let detectedObjects: DetectedObject[] = [];
+      let aiAvailable = true;
+      try {
+        const [topObjects, bottomObjects] = await Promise.all([detectObjects(photos.top.url), detectObjects(photos.bottom.url)]);
+        detectedObjects = [...topObjects, ...bottomObjects];
+      } catch {
+        aiAvailable = false;
+      }
+      const unrelated = detectedObjects.find((item) => definitelyNotPlanes.has(item.class) && item.score >= .55);
+      if (unrelated) {
+        const confidence = Math.round(unrelated.score * 100);
+        setReport({
+          kind: "rejected",
+          headline: `The AI sees a ${unrelated.class}, not a plane`,
+          detail: `The object detector is ${confidence}% confident that one of these photos contains a ${unrelated.class}. Replace that view with a paper airplane photo and try again.`,
+          steps: ["Put only the paper airplane in the frame.", "Use a plain floor or table behind it.", "Retake both views with the entire plane visible."],
+        });
+        return;
+      }
+
+      setAnalysisStage("Measuring the wing outlines and center folds…");
       const [top, bottom] = await Promise.all([inspectPlanePhoto(photos.top.url), inspectPlanePhoto(photos.bottom.url)]);
       const failedView = !top.recognizable ? { name: "top", signal: top } : !bottom.recognizable ? { name: "bottom", signal: bottom } : null;
       if (failedView) {
@@ -484,6 +578,19 @@ export default function Home() {
           : averageOutline < 68
             ? "The wing outline tapers unevenly. Match the two trailing edges before changing the elevator bends."
             : "Both views show a consistent outline. Keep the folds as they are and change only one rear edge at a time.";
+      setAnalysisStage("Estimating the next-flight distance…");
+      const behaviorMultiplier: Record<FlightBehavior, number> = { straight: 1, dives: .78, stalls: .82, left: .88, right: .88, wobbles: .83, spirals: .72, short: .76, flips: .65 };
+      const presetBaseline = planePresets.find((preset) => preset.id === activePlane?.preset)?.baseline ?? 27;
+      const baseline = average || presetBaseline;
+      const centerEstimate = baseline * behaviorMultiplier[behavior] * (.84 + score / 520);
+      const lowEstimate = Math.max(5, Math.round(centerEstimate * .82));
+      const highEstimate = Math.max(lowEstimate + 2, Math.round(centerEstimate * 1.18));
+      const detectedPlaneLabel = detectedObjects.find((item) => item.class === "airplane" || item.class === "kite");
+      const aiNote = !aiAvailable
+        ? "The object-detection model was unavailable, so this result uses the two-view fold measurements only."
+        : detectedPlaneLabel
+          ? `The AI found an airplane-like object with ${Math.round(detectedPlaneLabel.score * 100)}% confidence and found no competing subject.`
+          : "The AI found no cat, person, animal, vehicle, or other competing subject; the fold analyzer then measured the plane itself.";
       setReport({
         kind: "analysis",
         score,
@@ -491,6 +598,8 @@ export default function Home() {
         detail: `${photoAdvice} This recommendation comes from the measured outline and fold contrast in your two photos.`,
         observations,
         steps: [photoAdvice, behaviorTips[behavior], "Make that one change, then measure three throws and compare the new average."],
+        estimatedRange: `${lowEstimate}–${highEstimate} ft`,
+        aiNote,
       });
     } catch (error) {
       setReport({
@@ -501,6 +610,7 @@ export default function Home() {
       });
     } finally {
       setAnalyzing(false);
+      setAnalysisStage("");
     }
   }
 
@@ -532,7 +642,7 @@ export default function Home() {
           </div>
         </div>
         <div className="flight-stage" aria-label="Paper airplane flight graphic">
-          <div className="speed-lines" aria-hidden="true"><i /><i /><i /></div><div className="plane" aria-hidden="true"><span /></div>
+          <div className="speed-lines" aria-hidden="true"><i /><i /><i /></div>{activePlane?.image ? <img className="active-flight-image" src={activePlane.image} alt={`${activePlane.name} design`} /> : <div className="plane" aria-hidden="true"><span /></div>}
           <div className="flight-number"><b>{activePlane ? activePlane.name : "No plane"}</b><span>{activePlane ? "ready to test" : "add your first plane"}</span></div>
         </div>
       </section>
@@ -540,7 +650,7 @@ export default function Home() {
       <section className="hangar" id="hangar">
         <div><p className="kicker">Your hangar</p><h2>My planes</h2></div>
         <button className="add-plane-card" type="button" onClick={() => setPlaneModalOpen(true)}><span>＋</span><b>Add a plane</b><small>Name a new design and start testing</small></button>
-        {planes.map((plane) => <button key={plane.id} type="button" className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`} onClick={() => setActivePlaneId(plane.id)}><span className="mini-plane" aria-hidden="true">➤</span><b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button>)}
+        {planes.map((plane) => <button key={plane.id} type="button" className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`} onClick={() => setActivePlaneId(plane.id)}>{plane.image ? <img className="plane-card-image" src={plane.image} alt="" /> : <span className="mini-plane" aria-hidden="true">➤</span>}<b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button>)}
       </section>
 
       <section className="performance" id="performance">
@@ -555,7 +665,7 @@ export default function Home() {
       </section>
 
       <section className="analyzer" id="analyzer">
-        <div className="analyzer-intro"><p className="kicker">Two-view camera check</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Add one top photo and one bottom photo. Flight Lab first checks that each picture has a paper-airplane outline, then compares wing shape, fold contrast, and the way the last flight behaved.</p><div className="photo-guides"><span>01 Plain contrasting surface</span><span>02 Nose pointing up</span><span>03 Whole plane visible</span></div></div>
+        <div className="analyzer-intro"><p className="kicker">On-device AI + two-view scan</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Flight Lab now runs an object-detection AI first, so a cat or other obvious subject is stopped before scoring. Then it spends more time comparing the top and bottom wing shapes, fold contrast, flight behavior, and your measured throw history.</p><div className="photo-guides"><span>01 AI object check</span><span>02 Top + bottom fold scan</span><span>03 Next-flight estimate</span></div></div>
         <div className="scanner-card">
           <input ref={cameraRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePhoto} aria-label={`Take the ${photoTarget} photo of your paper airplane`} />
           <input ref={libraryRef} className="sr-only" type="file" accept="image/*" onChange={handlePhoto} aria-label={`Choose the ${photoTarget} photo of your paper airplane`} />
@@ -572,15 +682,15 @@ export default function Home() {
               <option value="straight">It flew mostly straight</option><option value="dives">It dives nose-first</option><option value="stalls">It climbs, then stalls</option><option value="left">It drifts or turns left</option><option value="right">It drifts or turns right</option><option value="wobbles">It wobbles side to side</option><option value="spirals">It spirals or corkscrews</option><option value="short">It glides smoothly but lands short</option><option value="flips">It flips over or flies upside down</option>
             </select>
             {!photos.top || !photos.bottom ? <p className="photo-requirement">Add both views before analysis. Non-airplane photos will be rejected instead of scored.</p> : null}
-            <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photos.top || !photos.bottom}>{analyzing ? "Checking both photos…" : "Analyze both views"}</button>
+            <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photos.top || !photos.bottom}>{analyzing ? analysisStage || "Analyzing both views…" : "Run full AI analysis"}</button>
           </div>
         </div>
         {report && <article className={`report-card ${report.kind === "rejected" ? "rejected" : ""}`} aria-live="polite">
           {report.kind === "analysis" ? <div className="report-score"><span>Two-view fold score</span><b>{report.score}<small>/100</small></b></div> : <div className="report-rejected-mark"><b>Not scored</b><span>Plane not verified</span></div>}
           <div className="report-copy"><p className="kicker">{report.kind === "analysis" ? "Analysis complete" : "Photo check stopped"}</p><h3>{report.headline}</h3><p>{report.detail}</p></div>
-          {report.kind === "analysis" && <ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul>}
+          {report.kind === "analysis" && <><div className="flight-estimate"><span>Estimated next flight</span><b>{report.estimatedRange}</b><small>Estimate—not a measurement</small></div><p className="ai-note">{report.aiNote}</p><ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></>}
           <ol>{report.steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol>
-          <p className="prototype-note">Analysis runs on this device and uses the visible outline, symmetry, texture, and fold contrast in both photos. Confirm advice with repeated throws.</p>
+          <p className="prototype-note">Object detection and fold analysis run on this device. Distance is estimated from design type, photo score, flight behavior, and this plane&apos;s measured history; confirm it with a real throw.</p>
         </article>}
       </section>
 
@@ -599,7 +709,7 @@ export default function Home() {
 
       <footer><a className="brand" href="#top"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a><p>Build. Test. Fly farther.</p></footer>
 
-      {planeModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setPlaneModalOpen(false); }}><section className="record-modal" role="dialog" aria-modal="true" aria-labelledby="plane-title"><button className="modal-close" type="button" onClick={() => setPlaneModalOpen(false)} aria-label="Close">×</button><p className="kicker">Your hangar</p><h2 id="plane-title">Add a plane</h2><p>Give this paper airplane design a name. Its throws and average will be tracked separately.</p><label htmlFor="plane-name">Plane name</label><input className="name-input" autoFocus id="plane-name" value={newPlaneName} onChange={(event) => setNewPlaneName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} placeholder="Example: Sky Dart" maxLength={32} /><button className="analyze-button" type="button" onClick={addPlane}>Add this plane</button></section></div>}
+      {planeModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setPlaneModalOpen(false); }}><section className="record-modal plane-builder" role="dialog" aria-modal="true" aria-labelledby="plane-title"><button className="modal-close" type="button" onClick={() => setPlaneModalOpen(false)} aria-label="Close">×</button><p className="kicker">Your hangar</p><h2 id="plane-title">Add a plane</h2><p>Choose a built-in design picture or take a photo of your own plane. Each design keeps its own throws, average, and analysis.</p><input ref={planePhotoRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePlanePhoto} aria-label="Take or choose a picture of your plane" /><div className="preset-grid">{planePresets.map((preset) => <button type="button" key={preset.id} className={`preset-card ${newPlanePreset === preset.id ? "selected" : ""}`} onClick={() => choosePlanePreset(preset)}><img src={preset.image} alt={`${preset.name} paper airplane`} /><b>{preset.name}</b><small>{preset.description}</small></button>)}<button type="button" className={`preset-card upload-preset ${newPlanePreset === "custom" ? "selected" : ""}`} onClick={() => planePhotoRef.current?.click()}>{newPlanePreset === "custom" ? <img src={newPlaneImage} alt="Your uploaded plane" /> : <span>CAM</span>}<b>Your plane</b><small>Take a picture or choose one</small></button></div><label htmlFor="plane-name">Plane name</label><input className="name-input" id="plane-name" value={newPlaneName} onChange={(event) => setNewPlaneName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} placeholder="Example: Sky Dart" maxLength={32} /><button className="analyze-button" type="button" onClick={addPlane}>Add this plane</button></section></div>}
 
       {measureOpen && <div className="modal-backdrop"><section className="measure-modal" role="dialog" aria-modal="true" aria-labelledby="measure-title">
         <button className="modal-close" type="button" onClick={closeMeasure} aria-label="Close">×</button>

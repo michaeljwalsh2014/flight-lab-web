@@ -43,12 +43,27 @@ test("includes all three browser-friendly measuring tools", async () => {
 
 test("requires two airplane photos and can reject invalid images", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /top photo/);
-  assert.match(page, /bottom photo/);
+  assert.match(page, /top view/i);
+  assert.match(page, /bottom view/i);
   assert.match(page, /inspectPlanePhoto/);
   assert.match(page, /I can’t verify a paper airplane/);
   assert.match(page, /Non-airplane photos will be rejected instead of scored/);
   assert.match(page, /It wobbles side to side/);
   assert.match(page, /It spirals or corkscrews/);
   assert.doesNotMatch(page, /Math\.max\(55/);
+});
+
+test("uses on-device AI, plane pictures, and a labeled distance estimate", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /@tensorflow-models\/coco-ssd/);
+  assert.match(page, /The AI sees a \$\{unrelated\.class\}, not a plane/);
+  assert.match(page, /Loading the on-device AI model/);
+  assert.match(page, /Run full AI analysis/);
+  assert.match(page, /Estimated next flight/);
+  assert.match(page, /Estimate—not a measurement/);
+  assert.match(page, /Paper Dart/);
+  assert.match(page, /Wide Glider/);
+  assert.match(page, /Take a picture or choose one/);
+  assert.match(page, /\/plane-presets\/dart\.png/);
+  assert.match(page, /\/plane-presets\/glider\.png/);
 });
