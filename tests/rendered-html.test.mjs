@@ -69,14 +69,18 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /\/plane-presets\/glider\.png/);
 });
 
-test("presents a locked Pro video-analysis preview and upgrade controls", async () => {
+test("recognizes the owner account and activates free Lifetime Pro", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /Upgrade to Pro/);
+  const accessRoute = await readFile(new URL("../app/api/pro-access/route.ts", import.meta.url), "utf8");
+  assert.match(page, /Owner sign in/);
+  assert.match(page, /Lifetime Pro is active/);
   assert.match(page, /Pro video lab/);
   assert.match(page, /Video path tracking/);
-  assert.match(page, /Flight Lab Owner gets Lifetime Pro/);
-  assert.match(page, /There are no free trials/);
-  assert.match(page, /does not collect money yet/);
+  assert.match(page, /You will not be charged for Flight Lab Pro/);
+  assert.match(page, /signin-with-chatgpt/);
+  assert.match(accessRoute, /FLIGHT_LAB_OWNER_EMAIL/);
+  assert.match(accessRoute, /Cache-Control/);
+  assert.doesNotMatch(accessRoute, /@gmail\.com|@outlook\.com|@icloud\.com/);
 });
 
 test("can delete a plane or an individual saved flight", async () => {
