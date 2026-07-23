@@ -67,3 +67,13 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /\/plane-presets\/dart\.png/);
   assert.match(page, /\/plane-presets\/glider\.png/);
 });
+
+test("can delete a plane or an individual saved flight", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /function deletePlane/);
+  assert.match(page, /item\.planeId !== plane\.id/);
+  assert.match(page, /function deleteFlight/);
+  assert.match(page, /item\.id !== flight\.id/);
+  assert.match(page, /aria-label={`Delete \$\{plane\.name\}`}/);
+  assert.match(page, /title="Delete this flight"/);
+});

@@ -296,6 +296,23 @@ export default function Home() {
     setPlaneModalOpen(false);
   }
 
+  function deletePlane(plane: PlaneRecord) {
+    const flightCount = throws.filter((item) => item.planeId === plane.id).length;
+    const historyNote = flightCount === 1 ? " and its 1 saved flight" : flightCount > 1 ? ` and its ${flightCount} saved flights` : "";
+    if (!window.confirm(`Delete ${plane.name}${historyNote}? This cannot be undone.`)) return;
+
+    const remainingPlanes = planes.filter((item) => item.id !== plane.id);
+    setPlanes(remainingPlanes);
+    setThrows((current) => current.filter((item) => item.planeId !== plane.id));
+    if (activePlaneId === plane.id) setActivePlaneId(remainingPlanes[0]?.id ?? null);
+    setReport(null);
+  }
+
+  function deleteFlight(flight: ThrowRecord) {
+    if (!window.confirm(`Delete this ${flight.distance.toFixed(1)} ft flight? This cannot be undone.`)) return;
+    setThrows((current) => current.filter((item) => item.id !== flight.id));
+  }
+
   function choosePlanePreset(preset: typeof planePresets[number]) {
     setNewPlanePreset(preset.id);
     setNewPlaneImage(preset.image);
@@ -650,7 +667,7 @@ export default function Home() {
       <section className="hangar" id="hangar">
         <div><p className="kicker">Your hangar</p><h2>My planes</h2></div>
         <button className="add-plane-card" type="button" onClick={() => setPlaneModalOpen(true)}><span>＋</span><b>Add a plane</b><small>Name a new design and start testing</small></button>
-        {planes.map((plane) => <button key={plane.id} type="button" className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`} onClick={() => setActivePlaneId(plane.id)}>{plane.image ? <img className="plane-card-image" src={plane.image} alt="" /> : <span className="mini-plane" aria-hidden="true">➤</span>}<b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button>)}
+        {planes.map((plane) => <div key={plane.id} className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`}><button className="plane-card-select" type="button" onClick={() => setActivePlaneId(plane.id)} aria-label={`Use ${plane.name}`}>{plane.image ? <img className="plane-card-image" src={plane.image} alt="" /> : <span className="mini-plane" aria-hidden="true">➤</span>}<b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button><button className="plane-delete" type="button" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`} title={`Delete ${plane.name}`}>Delete</button></div>)}
       </section>
 
       <section className="performance" id="performance">
@@ -658,7 +675,7 @@ export default function Home() {
         <div className="stat-strip"><div><span>Average distance</span><b>{average.toFixed(1)} <small>ft</small></b></div><div><span>Best throw</span><b>{best.toFixed(1)} <small>ft</small></b></div><div><span>Throws logged</span><b>{activeThrows.length}</b></div><div className="trend"><span>Flight trend</span><b>{activeThrows.length >= 3 ? "↑ Tracking" : "Needs 3 throws"}</b></div></div>
         <div className="performance-grid">
           <article className="throw-card"><div className="card-title"><div><p className="kicker">Flight log</p><h3>Recent throws</h3></div><button onClick={openMeasure}>Measure throw</button></div>
-            {activeThrows.length ? <ol className="throw-list">{activeThrows.slice(0, 5).map((item, index) => <li key={item.id}><span className="throw-rank">{String(index + 1).padStart(2, "0")}</span><span className="throw-bar"><i style={{ width: `${Math.max(18, (item.distance / Math.max(best, 1)) * 100)}%` }} /></span><b>{item.distance.toFixed(1)} ft</b><small>{item.createdAt}</small></li>)}</ol> : <div className="empty-state"><b>No throws yet</b><p>Your measurements will appear here after your first flight.</p><button type="button" onClick={openMeasure}>{activePlane ? "Measure first throw" : "Add a plane first"}</button></div>}
+            {activeThrows.length ? <ol className="throw-list">{activeThrows.slice(0, 5).map((item, index) => <li key={item.id}><span className="throw-rank">{String(index + 1).padStart(2, "0")}</span><span className="throw-bar"><i style={{ width: `${Math.max(18, (item.distance / Math.max(best, 1)) * 100)}%` }} /></span><b>{item.distance.toFixed(1)} ft</b><small>{item.createdAt}</small><button className="throw-delete" type="button" onClick={() => deleteFlight(item)} aria-label={`Delete ${item.distance.toFixed(1)} foot flight`} title="Delete this flight">Delete</button></li>)}</ol> : <div className="empty-state"><b>No throws yet</b><p>Your measurements will appear here after your first flight.</p><button type="button" onClick={openMeasure}>{activePlane ? "Measure first throw" : "Add a plane first"}</button></div>}
           </article>
           <aside className="coach-card"><span className="coach-label">Coach&apos;s next move</span><div className="coach-number">01</div><h3>{activeThrows.length >= 3 ? "Test one change" : "Build a baseline"}</h3><p>{activeThrows.length >= 3 ? "Change one fold, then measure three more throws to see if your average improves." : "Measure at least three throws with the same plane before changing the design."}</p><div className="test-plan"><span>Next test</span><b>{Math.max(0, 3 - activeThrows.length)} throws</b><small>needed for a useful average</small></div></aside>
         </div>

@@ -62,15 +62,19 @@ h1 em, .analyzer h2 em { color: var(--lime); font-style: normal; }
 
 .hangar { padding: 60px 7vw; background: white; display: grid; grid-template-columns: minmax(190px, .7fr) repeat(3, minmax(180px, 1fr)); gap: 18px; align-items: stretch; border-bottom: 1px solid var(--line); }
 .hangar h2 { margin: 0; font-size: 42px; letter-spacing: -.055em; text-transform: uppercase; }
-.add-plane-card, .plane-card { min-height: 145px; border-radius: 16px; padding: 22px; display: grid; align-content: center; justify-items: start; gap: 6px; text-align: left; }
+.add-plane-card, .plane-card { min-height: 145px; border-radius: 16px; text-align: left; }
+.add-plane-card { padding: 22px; display: grid; align-content: center; justify-items: start; gap: 6px; }
 .add-plane-card { border: 2px dashed #a9b8c8; background: #f6f9fc; color: var(--navy); }
 .add-plane-card span { color: var(--blue); font-size: 28px; line-height: 1; }
-.add-plane-card b, .plane-card b { font-size: 18px; }
-.add-plane-card small, .plane-card small { color: var(--muted); line-height: 1.35; }
-.plane-card { border: 2px solid var(--line); background: white; position: relative; }
+.add-plane-card b, .plane-card-select b { font-size: 18px; }
+.add-plane-card small, .plane-card-select small { color: var(--muted); line-height: 1.35; }
+.plane-card { border: 2px solid var(--line); background: white; position: relative; overflow: hidden; }
+.plane-card-select { width: 100%; min-height: 141px; padding: 22px; border: 0; background: transparent; color: var(--navy); display: grid; align-content: center; justify-items: start; gap: 6px; text-align: left; }
 .plane-card-image { width: calc(100% + 44px); height: 105px; margin: -22px -22px 10px; border-radius: 14px 14px 0 0; object-fit: cover; }
 .plane-card.selected { border-color: var(--blue); box-shadow: inset 0 0 0 2px var(--blue); }
-.plane-card.selected::after { content: "Active"; position: absolute; right: 13px; top: 13px; padding: 5px 7px; border-radius: 5px; background: var(--lime); font-size: 9px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+.plane-card.selected::after { content: "Active"; pointer-events: none; position: absolute; right: 11px; top: 48px; padding: 5px 7px; border-radius: 5px; background: var(--lime); font-size: 9px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+.plane-delete { position: absolute; z-index: 2; right: 10px; top: 10px; border: 1px solid #e0a6a6; border-radius: 7px; padding: 7px 9px; background: rgba(255,255,255,.94); color: #9b2424; font-size: 10px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.plane-delete:hover, .plane-delete:focus-visible, .throw-delete:hover, .throw-delete:focus-visible { border-color: #b52f2f; background: #fff0f0; color: #7d1616; }
 .mini-plane { color: var(--blue); font-size: 27px; transform: rotate(-18deg); }
 
 .performance { padding: 78px 7vw 90px; }
@@ -95,11 +99,12 @@ h1 em, .analyzer h2 em { color: var(--lime); font-style: normal; }
 .card-title h3, .coach-card h3, .report-card h3 { margin: 0; font-size: 27px; letter-spacing: -.04em; }
 .card-title button, .file-row button { border: 0; background: transparent; color: var(--blue); font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
 .throw-list { list-style: none; padding: 0; margin: 0; }
-.throw-list li { display: grid; grid-template-columns: 36px 1fr 76px 75px; gap: 14px; align-items: center; min-height: 62px; border-top: 1px solid var(--line); }
+.throw-list li { display: grid; grid-template-columns: 36px 1fr 76px 75px 62px; gap: 14px; align-items: center; min-height: 62px; border-top: 1px solid var(--line); }
 .throw-rank, .throw-list small { color: var(--muted); font-size: 11px; font-weight: 800; }
 .throw-bar { height: 8px; background: #e7edf5; border-radius: 10px; overflow: hidden; }
 .throw-bar i { display: block; height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .throw-list b { font-size: 17px; }
+.throw-delete { border: 1px solid #e4bcbc; border-radius: 7px; padding: 7px 8px; background: white; color: #9b2424; font-size: 9px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
 .empty-state { color: var(--muted); padding: 44px 0 24px; text-align: center; }
 .empty-state b { display: block; color: var(--navy); font-size: 22px; }
 .empty-state p { margin: 8px auto 18px; max-width: 400px; line-height: 1.5; }
@@ -288,7 +293,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .stat-strip > div { padding: 19px; min-height: 108px; }
   .stat-strip b { font-size: 30px; }
   .throw-card, .coach-card { padding: 22px; }
-  .throw-list li { grid-template-columns: 28px 1fr 64px; gap: 9px; }
+  .throw-list li { grid-template-columns: 28px 1fr 64px 58px; gap: 9px; }
   .throw-list small { display: none; }
   .card-title { align-items: center; }
   .photo-area, .photo-area img { min-height: 330px; }
