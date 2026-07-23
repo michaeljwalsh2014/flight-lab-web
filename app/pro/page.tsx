@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProAccess } from "@/app/pro-access";
+import FlightLabApp from "@/app/flight-lab-app";
 import ProVideoLab from "./pro-video-lab";
 
 export const dynamic = "force-dynamic";
@@ -14,5 +15,10 @@ export default async function ProPage() {
     redirect("/#pro");
   }
 
-  return <ProVideoLab displayName={displayName ?? "Flight Lab Owner"} />;
+  return (
+    <>
+      <FlightLabApp />
+      <ProVideoLab displayName={displayName ?? "Flight Lab Owner"} />
+    </>
+  );
 }

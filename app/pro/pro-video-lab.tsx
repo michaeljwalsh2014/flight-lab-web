@@ -291,19 +291,14 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   }
 
   return (
-    <main className="pro-lab-page">
-      <header className="pro-lab-header">
-        <a className="brand" href="/"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
-        <div><span>Owner confirmed</span><b>{displayName} · Lifetime Pro</b></div>
-      </header>
-
+    <section className="pro-lab-page" id="pro-video-workspace">
       <section className="pro-lab-hero">
         <div>
           <p className="pro-kicker">Flight Lab Pro · Video analyzer</p>
           <h1>Trace the<br /><em>whole flight.</em></h1>
           <p>Record one throw from a steady position. Flight Lab analyzes the video on this device, traces the moving flight path, and measures airtime, curve, stability, and relative screen speed.</p>
         </div>
-        <aside><b>Private by design</b><span>Your video stays on this device. It is not uploaded or saved by Flight Lab.</span></aside>
+        <aside><b>{displayName} · Lifetime Pro</b><span>Owner confirmed. Your video stays on this device and is not uploaded or saved by Flight Lab.</span></aside>
       </section>
 
       <section className="pro-video-workspace">
@@ -343,7 +338,6 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
         <p className="pro-report-note">These are on-screen motion estimates, not real-world distance or radar speed. Keep the camera still and compare videos shot from the same position for the most useful results.</p>
       </section>}
 
-      <footer><a className="brand" href="/"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a><p>Lifetime Pro · Owner access</p></footer>
-    </main>
+    </section>
   );
 }

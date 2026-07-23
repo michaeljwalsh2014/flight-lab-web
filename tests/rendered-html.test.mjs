@@ -28,7 +28,7 @@ test("renders the finished Flight Lab website", async () => {
 });
 
 test("includes all three browser-friendly measuring tools", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /Choose a measuring tool/);
   assert.match(page, /Walk & count/);
   assert.match(page, /Outdoor GPS/);
@@ -42,7 +42,7 @@ test("includes all three browser-friendly measuring tools", async () => {
 });
 
 test("requires one top-view airplane photo and can reject invalid images", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /top view/i);
   assert.doesNotMatch(page, /Add bottom photo/i);
   assert.doesNotMatch(page, /photos\.bottom/);
@@ -55,7 +55,7 @@ test("requires one top-view airplane photo and can reject invalid images", async
 });
 
 test("uses on-device AI, plane pictures, and a labeled distance estimate", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /@tensorflow-models\/coco-ssd/);
   assert.match(page, /The AI sees a \$\{unrelated\.class\}, not a plane/);
   assert.match(page, /Loading the on-device AI model/);
@@ -70,7 +70,7 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
 });
 
 test("recognizes the owner account and activates free Lifetime Pro", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   const accessRoute = await readFile(new URL("../app/api/pro-access/route.ts", import.meta.url), "utf8");
   const accessHelper = await readFile(new URL("../app/pro-access.ts", import.meta.url), "utf8");
   const proPage = await readFile(new URL("../app/pro/page.tsx", import.meta.url), "utf8");
@@ -86,6 +86,8 @@ test("recognizes the owner account and activates free Lifetime Pro", async () =>
   assert.match(accessRoute, /Cache-Control/);
   assert.doesNotMatch(accessHelper, /@gmail\.com|@outlook\.com|@icloud\.com/);
   assert.match(proPage, /getProAccess/);
+  assert.match(proPage, /FlightLabApp/);
+  assert.match(proPage, /ProVideoLab/);
   assert.match(proPage, /redirect\("\/#pro"\)/);
   assert.match(videoLab, /accept="video\/\*"/);
   assert.match(videoLab, /analyzeVideo/);
@@ -97,7 +99,7 @@ test("recognizes the owner account and activates free Lifetime Pro", async () =>
 });
 
 test("can delete a plane or an individual saved flight", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /function deletePlane/);
   assert.match(page, /item\.planeId !== plane\.id/);
   assert.match(page, /function deleteFlight/);
