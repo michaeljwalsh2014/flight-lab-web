@@ -72,15 +72,28 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
 test("recognizes the owner account and activates free Lifetime Pro", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const accessRoute = await readFile(new URL("../app/api/pro-access/route.ts", import.meta.url), "utf8");
+  const accessHelper = await readFile(new URL("../app/pro-access.ts", import.meta.url), "utf8");
+  const proPage = await readFile(new URL("../app/pro/page.tsx", import.meta.url), "utf8");
+  const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
   assert.match(page, /Owner sign in/);
   assert.match(page, /Lifetime Pro is active/);
   assert.match(page, /Pro video lab/);
   assert.match(page, /Video path tracking/);
   assert.match(page, /You will not be charged for Flight Lab Pro/);
   assert.match(page, /signin-with-chatgpt/);
-  assert.match(accessRoute, /FLIGHT_LAB_OWNER_EMAIL/);
+  assert.match(page, /Open Pro video analyzer/);
+  assert.match(accessHelper, /FLIGHT_LAB_OWNER_EMAIL/);
   assert.match(accessRoute, /Cache-Control/);
-  assert.doesNotMatch(accessRoute, /@gmail\.com|@outlook\.com|@icloud\.com/);
+  assert.doesNotMatch(accessHelper, /@gmail\.com|@outlook\.com|@icloud\.com/);
+  assert.match(proPage, /getProAccess/);
+  assert.match(proPage, /redirect\("\/#pro"\)/);
+  assert.match(videoLab, /accept="video\/\*"/);
+  assert.match(videoLab, /analyzeVideo/);
+  assert.match(videoLab, /Tracked airtime/);
+  assert.match(videoLab, /Flight curve/);
+  assert.match(videoLab, /Path stability/);
+  assert.match(videoLab, /Relative speed/);
+  assert.match(videoLab, /not uploaded or saved/);
 });
 
 test("can delete a plane or an individual saved flight", async () => {

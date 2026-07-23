@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { getProAccess } from "@/app/pro-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getChatGPTUser();
-  const ownerEmail = (process.env.FLIGHT_LAB_OWNER_EMAIL ?? "").trim().toLowerCase();
-  const isOwner = Boolean(user && ownerEmail && user.email.trim().toLowerCase() === ownerEmail);
+  const { user, isOwner, displayName } = await getProAccess();
 
   return NextResponse.json(
     {
       authenticated: Boolean(user),
       isOwner,
-      displayName: isOwner ? user?.displayName ?? "Flight Lab Owner" : null,
+      displayName,
     },
     {
       headers: {
