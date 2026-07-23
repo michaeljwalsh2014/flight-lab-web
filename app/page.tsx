@@ -9,7 +9,6 @@ type ThrowRecord = { id: number; planeId: number; distance: number; createdAt: s
 type FlightBehavior = "straight" | "dives" | "stalls" | "left" | "right" | "wobbles" | "spirals" | "short" | "flips";
 type MeasureStage = "ready" | "locating" | "walking";
 type MeasureMethod = "choose" | "pace" | "gps" | "manual";
-type PhotoSide = "top" | "bottom";
 type PlanePhoto = { url: string; name: string };
 type ImageSignals = {
   recognizable: boolean;
@@ -232,12 +231,12 @@ export default function Home() {
   const [manualFeet, setManualFeet] = useState("");
   const [manualInches, setManualInches] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
-  const [photoTarget, setPhotoTarget] = useState<PhotoSide>("top");
-  const [photos, setPhotos] = useState<Record<PhotoSide, PlanePhoto | null>>({ top: null, bottom: null });
+  const [photo, setPhoto] = useState<PlanePhoto | null>(null);
   const [behavior, setBehavior] = useState<FlightBehavior>("straight");
   const [report, setReport] = useState<PhotoReport | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStage, setAnalysisStage] = useState("");
+  const [proModalOpen, setProModalOpen] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const planePhotoRef = useRef<HTMLInputElement>(null);
@@ -516,30 +515,27 @@ export default function Home() {
     setHeightDraft(String(nextHeight));
   }
 
-  function openPhotoSource(side: PhotoSide) {
-    setPhotoTarget(side);
+  function openPhotoSource() {
     setSourceOpen(true);
   }
 
   function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const current = photos[photoTarget];
-    if (current) {
-      URL.revokeObjectURL(current.url);
-      photoUrls.current.delete(current.url);
+    if (photo) {
+      URL.revokeObjectURL(photo.url);
+      photoUrls.current.delete(photo.url);
     }
     const url = URL.createObjectURL(file);
     photoUrls.current.add(url);
-    setPhotos((previous) => ({ ...previous, [photoTarget]: { url, name: file.name || `${photoTarget} view` } }));
+    setPhoto({ url, name: file.name || "top view" });
     setReport(null);
     setSourceOpen(false);
     event.target.value = "";
   }
 
   async function analyzePhoto() {
-    if (!photos.top) { openPhotoSource("top"); return; }
-    if (!photos.bottom) { openPhotoSource("bottom"); return; }
+    if (!photo) { openPhotoSource(); return; }
     setAnalyzing(true);
     setReport(null);
     setAnalysisStage("Loading the on-device AI model…");
@@ -547,8 +543,7 @@ export default function Home() {
       let detectedObjects: DetectedObject[] = [];
       let aiAvailable = true;
       try {
-        const [topObjects, bottomObjects] = await Promise.all([detectObjects(photos.top.url), detectObjects(photos.bottom.url)]);
-        detectedObjects = [...topObjects, ...bottomObjects];
+        detectedObjects = await detectObjects(photo.url);
       } catch {
         aiAvailable = false;
       }
@@ -558,43 +553,35 @@ export default function Home() {
         setReport({
           kind: "rejected",
           headline: `The AI sees a ${unrelated.class}, not a plane`,
-          detail: `The object detector is ${confidence}% confident that one of these photos contains a ${unrelated.class}. Replace that view with a paper airplane photo and try again.`,
-          steps: ["Put only the paper airplane in the frame.", "Use a plain floor or table behind it.", "Retake both views with the entire plane visible."],
+          detail: `The object detector is ${confidence}% confident that this photo contains a ${unrelated.class}. Replace it with a paper airplane photo and try again.`,
+          steps: ["Put only the paper airplane in the frame.", "Use a plain floor or table behind it.", "Retake the top view with the entire plane visible."],
         });
         return;
       }
 
-      setAnalysisStage("Measuring the wing outlines and center folds…");
-      const [top, bottom] = await Promise.all([inspectPlanePhoto(photos.top.url), inspectPlanePhoto(photos.bottom.url)]);
-      const failedView = !top.recognizable ? { name: "top", signal: top } : !bottom.recognizable ? { name: "bottom", signal: bottom } : null;
-      if (failedView) {
+      setAnalysisStage("Measuring the wing outline and center fold…");
+      const top = await inspectPlanePhoto(photo.url);
+      if (!top.recognizable) {
         setReport({
           kind: "rejected",
           headline: "I can’t verify a paper airplane",
-          detail: `The ${failedView.name} photo did not pass the plane-shape check. ${failedView.signal.reason}`,
+          detail: `The top photo did not pass the plane-shape check. ${top.reason}`,
           steps: ["Use a plain floor or table that contrasts with the paper.", "Point the airplane nose toward the top of the photo.", "Keep the entire nose, both wingtips, and tail inside the frame."],
         });
         return;
       }
 
-      const averageSymmetry = Math.round((top.symmetry + bottom.symmetry) / 2);
-      const averageOutline = Math.round((top.outline + bottom.outline) / 2);
-      const averageFold = Math.round((top.foldVisibility + bottom.foldVisibility) / 2);
-      const score = Math.round(clamp(averageSymmetry * .55 + averageOutline * .3 + averageFold * .15, 0, 100));
-      const weakerView = top.symmetry <= bottom.symmetry ? "top" : "bottom";
-      const viewGap = Math.abs(top.symmetry - bottom.symmetry);
+      const score = Math.round(clamp(top.symmetry * .55 + top.outline * .3 + top.foldVisibility * .15, 0, 100));
       const observations = [
-        `Top view: ${top.symmetry}% left-to-right wing match.`,
-        `Bottom view: ${bottom.symmetry}% left-to-right wing match.`,
-        averageFold >= 42 ? "The center fold is visible enough to compare both sides." : "The center fold is faint; brighter, more even lighting will improve the next scan.",
+        `The left and right wings match by ${top.symmetry}%.`,
+        `The pointed wing outline scores ${top.outline}% in this top view.`,
+        top.foldVisibility >= 42 ? "The center fold is clear enough to measure." : "The center fold is faint; brighter, more even lighting will improve the next scan.",
       ];
-      const photoAdvice = averageSymmetry < 74
-        ? `The ${weakerView} view shows the bigger mismatch. Place both wingtips together and re-crease the wing that sits farther from the center line.`
-        : viewGap >= 14
-          ? `The top and bottom views disagree. Check the underside tabs and center pocket for a fold that is pulling one wing out of position.`
-          : averageOutline < 68
-            ? "The wing outline tapers unevenly. Match the two trailing edges before changing the elevator bends."
-            : "Both views show a consistent outline. Keep the folds as they are and change only one rear edge at a time.";
+      const photoAdvice = top.symmetry < 74
+        ? "The top view shows uneven wings. Place both wingtips together and re-crease the wing that sits farther from the center line."
+        : top.outline < 68
+          ? "The wing outline tapers unevenly. Match the two trailing edges before changing the elevator bends."
+          : "The top view has a consistent outline. Keep the main folds as they are and change only one rear edge at a time.";
       setAnalysisStage("Estimating the next-flight distance…");
       const behaviorMultiplier: Record<FlightBehavior, number> = { straight: 1, dives: .78, stalls: .82, left: .88, right: .88, wobbles: .83, spirals: .72, short: .76, flips: .65 };
       const presetBaseline = planePresets.find((preset) => preset.id === activePlane?.preset)?.baseline ?? 27;
@@ -604,15 +591,15 @@ export default function Home() {
       const highEstimate = Math.max(lowEstimate + 2, Math.round(centerEstimate * 1.18));
       const detectedPlaneLabel = detectedObjects.find((item) => item.class === "airplane" || item.class === "kite");
       const aiNote = !aiAvailable
-        ? "The object-detection model was unavailable, so this result uses the two-view fold measurements only."
+        ? "The object-detection model was unavailable, so this result uses the top-view fold measurements only."
         : detectedPlaneLabel
           ? `The AI found an airplane-like object with ${Math.round(detectedPlaneLabel.score * 100)}% confidence and found no competing subject.`
           : "The AI found no cat, person, animal, vehicle, or other competing subject; the fold analyzer then measured the plane itself.";
       setReport({
         kind: "analysis",
         score,
-        headline: averageSymmetry >= 82 && viewGap < 12 ? "Both views look well matched" : "A specific fold needs attention",
-        detail: `${photoAdvice} This recommendation comes from the measured outline and fold contrast in your two photos.`,
+        headline: top.symmetry >= 82 ? "The wings look well matched" : "A specific fold needs attention",
+        detail: `${photoAdvice} This recommendation comes from the measured outline and fold contrast in your top photo.`,
         observations,
         steps: [photoAdvice, behaviorTips[behavior], "Make that one change, then measure three throws and compare the new average."],
         estimatedRange: `${lowEstimate}–${highEstimate} ft`,
@@ -621,9 +608,9 @@ export default function Home() {
     } catch (error) {
       setReport({
         kind: "rejected",
-        headline: "I couldn’t read those photos",
-        detail: error instanceof Error ? error.message : "Try taking both photos again in brighter light.",
-        steps: ["Retake the top and bottom views.", "Keep the full plane inside the frame.", "Use even light without a strong shadow."],
+        headline: "I couldn’t read that photo",
+        detail: error instanceof Error ? error.message : "Try taking the top photo again in brighter light.",
+        steps: ["Retake the top view.", "Keep the full plane inside the frame.", "Use even light without a strong shadow."],
       });
     } finally {
       setAnalyzing(false);
@@ -644,8 +631,8 @@ export default function Home() {
     <main>
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Flight Lab home"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
-        <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#install">Install</a></nav>
-        <button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button>
+        <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#pro">Pro</a></nav>
+        <div className="topbar-actions"><button className="header-pro" type="button" onClick={() => setProModalOpen(true)}>Upgrade to Pro</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
       </header>
 
       <section className="hero" id="top">
@@ -682,33 +669,55 @@ export default function Home() {
       </section>
 
       <section className="analyzer" id="analyzer">
-        <div className="analyzer-intro"><p className="kicker">On-device AI + two-view scan</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Flight Lab now runs an object-detection AI first, so a cat or other obvious subject is stopped before scoring. Then it spends more time comparing the top and bottom wing shapes, fold contrast, flight behavior, and your measured throw history.</p><div className="photo-guides"><span>01 AI object check</span><span>02 Top + bottom fold scan</span><span>03 Next-flight estimate</span></div></div>
+        <div className="analyzer-intro"><p className="kicker">Free · one-photo AI scan</p><h2>Scan your plane.<br /><em>Find the next improvement.</em></h2><p>Lay the plane normally and take one photo from directly above. Flight Lab checks for unrelated objects first, then measures the left and right wings inside that same picture—so flipping the plane can no longer create a false mismatch.</p><div className="photo-guides"><span>01 One top-view photo</span><span>02 AI object check</span><span>03 Wing + fold measurements</span></div></div>
         <div className="scanner-card">
-          <input ref={cameraRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePhoto} aria-label={`Take the ${photoTarget} photo of your paper airplane`} />
-          <input ref={libraryRef} className="sr-only" type="file" accept="image/*" onChange={handlePhoto} aria-label={`Choose the ${photoTarget} photo of your paper airplane`} />
-          <div className="photo-grid">
-            {(["top", "bottom"] as PhotoSide[]).map((side) => <div className={`photo-slot ${photos[side] ? "has-photo" : ""}`} key={side}>
-              <span className="photo-side">{side === "top" ? "1 · Top view" : "2 · Bottom view"}</span>
-              {photos[side] ? <><img src={photos[side]?.url} alt={`${side} view of the selected paper airplane`} /><button className="change-photo" type="button" onClick={() => openPhotoSource(side)}>Change {side} photo</button></> : <button className="add-photo" type="button" onClick={() => openPhotoSource(side)}><span className="camera-icon" aria-hidden="true">CAM</span><b>Add {side} photo</b><small>{side === "top" ? "Lay the plane normally" : "Flip the plane over"}</small></button>}
-              <span className="scan-corner top-left" /><span className="scan-corner top-right" /><span className="scan-corner bottom-left" /><span className="scan-corner bottom-right" />
-            </div>)}
+          <input ref={cameraRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePhoto} aria-label="Take the top photo of your paper airplane" />
+          <input ref={libraryRef} className="sr-only" type="file" accept="image/*" onChange={handlePhoto} aria-label="Choose the top photo of your paper airplane" />
+          <div className={`photo-slot single-photo ${photo ? "has-photo" : ""}`}>
+            <span className="photo-side">Top view · one photo</span>
+            {photo ? <><img src={photo.url} alt="Top view of the selected paper airplane" /><button className="change-photo" type="button" onClick={openPhotoSource}>Change photo</button></> : <button className="add-photo" type="button" onClick={openPhotoSource}><span className="camera-icon" aria-hidden="true">CAM</span><b>Add top photo</b><small>Lay the plane normally and shoot from above</small></button>}
+            <span className="scan-corner top-left" /><span className="scan-corner top-right" /><span className="scan-corner bottom-left" /><span className="scan-corner bottom-right" />
           </div>
           <div className="scanner-controls">
             <label htmlFor="behavior">What happened on the last flight?</label>
             <select id="behavior" value={behavior} onChange={(event) => setBehavior(event.target.value as FlightBehavior)}>
               <option value="straight">It flew mostly straight</option><option value="dives">It dives nose-first</option><option value="stalls">It climbs, then stalls</option><option value="left">It drifts or turns left</option><option value="right">It drifts or turns right</option><option value="wobbles">It wobbles side to side</option><option value="spirals">It spirals or corkscrews</option><option value="short">It glides smoothly but lands short</option><option value="flips">It flips over or flies upside down</option>
             </select>
-            {!photos.top || !photos.bottom ? <p className="photo-requirement">Add both views before analysis. Non-airplane photos will be rejected instead of scored.</p> : null}
-            <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photos.top || !photos.bottom}>{analyzing ? analysisStage || "Analyzing both views…" : "Run full AI analysis"}</button>
+            {!photo ? <p className="photo-requirement">Add one top-view photo before analysis. Obvious non-airplane photos will be rejected instead of scored.</p> : null}
+            <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photo}>{analyzing ? analysisStage || "Analyzing the top view…" : "Analyze this plane"}</button>
           </div>
         </div>
         {report && <article className={`report-card ${report.kind === "rejected" ? "rejected" : ""}`} aria-live="polite">
-          {report.kind === "analysis" ? <div className="report-score"><span>Two-view fold score</span><b>{report.score}<small>/100</small></b></div> : <div className="report-rejected-mark"><b>Not scored</b><span>Plane not verified</span></div>}
+          {report.kind === "analysis" ? <div className="report-score"><span>Top-view fold score</span><b>{report.score}<small>/100</small></b></div> : <div className="report-rejected-mark"><b>Not scored</b><span>Plane not verified</span></div>}
           <div className="report-copy"><p className="kicker">{report.kind === "analysis" ? "Analysis complete" : "Photo check stopped"}</p><h3>{report.headline}</h3><p>{report.detail}</p></div>
           {report.kind === "analysis" && <><div className="flight-estimate"><span>Estimated next flight</span><b>{report.estimatedRange}</b><small>Estimate—not a measurement</small></div><p className="ai-note">{report.aiNote}</p><ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></>}
           <ol>{report.steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol>
-          <p className="prototype-note">Object detection and fold analysis run on this device. Distance is estimated from design type, photo score, flight behavior, and this plane&apos;s measured history; confirm it with a real throw.</p>
+          <p className="prototype-note">Object detection and top-view fold analysis run on this device. Distance is estimated from design type, photo score, flight behavior, and this plane&apos;s measured history; confirm it with a real throw.</p>
         </article>}
+      </section>
+
+      <section className="pro-preview" id="pro">
+        <div className="pro-copy">
+          <p className="pro-kicker">Flight Lab Pro</p>
+          <h2>See the whole flight,<br /><em>not just the landing.</em></h2>
+          <p>Pro is being designed around video analysis: record one throw and get a traced flight path, airtime, curve, stall and dive detection, plus deeper experiment comparisons.</p>
+          <button className="pro-primary" type="button" onClick={() => setProModalOpen(true)}>Preview Pro</button>
+          <small>No free trials. The owner receives Lifetime Pro; everyone else needs an active paid subscription.</small>
+        </div>
+        <div className="video-lab-card" aria-label="Locked preview of Pro video analysis">
+          <div className="video-lab-top"><span>Pro video lab</span><b>Locked</b></div>
+          <div className="video-flight">
+            <span className="video-plane" aria-hidden="true">➤</span>
+            <i className="path-one" /><i className="path-two" /><i className="path-three" />
+            <div className="video-lock"><b>VIDEO</b><span>Record · Track · Improve</span></div>
+          </div>
+          <div className="video-metrics"><div><span>Airtime</span><b>—</b></div><div><span>Flight path</span><b>—</b></div><div><span>Speed</span><b>—</b></div></div>
+        </div>
+        <div className="pro-features">
+          <article><span>01</span><b>Video path tracking</b><p>See curves, stalls, dives, and airtime across the complete throw.</p></article>
+          <article><span>02</span><b>Advanced experiments</b><p>Compare folds, paper, nose weight, and launch changes over time.</p></article>
+          <article><span>03</span><b>Deeper statistics</b><p>Track consistency, personal records, and predicted performance.</p></article>
+        </div>
       </section>
 
       <section className="install-section" id="install">
@@ -725,6 +734,8 @@ export default function Home() {
       </section>
 
       <footer><a className="brand" href="#top"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a><p>Build. Test. Fly farther.</p></footer>
+
+      <button className="pro-upgrade-fab" type="button" onClick={() => setProModalOpen(true)} aria-label="Upgrade to Flight Lab Pro"><span>PRO</span> Upgrade</button>
 
       {planeModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setPlaneModalOpen(false); }}><section className="record-modal plane-builder" role="dialog" aria-modal="true" aria-labelledby="plane-title"><button className="modal-close" type="button" onClick={() => setPlaneModalOpen(false)} aria-label="Close">×</button><p className="kicker">Your hangar</p><h2 id="plane-title">Add a plane</h2><p>Choose a built-in design picture or take a photo of your own plane. Each design keeps its own throws, average, and analysis.</p><input ref={planePhotoRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePlanePhoto} aria-label="Take or choose a picture of your plane" /><div className="preset-grid">{planePresets.map((preset) => <button type="button" key={preset.id} className={`preset-card ${newPlanePreset === preset.id ? "selected" : ""}`} onClick={() => choosePlanePreset(preset)}><img src={preset.image} alt={`${preset.name} paper airplane`} /><b>{preset.name}</b><small>{preset.description}</small></button>)}<button type="button" className={`preset-card upload-preset ${newPlanePreset === "custom" ? "selected" : ""}`} onClick={() => planePhotoRef.current?.click()}>{newPlanePreset === "custom" ? <img src={newPlaneImage} alt="Your uploaded plane" /> : <span>CAM</span>}<b>Your plane</b><small>Take a picture or choose one</small></button></div><label htmlFor="plane-name">Plane name</label><input className="name-input" id="plane-name" value={newPlaneName} onChange={(event) => setNewPlaneName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} placeholder="Example: Sky Dart" maxLength={32} /><button className="analyze-button" type="button" onClick={addPlane}>Add this plane</button></section></div>}
 
@@ -779,7 +790,9 @@ export default function Home() {
         </>}
       </section></div>}
 
-      {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">{photoTarget} view</p><h2 id="source-title">Add the {photoTarget} photo</h2><p className="source-help">Use a plain surface, point the nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take {photoTarget} photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose {photoTarget} photo</b><small>Select a photo you already took</small></button></section></div>}
+      {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">Top view</p><h2 id="source-title">Add one plane photo</h2><p className="source-help">Lay the plane normally on a plain surface, point its nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take top photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose top photo</b><small>Select a photo you already took</small></button></section></div>}
+
+      {proModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProModalOpen(false); }}><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><p className="pro-kicker">Flight Lab Pro</p><h2 id="pro-title">The complete flight lab.</h2><p className="pro-modal-lede">Pro adds video flight analysis, advanced experiments, unlimited design history, and deeper performance statistics.</p><ul><li><b>Video analyzer</b><span>Trace airtime, curves, stalls, dives, and speed estimates.</span></li><li><b>Experiment comparisons</b><span>See which fold or launch change actually improved the average.</span></li><li><b>Advanced records</b><span>Keep complete design versions, charts, and performance predictions.</span></li></ul><div className="owner-rule"><b>Access rule</b><span>Flight Lab Owner gets Lifetime Pro. Everyone else needs an active paid subscription. There are no free trials.</span></div><p className="billing-note">This is the Pro preview. Secure account and payment setup must be connected before purchases open; this page does not collect money yet.</p><button className="pro-primary" type="button" onClick={() => setProModalOpen(false)}>Close Pro preview</button></section></div>}
     </main>
   );
 }

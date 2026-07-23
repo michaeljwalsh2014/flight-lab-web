@@ -41,13 +41,14 @@ test("includes all three browser-friendly measuring tools", async () => {
   assert.match(page, /You can erase the current number and type any height/);
 });
 
-test("requires two airplane photos and can reject invalid images", async () => {
+test("requires one top-view airplane photo and can reject invalid images", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /top view/i);
-  assert.match(page, /bottom view/i);
+  assert.doesNotMatch(page, /Add bottom photo/i);
+  assert.doesNotMatch(page, /photos\.bottom/);
   assert.match(page, /inspectPlanePhoto/);
   assert.match(page, /I can’t verify a paper airplane/);
-  assert.match(page, /Non-airplane photos will be rejected instead of scored/);
+  assert.match(page, /non-airplane photos will be rejected instead of scored/i);
   assert.match(page, /It wobbles side to side/);
   assert.match(page, /It spirals or corkscrews/);
   assert.doesNotMatch(page, /Math\.max\(55/);
@@ -58,7 +59,7 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /@tensorflow-models\/coco-ssd/);
   assert.match(page, /The AI sees a \$\{unrelated\.class\}, not a plane/);
   assert.match(page, /Loading the on-device AI model/);
-  assert.match(page, /Run full AI analysis/);
+  assert.match(page, /Analyze this plane/);
   assert.match(page, /Estimated next flight/);
   assert.match(page, /Estimate—not a measurement/);
   assert.match(page, /Paper Dart/);
@@ -66,6 +67,16 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /Take a picture or choose one/);
   assert.match(page, /\/plane-presets\/dart\.png/);
   assert.match(page, /\/plane-presets\/glider\.png/);
+});
+
+test("presents a locked Pro video-analysis preview and upgrade controls", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /Upgrade to Pro/);
+  assert.match(page, /Pro video lab/);
+  assert.match(page, /Video path tracking/);
+  assert.match(page, /Flight Lab Owner gets Lifetime Pro/);
+  assert.match(page, /There are no free trials/);
+  assert.match(page, /does not collect money yet/);
 });
 
 test("can delete a plane or an individual saved flight", async () => {
