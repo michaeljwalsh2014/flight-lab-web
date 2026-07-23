@@ -98,6 +98,17 @@ test("recognizes the owner account and activates free Lifetime Pro", async () =>
   assert.match(videoLab, /not uploaded or saved/);
 });
 
+test("supports a no-sign-in Pro Pass link with every free and video tool", async () => {
+  const sharePage = await readFile(new URL("../app/pro/share/[token]/page.tsx", import.meta.url), "utf8");
+  const app = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
+  assert.match(sharePage, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
+  assert.match(sharePage, /FlightLabApp sharedProPass/);
+  assert.match(sharePage, /ProVideoLab/);
+  assert.match(app, /sharedProPass/);
+  assert.match(app, /No account, payment, or sign-in is required/);
+  assert.match(app, /Anyone with this exact private link receives Pro access automatically/);
+});
+
 test("can delete a plane or an individual saved flight", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /function deletePlane/);

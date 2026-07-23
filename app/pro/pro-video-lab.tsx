@@ -298,7 +298,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
           <h1>Trace the<br /><em>whole flight.</em></h1>
           <p>Record one throw from a steady position. Flight Lab analyzes the video on this device, traces the moving flight path, and measures airtime, curve, stability, and relative screen speed.</p>
         </div>
-        <aside><b>{displayName} · Lifetime Pro</b><span>Owner confirmed. Your video stays on this device and is not uploaded or saved by Flight Lab.</span></aside>
+        <aside><b>{displayName} · Lifetime Pro</b><span>Pro access confirmed. Your video stays on this device and is not uploaded or saved by Flight Lab.</span></aside>
       </section>
 
       <section className="pro-video-workspace">

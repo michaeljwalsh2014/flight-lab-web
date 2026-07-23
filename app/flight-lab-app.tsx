@@ -214,7 +214,11 @@ function distanceInFeet(start: GeolocationCoordinates, end: GeolocationCoordinat
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 3.28084;
 }
 
-export default function FlightLabApp() {
+export default function FlightLabApp({
+  sharedProPass = false,
+}: {
+  sharedProPass?: boolean;
+}) {
   const [planes, setPlanes] = useState<PlaneRecord[]>([]);
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
@@ -242,7 +246,11 @@ export default function FlightLabApp() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStage, setAnalysisStage] = useState("");
   const [proModalOpen, setProModalOpen] = useState(false);
-  const [proAccess, setProAccess] = useState<ProAccess>({ status: "loading" });
+  const [proAccess, setProAccess] = useState<ProAccess>(
+    sharedProPass
+      ? { status: "owner", displayName: "Pro Pass" }
+      : { status: "loading" },
+  );
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const planePhotoRef = useRef<HTMLInputElement>(null);
@@ -279,6 +287,7 @@ export default function FlightLabApp() {
   useEffect(() => { window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(throws)); }, [throws]);
   useEffect(() => { window.localStorage.setItem("flight-lab-v3-height", String(heightInches)); }, [heightInches]);
   useEffect(() => {
+    if (sharedProPass) return;
     let active = true;
     fetch("/api/pro-access", { cache: "no-store" })
       .then(async (response) => {
@@ -297,7 +306,7 @@ export default function FlightLabApp() {
         if (active) setProAccess({ status: "anonymous" });
       });
     return () => { active = false; };
-  }, []);
+  }, [sharedProPass]);
   useEffect(() => () => {
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
     if (motionListener.current) window.removeEventListener("devicemotion", motionListener.current);
@@ -686,7 +695,7 @@ export default function FlightLabApp() {
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Flight Lab home"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
         <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#pro">Pro</a></nav>
-        <div className="topbar-actions"><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : ownerHasPro ? "Lifetime Pro" : "Owner sign in"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
+        <div className="topbar-actions"><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : sharedProPass ? "Pro Pass" : ownerHasPro ? "Lifetime Pro" : "Owner sign in"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
       </header>
 
       <section className="hero" id="top">
@@ -755,11 +764,11 @@ export default function FlightLabApp() {
           <p className="pro-kicker">Flight Lab Pro</p>
           <h2>See the whole flight,<br /><em>not just the landing.</em></h2>
           <p>Pro is being designed around video analysis: record one throw and get a traced flight path, airtime, curve, stall and dive detection, plus deeper experiment comparisons.</p>
-          <button className="pro-primary" type="button" onClick={openProAccess}>{ownerHasPro ? "Open Lifetime Pro" : "Sign in as owner"}</button>
-          <small>{ownerHasPro ? `Lifetime Pro is active for ${proAccess.displayName}.` : "The owner receives Lifetime Pro for free after signing in with the owner account."}</small>
+          <button className="pro-primary" type="button" onClick={openProAccess}>{sharedProPass ? "Open Pro video tools" : ownerHasPro ? "Open Lifetime Pro" : "Sign in as owner"}</button>
+          <small>{sharedProPass ? "This Pro Pass includes every free tool plus the video analyzer—no sign-in needed." : ownerHasPro ? `Lifetime Pro is active for ${proAccess.displayName}.` : "The owner receives Lifetime Pro for free after signing in with the owner account."}</small>
         </div>
         <div className={`video-lab-card ${ownerHasPro ? "unlocked" : ""}`} aria-label={ownerHasPro ? "Owner access to the Pro video lab" : "Locked preview of Pro video analysis"}>
-          <div className="video-lab-top"><span>Pro video lab</span><b>{ownerHasPro ? "Owner access" : "Locked"}</b></div>
+            <div className="video-lab-top"><span>Pro video lab</span><b>{sharedProPass ? "Pro Pass" : ownerHasPro ? "Owner access" : "Locked"}</b></div>
           <div className="video-flight">
             <span className="video-plane" aria-hidden="true">➤</span>
             <i className="path-one" /><i className="path-two" /><i className="path-three" />
@@ -789,7 +798,7 @@ export default function FlightLabApp() {
 
       <footer><a className="brand" href="#top"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a><p>Build. Test. Fly farther.</p></footer>
 
-      <button className={`pro-upgrade-fab ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess} aria-label={ownerHasPro ? "Open your Lifetime Pro access" : "Sign in for owner Pro access"}><span>PRO</span> {ownerHasPro ? "Lifetime" : "Owner sign in"}</button>
+      <button className={`pro-upgrade-fab ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess} aria-label={sharedProPass ? "Open Pro video tools" : ownerHasPro ? "Open your Lifetime Pro access" : "Sign in for owner Pro access"}><span>PRO</span> {sharedProPass ? "Pass" : ownerHasPro ? "Lifetime" : "Owner sign in"}</button>
 
       {planeModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setPlaneModalOpen(false); }}><section className="record-modal plane-builder" role="dialog" aria-modal="true" aria-labelledby="plane-title"><button className="modal-close" type="button" onClick={() => setPlaneModalOpen(false)} aria-label="Close">×</button><p className="kicker">Your hangar</p><h2 id="plane-title">Add a plane</h2><p>Choose a built-in design picture or take a photo of your own plane. Each design keeps its own throws, average, and analysis.</p><input ref={planePhotoRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePlanePhoto} aria-label="Take or choose a picture of your plane" /><div className="preset-grid">{planePresets.map((preset) => <button type="button" key={preset.id} className={`preset-card ${newPlanePreset === preset.id ? "selected" : ""}`} onClick={() => choosePlanePreset(preset)}><img src={preset.image} alt={`${preset.name} paper airplane`} /><b>{preset.name}</b><small>{preset.description}</small></button>)}<button type="button" className={`preset-card upload-preset ${newPlanePreset === "custom" ? "selected" : ""}`} onClick={() => planePhotoRef.current?.click()}>{newPlanePreset === "custom" ? <img src={newPlaneImage} alt="Your uploaded plane" /> : <span>CAM</span>}<b>Your plane</b><small>Take a picture or choose one</small></button></div><label htmlFor="plane-name">Plane name</label><input className="name-input" id="plane-name" value={newPlaneName} onChange={(event) => setNewPlaneName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} placeholder="Example: Sky Dart" maxLength={32} /><button className="analyze-button" type="button" onClick={addPlane}>Add this plane</button></section></div>}
 
@@ -846,7 +855,7 @@ export default function FlightLabApp() {
 
       {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">Top view</p><h2 id="source-title">Add one plane photo</h2><p className="source-help">Lay the plane normally on a plain surface, point its nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take top photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose top photo</b><small>Select a photo you already took</small></button></section></div>}
 
-      {proModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProModalOpen(false); }}><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><p className="pro-kicker">Flight Lab Pro</p><h2 id="pro-title">{ownerHasPro ? "Lifetime Pro is active." : "Owner access"}</h2><p className="pro-modal-lede">{ownerHasPro ? `Welcome, ${proAccess.displayName}. This owner account has permanent Pro access at no cost.` : "Sign in with the ChatGPT account that owns Flight Lab to activate free Lifetime Pro."}</p><ul><li><b>Video analyzer</b><span>Trace airtime, curves, flight shape, stability, and relative speed.</span></li><li><b>On-device analysis</b><span>Your selected video stays on your device and is not uploaded.</span></li><li><b>Flight-path report</b><span>See a visual trace and repeatable scores for comparing throws.</span></li></ul><div className={`owner-rule ${ownerHasPro ? "confirmed" : ""}`}><b>{ownerHasPro ? "Owner confirmed" : "Access rule"}</b><span>{ownerHasPro ? "Your Lifetime Pro entitlement is active. You will not be charged for Flight Lab Pro." : proAccess.status === "visitor" ? "This signed-in account is not the Flight Lab owner account. Sign out, then use the owner account." : "The Flight Lab owner gets Lifetime Pro for free. Other accounts remain on the standard version while paid subscriptions are unavailable."}</span></div><p className="billing-note">{ownerHasPro ? "Owner access is tied to your signed-in account and works on any device." : "Flight Lab does not collect payment information."}</p>{ownerHasPro ? <button className="pro-primary" type="button" onClick={openProVideoLab}>Open Pro video analyzer</button> : proAccess.status === "visitor" ? <button className="pro-primary" type="button" onClick={signOutOfPro}>Sign out and switch account</button> : <button className="pro-primary" type="button" onClick={openProAccess}>Sign in with ChatGPT</button>}</section></div>}
+      {proModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProModalOpen(false); }}><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><p className="pro-kicker">Flight Lab Pro</p><h2 id="pro-title">{sharedProPass ? "Pro is unlocked." : ownerHasPro ? "Lifetime Pro is active." : "Owner access"}</h2><p className="pro-modal-lede">{sharedProPass ? "This Pro Pass unlocks every Flight Lab tool without an account." : ownerHasPro ? `Welcome, ${proAccess.displayName}. This owner account has permanent Pro access at no cost.` : "Sign in with the ChatGPT account that owns Flight Lab to activate free Lifetime Pro."}</p><ul><li><b>Video analyzer</b><span>Trace airtime, curves, flight shape, stability, and relative speed.</span></li><li><b>On-device analysis</b><span>Your selected video stays on your device and is not uploaded.</span></li><li><b>Flight-path report</b><span>See a visual trace and repeatable scores for comparing throws.</span></li></ul><div className={`owner-rule ${ownerHasPro ? "confirmed" : ""}`}><b>{sharedProPass ? "Pro Pass confirmed" : ownerHasPro ? "Owner confirmed" : "Access rule"}</b><span>{sharedProPass ? "Anyone with this exact private link receives Pro access automatically." : ownerHasPro ? "Your Lifetime Pro entitlement is active. You will not be charged for Flight Lab Pro." : proAccess.status === "visitor" ? "This signed-in account is not the Flight Lab owner account. Sign out, then use the owner account." : "The Flight Lab owner gets Lifetime Pro for free. Other accounts remain on the standard version while paid subscriptions are unavailable."}</span></div><p className="billing-note">{sharedProPass ? "No account, payment, or sign-in is required." : ownerHasPro ? "Owner access is tied to your signed-in account and works on any device." : "Flight Lab does not collect payment information."}</p>{ownerHasPro ? <button className="pro-primary" type="button" onClick={openProVideoLab}>Open Pro video analyzer</button> : proAccess.status === "visitor" ? <button className="pro-primary" type="button" onClick={signOutOfPro}>Sign out and switch account</button> : <button className="pro-primary" type="button" onClick={openProAccess}>Sign in with ChatGPT</button>}</section></div>}
     </main>
   );
 }
