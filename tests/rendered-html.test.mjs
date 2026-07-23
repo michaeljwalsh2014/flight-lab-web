@@ -74,6 +74,8 @@ test("can delete a plane or an individual saved flight", async () => {
   assert.match(page, /item\.planeId !== plane\.id/);
   assert.match(page, /function deleteFlight/);
   assert.match(page, /item\.id !== flight\.id/);
+  assert.match(page, /activeThrows\.map/);
+  assert.doesNotMatch(page, /activeThrows\.slice\(0, 5\)/);
   assert.match(page, /aria-label={`Delete \$\{plane\.name\}`}/);
   assert.match(page, /title="Delete this flight"/);
 });
