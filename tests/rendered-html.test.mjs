@@ -69,13 +69,15 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /\/plane-presets\/glider\.png/);
 });
 
-test("recognizes the owner account and activates free Lifetime Pro", async () => {
+test("offers a normal Pro upgrade and recognizes the owner account", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   const accessRoute = await readFile(new URL("../app/api/pro-access/route.ts", import.meta.url), "utf8");
   const accessHelper = await readFile(new URL("../app/pro-access.ts", import.meta.url), "utf8");
   const proPage = await readFile(new URL("../app/pro/page.tsx", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
-  assert.match(page, /Owner sign in/);
+  assert.match(page, /Upgrade to Pro/);
+  assert.doesNotMatch(page, />Owner sign in</);
   assert.match(page, /Lifetime Pro is active/);
   assert.match(page, /Pro video lab/);
   assert.match(page, /Video path tracking/);
@@ -86,27 +88,34 @@ test("recognizes the owner account and activates free Lifetime Pro", async () =>
   assert.match(accessRoute, /Cache-Control/);
   assert.doesNotMatch(accessHelper, /@gmail\.com|@outlook\.com|@icloud\.com/);
   assert.match(proPage, /getProAccess/);
-  assert.match(proPage, /FlightLabApp/);
-  assert.match(proPage, /ProVideoLab/);
+  assert.match(proPage, /ProDashboard/);
   assert.match(proPage, /redirect\("\/#pro"\)/);
+  assert.match(dashboard, /Rate my plane/);
+  assert.match(dashboard, /Smart Walk Measure/);
+  assert.match(dashboard, /Experiment Builder/);
+  assert.match(dashboard, /Age range · optional/);
+  assert.match(dashboard, /Measured best · optional/);
   assert.match(videoLab, /accept="video\/\*"/);
   assert.match(videoLab, /analyzeVideo/);
+  assert.match(videoLab, /Drag to rotate/);
+  assert.match(videoLab, /pinch or scroll to zoom/);
+  assert.match(videoLab, /Top map/);
+  assert.match(videoLab, /Removing camera shake and false turns/);
   assert.match(videoLab, /Tracked airtime/);
   assert.match(videoLab, /Flight curve/);
   assert.match(videoLab, /Path stability/);
   assert.match(videoLab, /Relative speed/);
-  assert.match(videoLab, /not uploaded or saved/);
+  assert.match(videoLab, /Your video stays on this device/);
 });
 
-test("supports a no-sign-in Pro Pass link with every free and video tool", async () => {
+test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", async () => {
   const sharePage = await readFile(new URL("../app/pro/share/[token]/page.tsx", import.meta.url), "utf8");
-  const app = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   assert.match(sharePage, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
-  assert.match(sharePage, /FlightLabApp sharedProPass/);
-  assert.match(sharePage, /ProVideoLab/);
-  assert.match(app, /sharedProPass/);
-  assert.match(app, /No account, payment, or sign-in is required/);
-  assert.match(app, /Anyone with this exact private link receives Pro access automatically/);
+  assert.match(sharePage, /ProDashboard/);
+  assert.match(sharePage, /sharedPass/);
+  assert.match(dashboard, /Pro Pass active/);
+  assert.match(dashboard, /ProVideoLab/);
 });
 
 test("can delete a plane or an individual saved flight", async () => {

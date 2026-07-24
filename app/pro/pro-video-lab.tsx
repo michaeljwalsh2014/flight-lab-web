@@ -1,8 +1,10 @@
 "use client";
 
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, PointerEvent as ReactPointerEvent, WheelEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AnalysisLoader } from "./pro-ui";
 
-type TrackPoint = { x: number; y: number; time: number };
+type TrackPoint = { x: number; y: number; time: number; confidence: number };
+type Candidate = { x: number; y: number; area: number; energy: number; frame: number; time: number };
 type VideoReport = {
   airtime: number;
   curve: number;
@@ -11,7 +13,9 @@ type VideoReport = {
   confidence: number;
   profile: string;
   points: TrackPoint[];
+  sampledFrames: number;
 };
+type ViewMode = "3d" | "side" | "top";
 
 const clampNumber = (value: number, minimum: number, maximum: number) =>
   Math.max(minimum, Math.min(maximum, value));
@@ -21,7 +25,7 @@ function waitForVideoEvent(video: HTMLVideoElement, eventName: "loadedmetadata" 
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error("The video took too long to decode. Try a shorter recording."));
-    }, 12000);
+    }, 14000);
     const onEvent = () => {
       cleanup();
       resolve();
@@ -41,7 +45,7 @@ function waitForVideoEvent(video: HTMLVideoElement, eventName: "loadedmetadata" 
 }
 
 async function seekVideo(video: HTMLVideoElement, time: number) {
-  if (Math.abs(video.currentTime - time) < .015) return;
+  if (Math.abs(video.currentTime - time) < .012) return;
   const ready = waitForVideoEvent(video, "seeked");
   video.currentTime = time;
   await ready;
@@ -53,145 +57,306 @@ function angleDifference(first: number, second: number) {
   return difference;
 }
 
-async function analyzeVideo(url: string): Promise<VideoReport> {
+function motionCandidates(
+  pixels: Uint8ClampedArray,
+  previous: Uint8ClampedArray,
+  width: number,
+  height: number,
+  frame: number,
+  time: number,
+) {
+  const length = width * height;
+  const differences = new Float32Array(length);
+  let differenceTotal = 0;
+  for (let pixel = 0; pixel < length; pixel++) {
+    const offset = pixel * 4;
+    const difference = (
+      Math.abs(pixels[offset] - previous[offset]) +
+      Math.abs(pixels[offset + 1] - previous[offset + 1]) +
+      Math.abs(pixels[offset + 2] - previous[offset + 2])
+    ) / 3;
+    differences[pixel] = difference;
+    differenceTotal += difference;
+  }
+  const averageDifference = differenceTotal / length;
+  const threshold = clampNumber(averageDifference * 2.9 + 11, 26, 78);
+  const mask = new Uint8Array(length);
+  let changed = 0;
+  for (let y = 4; y < height - 4; y++) for (let x = 4; x < width - 4; x++) {
+    const position = y * width + x;
+    if (differences[position] > threshold) {
+      mask[position] = 1;
+      changed++;
+    }
+  }
+  const changedRatio = changed / length;
+  if (changedRatio < .00015 || changedRatio > .22) return [];
+
+  const visited = new Uint8Array(length);
+  const candidates: Candidate[] = [];
+  const stack: number[] = [];
+  const maxArea = length * .045;
+
+  for (let y = 5; y < height - 5; y++) for (let x = 5; x < width - 5; x++) {
+    const start = y * width + x;
+    if (!mask[start] || visited[start]) continue;
+    stack.length = 0;
+    stack.push(start);
+    visited[start] = 1;
+    let area = 0;
+    let energy = 0;
+    let xTotal = 0;
+    let yTotal = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+    while (stack.length) {
+      const position = stack.pop()!;
+      const pointY = Math.floor(position / width);
+      const pointX = position - pointY * width;
+      const weight = Math.max(1, differences[position] - threshold);
+      area++;
+      energy += weight;
+      xTotal += pointX * weight;
+      yTotal += pointY * weight;
+      minX = Math.min(minX, pointX);
+      maxX = Math.max(maxX, pointX);
+      minY = Math.min(minY, pointY);
+      maxY = Math.max(maxY, pointY);
+      if (area > maxArea) break;
+      for (let offsetY = -1; offsetY <= 1; offsetY++) for (let offsetX = -1; offsetX <= 1; offsetX++) {
+        if (!offsetX && !offsetY) continue;
+        const neighborX = pointX + offsetX;
+        const neighborY = pointY + offsetY;
+        if (neighborX < 3 || neighborX >= width - 3 || neighborY < 3 || neighborY >= height - 3) continue;
+        const neighbor = neighborY * width + neighborX;
+        if (mask[neighbor] && !visited[neighbor]) {
+          visited[neighbor] = 1;
+          stack.push(neighbor);
+        }
+      }
+    }
+    if (area < 3 || area > maxArea || energy < 70) continue;
+    const boxWidth = maxX - minX + 1;
+    const boxHeight = maxY - minY + 1;
+    const aspect = Math.max(boxWidth, boxHeight) / Math.max(1, Math.min(boxWidth, boxHeight));
+    if (aspect > 9 || boxWidth > width * .34 || boxHeight > height * .42) continue;
+    candidates.push({
+      x: xTotal / Math.max(1, energy) / width,
+      y: yTotal / Math.max(1, energy) / height,
+      area,
+      energy,
+      frame,
+      time,
+    });
+  }
+  return candidates.sort((first, second) => second.energy / Math.sqrt(second.area) - first.energy / Math.sqrt(first.area)).slice(0, 14);
+}
+
+function buildBestTrack(frames: Candidate[][]) {
+  type Node = Candidate & { score: number; length: number; previous: Node | null; velocityX: number; velocityY: number };
+  const nodesByFrame: Node[][] = [];
+  let best: Node | null = null;
+  frames.forEach((candidates, frameIndex) => {
+    const nodes = candidates.map((candidate) => {
+      let bestPrevious: Node | null = null;
+      let bestScore = -Infinity;
+      for (let lookback = 1; lookback <= 3; lookback++) {
+        const previousFrame = nodesByFrame[frameIndex - lookback] ?? [];
+        for (const previous of previousFrame) {
+          const predictedX = previous.x + previous.velocityX * lookback;
+          const predictedY = previous.y + previous.velocityY * lookback;
+          const predictionError = Math.hypot(candidate.x - predictedX, candidate.y - predictedY);
+          const rawDistance = Math.hypot(candidate.x - previous.x, candidate.y - previous.y);
+          if (rawDistance > .32 || predictionError > .27) continue;
+          const areaChange = Math.abs(Math.log((candidate.area + 1) / (previous.area + 1)));
+          const movementReward = Math.min(.12, rawDistance) * 17;
+          const transition = previous.score + 3.2 + movementReward - predictionError * 24 - areaChange * 1.1 - (lookback - 1) * 1.5;
+          if (transition > bestScore) {
+            bestScore = transition;
+            bestPrevious = previous;
+          }
+        }
+      }
+      const baseScore = Math.min(2.4, candidate.energy / Math.max(1, candidate.area) / 18);
+      const node: Node = {
+        ...candidate,
+        score: bestPrevious ? bestScore + baseScore : baseScore,
+        length: (bestPrevious?.length ?? 0) + 1,
+        previous: bestPrevious,
+        velocityX: bestPrevious ? (candidate.x - bestPrevious.x) * .65 + bestPrevious.velocityX * .35 : 0,
+        velocityY: bestPrevious ? (candidate.y - bestPrevious.y) * .65 + bestPrevious.velocityY * .35 : 0,
+      };
+      if (!best || node.length > best.length || (node.length === best.length && node.score > best.score)) best = node;
+      return node;
+    });
+    nodesByFrame.push(nodes);
+  });
+
+  const reversed: Candidate[] = [];
+  let cursor: Node | null = best;
+  while (cursor) {
+    reversed.push(cursor);
+    cursor = cursor.previous;
+  }
+  return reversed.reverse();
+}
+
+function cleanTrack(raw: Candidate[], totalSamples: number) {
+  if (raw.length < 6) return [];
+  const distances = raw.slice(1).map((point, index) => Math.hypot(point.x - raw[index].x, point.y - raw[index].y)).sort((a, b) => a - b);
+  const medianStep = distances[Math.floor(distances.length / 2)] || .03;
+  const filtered = raw.filter((point, index, all) => {
+    if (!index) return true;
+    const step = Math.hypot(point.x - all[index - 1].x, point.y - all[index - 1].y);
+    return step < Math.max(.12, medianStep * 4.2);
+  });
+  return filtered.map((point, index, all) => {
+    const nearby = all.slice(Math.max(0, index - 2), Math.min(all.length, index + 3));
+    const weightTotal = nearby.reduce((sum, item, nearbyIndex) => sum + (nearbyIndex === 2 ? 2 : 1), 0);
+    const x = nearby.reduce((sum, item, nearbyIndex) => sum + item.x * (nearbyIndex === 2 ? 2 : 1), 0) / weightTotal;
+    const y = nearby.reduce((sum, item, nearbyIndex) => sum + item.y * (nearbyIndex === 2 ? 2 : 1), 0) / weightTotal;
+    return {
+      x,
+      y,
+      time: point.time,
+      confidence: Math.round(clampNumber(45 + point.energy / Math.max(1, point.area) * 2 + filtered.length / totalSamples * 38, 0, 99)),
+    };
+  });
+}
+
+async function analyzeVideo(url: string, onProgress: (progress: number, stage: string) => void): Promise<VideoReport> {
   const video = document.createElement("video");
   video.preload = "auto";
   video.muted = true;
   video.playsInline = true;
   video.src = url;
+  onProgress(4, "Opening the video");
   await waitForVideoEvent(video, "loadedmetadata");
   if (video.readyState < 2) await waitForVideoEvent(video, "loadeddata");
 
   const duration = video.duration;
-  if (!Number.isFinite(duration) || duration < .5) {
-    throw new Error("Record at least half a second of the throw.");
-  }
-  if (duration > 45) {
-    throw new Error("Use a clip under 45 seconds so Flight Lab can focus on one throw.");
-  }
+  if (!Number.isFinite(duration) || duration < .5) throw new Error("Record at least half a second of the throw.");
+  if (duration > 45) throw new Error("Use a clip under 45 seconds so Flight Lab can focus on one throw.");
 
-  const width = 240;
-  const height = Math.max(120, Math.round(width / Math.max(.75, video.videoWidth / video.videoHeight)));
+  const width = 300;
+  const height = Math.max(140, Math.round(width / Math.max(.75, video.videoWidth / video.videoHeight)));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("Video analysis is unavailable in this browser.");
 
-  const sampleCount = clampNumber(Math.round(duration * 5), 18, 42);
-  const points: TrackPoint[] = [];
+  const sampleCount = clampNumber(Math.round(duration * 9), 24, 90);
+  const frames: Candidate[][] = [];
   let previous: Uint8ClampedArray | null = null;
+  onProgress(10, "Finding the airplane");
 
   for (let index = 0; index < sampleCount; index++) {
-    const time = Math.min(Math.max(0, duration - .03), (duration * index) / Math.max(1, sampleCount - 1));
+    const time = Math.min(Math.max(0, duration - .025), (duration * index) / Math.max(1, sampleCount - 1));
     await seekVideo(video, time);
     context.drawImage(video, 0, 0, width, height);
     const pixels = context.getImageData(0, 0, width, height).data;
-
-    if (previous) {
-      const differences = new Float32Array(width * height);
-      let differenceTotal = 0;
-      for (let pixel = 0; pixel < width * height; pixel++) {
-        const offset = pixel * 4;
-        const difference = (
-          Math.abs(pixels[offset] - previous[offset]) +
-          Math.abs(pixels[offset + 1] - previous[offset + 1]) +
-          Math.abs(pixels[offset + 2] - previous[offset + 2])
-        ) / 3;
-        differences[pixel] = difference;
-        differenceTotal += difference;
-      }
-
-      const averageDifference = differenceTotal / differences.length;
-      const threshold = clampNumber(averageDifference * 2.5 + 8, 24, 72);
-      let weightTotal = 0;
-      let xTotal = 0;
-      let yTotal = 0;
-      let changedPixels = 0;
-
-      for (let y = 5; y < height - 5; y++) {
-        for (let x = 5; x < width - 5; x++) {
-          const difference = differences[y * width + x];
-          if (difference <= threshold) continue;
-          const weight = difference - threshold;
-          weightTotal += weight;
-          xTotal += x * weight;
-          yTotal += y * weight;
-          changedPixels++;
-        }
-      }
-
-      const changedRatio = changedPixels / (width * height);
-      if (weightTotal > 900 && changedRatio > .0004 && changedRatio < .34) {
-        points.push({
-          x: xTotal / weightTotal / width,
-          y: yTotal / weightTotal / height,
-          time,
-        });
-      }
-    }
-
+    frames.push(previous ? motionCandidates(pixels, previous, width, height, index, time) : []);
     previous = new Uint8ClampedArray(pixels);
+    const progress = 12 + Math.round((index / Math.max(1, sampleCount - 1)) * 66);
+    onProgress(progress, index < sampleCount * .28 ? "Finding the airplane" : "Tracking every flight frame");
   }
 
-  const smoothed = points.map((point, index, all) => {
-    const nearby = all.slice(Math.max(0, index - 1), Math.min(all.length, index + 2));
-    return {
-      x: nearby.reduce((sum, item) => sum + item.x, 0) / nearby.length,
-      y: nearby.reduce((sum, item) => sum + item.y, 0) / nearby.length,
-      time: point.time,
-    };
-  }).filter((point, index, all) => {
-    if (index === 0) return true;
-    return Math.hypot(point.x - all[index - 1].x, point.y - all[index - 1].y) < .62;
-  });
-
-  if (smoothed.length < 5) {
-    throw new Error("I could not find a clear moving flight. Keep the camera steady, use a plain background, and keep the airplane in frame.");
+  onProgress(82, "Removing camera shake and false turns");
+  const rawTrack = buildBestTrack(frames);
+  const points = cleanTrack(rawTrack, sampleCount);
+  if (points.length < 6) {
+    throw new Error("I could not lock onto one clear flight. Keep the camera still, use a contrasting background, and keep the complete throw in frame.");
   }
+
+  const displacement = Math.hypot(points.at(-1)!.x - points[0].x, points.at(-1)!.y - points[0].y);
+  if (displacement < .11) throw new Error("The tracked movement was too small to separate the airplane from the thrower.");
 
   let pathLength = 0;
   const angles: number[] = [];
-  for (let index = 1; index < smoothed.length; index++) {
-    const deltaX = smoothed[index].x - smoothed[index - 1].x;
-    const deltaY = smoothed[index].y - smoothed[index - 1].y;
+  for (let index = 1; index < points.length; index++) {
+    const deltaX = points[index].x - points[index - 1].x;
+    const deltaY = points[index].y - points[index - 1].y;
     pathLength += Math.hypot(deltaX, deltaY);
     angles.push(Math.atan2(deltaY, deltaX));
   }
-
-  const directDistance = Math.hypot(
-    smoothed.at(-1)!.x - smoothed[0].x,
-    smoothed.at(-1)!.y - smoothed[0].y,
-  );
-  const curve = Math.round(clampNumber((1 - directDistance / Math.max(.001, pathLength)) * 135, 0, 100));
   const directionChanges = angles.slice(1).map((angle, index) => angleDifference(angle, angles[index]));
-  const averageTurn = directionChanges.length
-    ? directionChanges.reduce((sum, value) => sum + value, 0) / directionChanges.length
-    : 0;
-  const stability = Math.round(clampNumber(100 - (averageTurn / Math.PI) * 125, 0, 100));
-  const airtime = Math.max(.1, smoothed.at(-1)!.time - smoothed[0].time);
-  const verticalTravel = smoothed.at(-1)!.y - smoothed[0].y;
-  const profile = verticalTravel > .16
-    ? "Descending finish"
-    : verticalTravel < -.16
-      ? "Climbing finish"
-      : curve > 55
-        ? "Curved flight"
-        : "Mostly level";
+  const averageTurn = directionChanges.length ? directionChanges.reduce((sum, value) => sum + value, 0) / directionChanges.length : 0;
+  const curve = Math.round(clampNumber((1 - displacement / Math.max(.001, pathLength)) * 120, 0, 100));
+  const stability = Math.round(clampNumber(100 - averageTurn / Math.PI * 108, 0, 100));
+  const airtime = Math.max(.1, points.at(-1)!.time - points[0].time);
+  const verticalTravel = points.at(-1)!.y - points[0].y;
+  const profile = verticalTravel > .17 ? "Descending finish" : verticalTravel < -.17 ? "Climbing finish" : curve > 52 ? "Curved flight" : stability > 76 ? "Stable flight" : "Mostly level";
+  const averagePointConfidence = points.reduce((sum, point) => sum + point.confidence, 0) / points.length;
+  const confidence = Math.round(clampNumber(averagePointConfidence * .72 + points.length / sampleCount * 42, 0, 98));
+  onProgress(94, "Building the interactive flight model");
+  await new Promise((resolve) => window.setTimeout(resolve, 120));
+  onProgress(100, "Flight model ready");
 
   return {
     airtime,
     curve,
     stability,
     relativeSpeed: pathLength / airtime,
-    confidence: Math.round(clampNumber((smoothed.length / (sampleCount - 1)) * 125, 0, 100)),
+    confidence,
     profile,
-    points: smoothed,
+    points,
+    sampledFrames: sampleCount,
   };
 }
 
-function FlightPathCanvas({ report }: { report: VideoReport }) {
+function projectPath(
+  report: VideoReport,
+  width: number,
+  height: number,
+  yaw: number,
+  pitch: number,
+  zoom: number,
+) {
+  const first = report.points[0];
+  const last = report.points.at(-1)!;
+  const directX = last.x - first.x;
+  const directY = last.y - first.y;
+  const directLength = Math.max(.001, Math.hypot(directX, directY));
+  const directionX = directX / directLength;
+  const directionY = directY / directLength;
+  const timeSpan = Math.max(.001, last.time - first.time);
+  return report.points.map((point) => {
+    const timeProgress = (point.time - first.time) / timeSpan;
+    const relativeX = point.x - first.x;
+    const relativeY = point.y - first.y;
+    const along = relativeX * directionX + relativeY * directionY;
+    const lateral = relativeX * -directionY + relativeY * directionX;
+    let x = (along / directLength - .5) * 2.2;
+    let y = (.5 - point.y) * 1.65;
+    let z = lateral / directLength * 1.45 + (timeProgress - .5) * .16;
+    const yawX = x * Math.cos(yaw) - z * Math.sin(yaw);
+    const yawZ = x * Math.sin(yaw) + z * Math.cos(yaw);
+    const pitchY = y * Math.cos(pitch) - yawZ * Math.sin(pitch);
+    const pitchZ = y * Math.sin(pitch) + yawZ * Math.cos(pitch);
+    x = yawX;
+    y = pitchY;
+    z = pitchZ;
+    const perspective = 1 / Math.max(.48, 1.8 + z * .34);
+    return {
+      x: width / 2 + x * width * .39 * perspective * zoom,
+      y: height / 2 - y * height * .72 * perspective * zoom,
+      depth: z,
+      confidence: point.confidence,
+    };
+  });
+}
+
+function InteractiveFlightPath({ report }: { report: VideoReport }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [view, setView] = useState<ViewMode>("3d");
+  const [yaw, setYaw] = useState(-.62);
+  const [pitch, setPitch] = useState(.34);
+  const [zoom, setZoom] = useState(1);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const lastPinch = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -200,55 +365,152 @@ function FlightPathCanvas({ report }: { report: VideoReport }) {
     if (!context) return;
     const width = canvas.width;
     const height = canvas.height;
-    const padding = 48;
-    context.clearRect(0, 0, width, height);
-    const gradient = context.createRadialGradient(width * .55, height * .45, 20, width * .55, height * .45, width * .65);
-    gradient.addColorStop(0, "#164c91");
-    gradient.addColorStop(.46, "#0b2b54");
-    gradient.addColorStop(1, "#041120");
+    const gradient = context.createRadialGradient(width * .52, height * .42, 20, width * .52, height * .42, width * .72);
+    gradient.addColorStop(0, "#123b69");
+    gradient.addColorStop(.48, "#071d36");
+    gradient.addColorStop(1, "#020913");
     context.fillStyle = gradient;
     context.fillRect(0, 0, width, height);
 
-    context.strokeStyle = "rgba(67, 220, 255, .22)";
-    context.lineWidth = 2;
-    context.beginPath();
-    context.ellipse(width * .52, height * .5, width * .38, height * .3, -.12, 0, Math.PI * 2);
-    context.stroke();
+    const projected = projectPath(report, width, height, yaw, pitch, zoom);
+    context.strokeStyle = "rgba(100, 199, 255, .13)";
+    context.lineWidth = 1;
+    for (let index = -5; index <= 5; index++) {
+      const position = height / 2 + index * 36 * zoom;
+      context.beginPath();
+      context.moveTo(width * .08, position);
+      context.lineTo(width * .92, position);
+      context.stroke();
+    }
+    for (let index = -8; index <= 8; index++) {
+      const position = width / 2 + index * 52 * zoom;
+      context.beginPath();
+      context.moveTo(position, height * .12);
+      context.lineTo(position, height * .88);
+      context.stroke();
+    }
 
     context.lineCap = "round";
     context.lineJoin = "round";
-    context.lineWidth = 7;
-    context.shadowColor = "rgba(67, 220, 255, .7)";
-    context.shadowBlur = 16;
-    const line = context.createLinearGradient(0, 0, width, 0);
+    context.lineWidth = 9;
+    context.shadowColor = "rgba(67,220,255,.7)";
+    context.shadowBlur = 18;
+    const line = context.createLinearGradient(width * .1, 0, width * .9, 0);
     line.addColorStop(0, "#c8f34b");
-    line.addColorStop(.55, "#43dcff");
+    line.addColorStop(.54, "#43dcff");
     line.addColorStop(1, "#ff7148");
     context.strokeStyle = line;
     context.beginPath();
-    report.points.forEach((point, index) => {
-      const x = padding + point.x * (width - padding * 2);
-      const y = padding + point.y * (height - padding * 2);
-      if (index === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
+    projected.forEach((point, index) => {
+      if (!index) context.moveTo(point.x, point.y);
+      else context.lineTo(point.x, point.y);
     });
     context.stroke();
     context.shadowBlur = 0;
 
-    const last = report.points.at(-1)!;
-    context.fillStyle = "#ffffff";
-    context.beginPath();
-    context.arc(
-      padding + last.x * (width - padding * 2),
-      padding + last.y * (height - padding * 2),
-      10,
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
-  }, [report]);
+    projected.forEach((point, index) => {
+      if (index % Math.max(1, Math.round(projected.length / 12)) !== 0 && index !== projected.length - 1) return;
+      context.fillStyle = point.confidence < 58 ? "#ffb248" : "#ffffff";
+      context.beginPath();
+      context.arc(point.x, point.y, index === projected.length - 1 ? 8 : 4, 0, Math.PI * 2);
+      context.fill();
+    });
 
-  return <canvas ref={canvasRef} className="pro-path-canvas" width="960" height="420" aria-label="Tracked flight path from the selected video" />;
+    const start = projected[0];
+    const finish = projected.at(-1)!;
+    context.font = "800 18px system-ui";
+    context.fillStyle = "#c8f34b";
+    context.fillText("LAUNCH", start.x + 12, start.y - 12);
+    context.fillStyle = "#ff8d6d";
+    context.fillText("FINISH", finish.x + 12, finish.y - 12);
+  }, [pitch, report, view, yaw, zoom]);
+
+  function chooseView(next: ViewMode) {
+    setView(next);
+    if (next === "side") {
+      setYaw(0);
+      setPitch(0);
+    } else if (next === "top") {
+      setYaw(0);
+      setPitch(1.18);
+    } else {
+      setYaw(-.62);
+      setPitch(.34);
+    }
+    setZoom(1);
+  }
+
+  function pointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  }
+
+  function pointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    const previous = pointers.current.get(event.pointerId);
+    if (!previous) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const active = [...pointers.current.values()];
+    if (active.length === 1) {
+      setYaw((value) => value + (event.clientX - previous.x) * .009);
+      setPitch((value) => clampNumber(value + (event.clientY - previous.y) * .007, -1.25, 1.25));
+    } else if (active.length === 2) {
+      const distance = Math.hypot(active[0].x - active[1].x, active[0].y - active[1].y);
+      if (lastPinch.current != null) setZoom((value) => clampNumber(value * distance / Math.max(1, lastPinch.current!), .62, 2.3));
+      lastPinch.current = distance;
+    }
+  }
+
+  function pointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
+    pointers.current.delete(event.pointerId);
+    if (pointers.current.size < 2) lastPinch.current = null;
+  }
+
+  function wheel(event: WheelEvent<HTMLCanvasElement>) {
+    event.preventDefault();
+    setZoom((value) => clampNumber(value * (event.deltaY > 0 ? .92 : 1.08), .62, 2.3));
+  }
+
+  return (
+    <div className="interactive-flight-model">
+      <div className="path-toolbar">
+        <div><button type="button" className={view === "3d" ? "active" : ""} onClick={() => chooseView("3d")}>3D view</button><button type="button" className={view === "side" ? "active" : ""} onClick={() => chooseView("side")}>Side view</button><button type="button" className={view === "top" ? "active" : ""} onClick={() => chooseView("top")}>Top map</button></div>
+        <span>Drag to rotate · pinch or scroll to zoom</span>
+      </div>
+      <canvas ref={canvasRef} className="interactive-path-canvas" width="1200" height="620" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={wheel} aria-label="Interactive estimated three-dimensional flight path. Drag to rotate and pinch to zoom." />
+      <p className="model-disclaimer">The movable model uses screen motion and time to help inspect the trace. A single side video cannot measure true real-world depth.</p>
+    </div>
+  );
+}
+
+function VideoPathReplay({ url, report }: { url: string; report: VideoReport }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const gradient = context.createLinearGradient(0, 0, canvas.width, 0);
+    gradient.addColorStop(0, "#c8f34b");
+    gradient.addColorStop(.55, "#43dcff");
+    gradient.addColorStop(1, "#ff7148");
+    context.strokeStyle = gradient;
+    context.lineWidth = 5;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.shadowColor = "rgba(0,0,0,.65)";
+    context.shadowBlur = 8;
+    context.beginPath();
+    report.points.forEach((point, index) => {
+      const x = point.x * canvas.width;
+      const y = point.y * canvas.height;
+      if (!index) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    context.shadowBlur = 0;
+  }, [report]);
+  return <div className="video-path-replay"><video src={url} controls playsInline preload="metadata" aria-label="Original video with tracked flight path" /><canvas ref={canvasRef} width="960" height="540" aria-hidden="true" /><span>Tracked path overlay</span></div>;
 }
 
 export default function ProVideoLab({ displayName }: { displayName: string }) {
@@ -256,7 +518,8 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("");
   const [report, setReport] = useState<VideoReport | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => () => {
@@ -270,74 +533,66 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
       setError("Choose a video recording of one paper-airplane throw.");
       return;
     }
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
     setVideoUrl(URL.createObjectURL(file));
     setVideoName(file.name);
     setReport(null);
+    setProgress(0);
+    setStage("");
     setError("");
+    event.target.value = "";
   }
 
   async function runAnalysis() {
     if (!videoUrl) return;
-    setAnalyzing(true);
     setError("");
     setReport(null);
+    setProgress(1);
+    setStage("Preparing the flight");
     try {
-      setReport(await analyzeVideo(videoUrl));
+      const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
+        setProgress(nextProgress);
+        setStage(nextStage);
+      });
+      setReport(nextReport);
     } catch (analysisError) {
       setError(analysisError instanceof Error ? analysisError.message : "The video could not be analyzed.");
-    } finally {
-      setAnalyzing(false);
+      setProgress(0);
+      setStage("");
     }
   }
 
-  return (
-    <section className="pro-lab-page" id="pro-video-workspace">
-      <section className="pro-lab-hero">
-        <div>
-          <p className="pro-kicker">Flight Lab Pro · Video analyzer</p>
-          <h1>Trace the<br /><em>whole flight.</em></h1>
-          <p>Record one throw from a steady position. Flight Lab analyzes the video on this device, traces the moving flight path, and measures airtime, curve, stability, and relative screen speed.</p>
-        </div>
-        <aside><b>{displayName} · Lifetime Pro</b><span>Pro access confirmed. Your video stays on this device and is not uploaded or saved by Flight Lab.</span></aside>
-      </section>
+  const analyzing = progress > 0 && progress < 100 && !report;
+  const trackQuality = useMemo(() => report ? report.confidence >= 80 ? "High-confidence track" : report.confidence >= 62 ? "Usable track" : "Review uncertain points" : "", [report]);
 
-      <section className="pro-video-workspace">
+  return (
+    <section className="pro-tool-section pro-video-lab" id="video-lab">
+      <div className="pro-tool-heading">
+        <div><span className="pro-index">02</span><p>Airplane-specific motion tracking</p><h2>3D Flight Tracker</h2></div>
+        <p>Higher frame sampling, motion-component tracking, shake rejection, and a path you can move with your fingers.</p>
+      </div>
+
+      <div className="pro-video-grid">
         <div className="pro-video-input">
           <input ref={inputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseVideo} aria-label="Record or choose a flight video" />
-          {videoUrl ? (
-            <>
-              <video src={videoUrl} controls playsInline preload="metadata" aria-label={`Selected flight video: ${videoName}`} />
-              <div className="pro-video-actions">
-                <button type="button" className="secondary-action" onClick={() => inputRef.current?.click()}>Choose another video</button>
-                <button type="button" className="primary-action" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Tracing flight…" : "Analyze flight video"}</button>
-              </div>
-            </>
-          ) : (
-            <button className="pro-video-picker" type="button" onClick={() => inputRef.current?.click()}>
-              <span>VIDEO</span><b>Record or choose one throw</b><small>Best results: steady camera, plain background, whole flight in frame, clip under 45 seconds</small>
-            </button>
-          )}
-          {error && <p className="pro-video-error" role="alert">{error}</p>}
+          {videoUrl ? <>
+            <video src={videoUrl} controls playsInline preload="metadata" aria-label={`Selected flight video: ${videoName}`} />
+            <div className="pro-video-actions"><button type="button" onClick={() => inputRef.current?.click()}>Choose another</button><button type="button" className="primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Tracking…" : "Analyze flight video"}</button></div>
+          </> : <button className="pro-video-picker" type="button" onClick={() => inputRef.current?.click()}><span>VIDEO</span><b>Record or choose one complete throw</b><small>Steady camera · contrasting background · launch and landing in frame · under 45 seconds</small></button>}
+          {error && <p className="pro-inline-error" role="alert">{error}</p>}
         </div>
+        <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · Your video stays on this device.</p></aside>
+      </div>
 
-        <div className="pro-video-guide">
-          <p className="pro-kicker">Capture checklist</p>
-          <ol><li><span>01</span><b>Hold still</b><small>Rest the phone or iPad against something stable.</small></li><li><span>02</span><b>Frame the route</b><small>Keep the launch and landing area visible.</small></li><li><span>03</span><b>Use contrast</b><small>A bright plane against a darker background tracks best.</small></li></ol>
-        </div>
-      </section>
+      {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
-      {report && <section className="pro-video-report" aria-live="polite">
-        <div className="pro-report-heading"><div><p className="pro-kicker">Analysis complete</p><h2>{report.profile}</h2></div><span>{report.confidence}% track confidence</span></div>
-        <FlightPathCanvas report={report} />
-        <div className="pro-report-metrics">
-          <article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article>
-          <article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article>
-          <article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article>
-          <article><span>Relative speed</span><b>{report.relativeSpeed.toFixed(2)} <small>frames/sec</small></b></article>
-        </div>
-        <p className="pro-report-note">These are on-screen motion estimates, not real-world distance or radar speed. Keep the camera still and compare videos shot from the same position for the most useful results.</p>
-      </section>}
-
+      {report && videoUrl && <div className="pro-video-report" aria-live="polite">
+        <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>
+        <VideoPathReplay url={videoUrl} report={report} />
+        <InteractiveFlightPath report={report} />
+        <div className="pro-report-metrics"><article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article><article><span>Relative speed</span><b>{report.relativeSpeed.toFixed(2)} <small>screen/sec</small></b></article></div>
+        <p className="pro-report-note">Tracked from {report.sampledFrames} sampled video frames. Orange uncertainty points deserve review. These are screen-motion measurements, not radar speed or true three-dimensional distance.</p>
+      </div>}
     </section>
   );
 }

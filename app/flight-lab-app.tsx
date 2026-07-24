@@ -15,7 +15,7 @@ type ProAccess =
   | { status: "anonymous" }
   | { status: "visitor" }
   | { status: "owner"; displayName: string };
-type ImageSignals = {
+export type ImageSignals = {
   recognizable: boolean;
   reason: string;
   symmetry: number;
@@ -59,7 +59,7 @@ function loadImage(url: string) {
   });
 }
 
-async function detectObjects(url: string) {
+export async function detectObjects(url: string) {
   const [detector, image] = await Promise.all([getObjectDetector(), loadImage(url)]);
   return detector.detect(image, 8, .46);
 }
@@ -78,7 +78,7 @@ const behaviorTips: Record<FlightBehavior, string> = {
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value));
 
-function inspectPlanePhoto(url: string) {
+export function inspectPlanePhoto(url: string) {
   return new Promise<ImageSignals>((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
@@ -695,7 +695,7 @@ export default function FlightLabApp({
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Flight Lab home"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
         <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#pro">Pro</a></nav>
-        <div className="topbar-actions"><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : sharedProPass ? "Pro Pass" : ownerHasPro ? "Lifetime Pro" : "Owner sign in"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
+        <div className="topbar-actions"><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : sharedProPass ? "Pro Pass" : ownerHasPro ? "Open Pro" : "Upgrade to Pro"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
       </header>
 
       <section className="hero" id="top">
@@ -764,8 +764,8 @@ export default function FlightLabApp({
           <p className="pro-kicker">Flight Lab Pro</p>
           <h2>See the whole flight,<br /><em>not just the landing.</em></h2>
           <p>Pro is being designed around video analysis: record one throw and get a traced flight path, airtime, curve, stall and dive detection, plus deeper experiment comparisons.</p>
-          <button className="pro-primary" type="button" onClick={openProAccess}>{sharedProPass ? "Open Pro video tools" : ownerHasPro ? "Open Lifetime Pro" : "Sign in as owner"}</button>
-          <small>{sharedProPass ? "This Pro Pass includes every free tool plus the video analyzer—no sign-in needed." : ownerHasPro ? `Lifetime Pro is active for ${proAccess.displayName}.` : "The owner receives Lifetime Pro for free after signing in with the owner account."}</small>
+          <button className="pro-primary" type="button" onClick={openProAccess}>{sharedProPass ? "Open Pro tools" : ownerHasPro ? "Open Flight Lab Pro" : "Upgrade to Pro"}</button>
+          <small>{sharedProPass ? "This Pro Pass includes every premium analyzer—no sign-in needed." : ownerHasPro ? `Pro is active for ${proAccess.displayName}.` : "Unlock advanced tracking, calibrated measurement, and deeper flight analysis."}</small>
         </div>
         <div className={`video-lab-card ${ownerHasPro ? "unlocked" : ""}`} aria-label={ownerHasPro ? "Owner access to the Pro video lab" : "Locked preview of Pro video analysis"}>
             <div className="video-lab-top"><span>Pro video lab</span><b>{sharedProPass ? "Pro Pass" : ownerHasPro ? "Owner access" : "Locked"}</b></div>
@@ -798,7 +798,7 @@ export default function FlightLabApp({
 
       <footer><a className="brand" href="#top"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a><p>Build. Test. Fly farther.</p></footer>
 
-      <button className={`pro-upgrade-fab ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess} aria-label={sharedProPass ? "Open Pro video tools" : ownerHasPro ? "Open your Lifetime Pro access" : "Sign in for owner Pro access"}><span>PRO</span> {sharedProPass ? "Pass" : ownerHasPro ? "Lifetime" : "Owner sign in"}</button>
+      <button className={`pro-upgrade-fab ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess} aria-label={sharedProPass ? "Open Pro tools" : ownerHasPro ? "Open Flight Lab Pro" : "Upgrade to Flight Lab Pro"}><span>PRO</span> {sharedProPass ? "Pass" : ownerHasPro ? "Open Pro" : "Upgrade"}</button>
 
       {planeModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setPlaneModalOpen(false); }}><section className="record-modal plane-builder" role="dialog" aria-modal="true" aria-labelledby="plane-title"><button className="modal-close" type="button" onClick={() => setPlaneModalOpen(false)} aria-label="Close">×</button><p className="kicker">Your hangar</p><h2 id="plane-title">Add a plane</h2><p>Choose a built-in design picture or take a photo of your own plane. Each design keeps its own throws, average, and analysis.</p><input ref={planePhotoRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={handlePlanePhoto} aria-label="Take or choose a picture of your plane" /><div className="preset-grid">{planePresets.map((preset) => <button type="button" key={preset.id} className={`preset-card ${newPlanePreset === preset.id ? "selected" : ""}`} onClick={() => choosePlanePreset(preset)}><img src={preset.image} alt={`${preset.name} paper airplane`} /><b>{preset.name}</b><small>{preset.description}</small></button>)}<button type="button" className={`preset-card upload-preset ${newPlanePreset === "custom" ? "selected" : ""}`} onClick={() => planePhotoRef.current?.click()}>{newPlanePreset === "custom" ? <img src={newPlaneImage} alt="Your uploaded plane" /> : <span>CAM</span>}<b>Your plane</b><small>Take a picture or choose one</small></button></div><label htmlFor="plane-name">Plane name</label><input className="name-input" id="plane-name" value={newPlaneName} onChange={(event) => setNewPlaneName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} placeholder="Example: Sky Dart" maxLength={32} /><button className="analyze-button" type="button" onClick={addPlane}>Add this plane</button></section></div>}
 

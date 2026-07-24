@@ -8,7 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "Flight Lab — Throw. Measure. Improve.";
-  const description = "Measure paper airplane throws, analyze one top-view photo with on-device AI, and preview Flight Lab Pro video analysis.";
+  const description = "Measure paper airplane throws, rate your design, and unlock Flight Lab Pro for calibrated distance and interactive video flight-path analysis.";
 
   return {
     metadataBase: new URL(origin),
@@ -30,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "Flight Lab Pro video flight analysis preview" }],
+      images: [{ url: `${origin}/og.png`, width: 1728, height: 910, alt: "Flight Lab Pro paper airplane flight-path analysis" }],
     },
     twitter: {
       card: "summary_large_image",

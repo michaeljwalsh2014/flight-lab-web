@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import FlightLabApp from "@/app/flight-lab-app";
-import ProVideoLab from "@/app/pro/pro-video-lab";
+import ProDashboard from "@/app/pro/pro-dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +15,5 @@ export default async function SharedProPage({
     redirect("/#pro");
   }
 
-  return (
-    <>
-      <FlightLabApp sharedProPass />
-      <ProVideoLab displayName="Pro Pass" />
-    </>
-  );
+  return <ProDashboard displayName="Pro Pass" sharedPass />;
 }
