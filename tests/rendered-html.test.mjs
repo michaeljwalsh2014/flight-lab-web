@@ -119,8 +119,11 @@ test("keeps Pro mobile layout vertical and uses full-size controls", async () =>
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /html \{ max-width: 100%; overflow-x: hidden/);
   assert.match(styles, /\.pro-dashboard \{[\s\S]*?overflow-x: clip/);
-  assert.match(styles, /\.path-toolbar button \{ min-height: 50px/);
-  assert.match(styles, /\.pro-history-tabs button \{ min-height: 54px/);
+  assert.match(styles, /\.path-toolbar button \{ min-height: 60px/);
+  assert.match(styles, /\.pro-history-tabs button \{ min-height: 64px/);
+  assert.match(styles, /\.pro-command-button \{[^}]*min-height: 66px[^}]*font-size: 14px/);
+  assert.match(styles, /\.measure-button-row button,[^}]*min-height: 64px[^}]*font-size: 14px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.path-toolbar button \{ min-height: 64px[^}]*font-size: 13px/);
   assert.match(styles, /\.pro-plane-panel\.panel-left/);
   assert.match(styles, /\.pro-plane-nose/);
 });
