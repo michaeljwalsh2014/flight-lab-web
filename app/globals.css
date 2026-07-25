@@ -547,10 +547,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-photo-target > small { max-width: 360px; color: var(--pro-muted); line-height: 1.5; }
 .target-corner { width: 35px; height: 35px; position: absolute; border-color: var(--lime); border-style: solid; }
 .corner-a { left: 16px; top: 16px; border-width: 2px 0 0 2px; }.corner-b { right: 16px; top: 16px; border-width: 2px 2px 0 0; }.corner-c { left: 16px; bottom: 16px; border-width: 0 0 2px 2px; }.corner-d { right: 16px; bottom: 16px; border-width: 0 2px 2px 0; }
-.pro-form-grid { margin: 18px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.pro-dashboard label { display: grid; gap: 7px; color: #9eb4c9; font-size: 10px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
+.pro-form-grid { margin: 22px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 20px 18px; }
+.pro-dashboard label { display: grid; gap: 10px; color: #9eb4c9; font-size: 12px; font-weight: 950; letter-spacing: .08em; text-transform: uppercase; }
 .pro-dashboard label.span-two { grid-column: span 2; }
-.pro-dashboard select, .pro-dashboard input { width: 100%; min-height: 52px; padding: 0 13px; border: 1px solid rgba(145,185,215,.24); border-radius: 9px; outline: none; color: white; background: #06172a; }
+.pro-dashboard select, .pro-dashboard input { width: 100%; height: 72px; min-height: 72px; padding: 0 20px; border: 2px solid rgba(145,185,215,.36); border-radius: 12px; outline: none; color: white; background: #06172a; font-size: 18px; font-weight: 850; }
 .pro-dashboard select:focus, .pro-dashboard input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(67,220,255,.1); }
 .pro-dashboard option { color: white; background: #06172a; }
 .pro-unit-input { display: flex; align-items: center; border: 1px solid rgba(145,185,215,.24); border-radius: 9px; background: #06172a; overflow: hidden; }
@@ -719,6 +719,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pro-photo-target, .pro-photo-target img { min-height: 290px; height: 290px; }
   .pro-form-grid { grid-template-columns: 1fr; }
   .pro-dashboard label.span-two { grid-column: auto; }
+  .pro-dashboard select, .pro-dashboard input { height: 76px; min-height: 76px; font-size: 18px; }
   .pro-result-panel { min-height: 470px; }
   .pro-signal-row { grid-template-columns: 1fr; }
   .pro-analysis-loader { min-height: 480px; padding: 18px; grid-template-columns: 1fr; justify-items: center; text-align: center; }

@@ -123,7 +123,9 @@ test("keeps Pro mobile layout vertical and uses full-size controls", async () =>
   assert.match(styles, /\.pro-history-tabs button \{ min-height: 64px/);
   assert.match(styles, /\.pro-command-button \{[^}]*min-height: 66px[^}]*font-size: 14px/);
   assert.match(styles, /\.measure-button-row button,[^}]*min-height: 64px[^}]*font-size: 14px/);
+  assert.match(styles, /\.pro-dashboard select, \.pro-dashboard input \{[^}]*height: 72px[^}]*font-size: 18px/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.path-toolbar button \{ min-height: 64px[^}]*font-size: 13px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*?\.pro-dashboard select, \.pro-dashboard input \{ height: 76px/);
   assert.match(styles, /\.pro-plane-panel\.panel-left/);
   assert.match(styles, /\.pro-plane-nose/);
 });
