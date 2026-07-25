@@ -92,6 +92,10 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(proPage, /redirect\("\/#pro"\)/);
   assert.match(dashboard, /Rate my plane/);
   assert.match(dashboard, /Smart Walk Measure/);
+  assert.match(dashboard, /Average distance/);
+  assert.match(dashboard, /Newest 5/);
+  assert.match(dashboard, /Show all flights/);
+  assert.match(dashboard, /flight-lab-v2-throws/);
   assert.match(dashboard, /Experiment Builder/);
   assert.match(dashboard, /Age range · optional/);
   assert.match(dashboard, /Measured best · optional/);
@@ -101,11 +105,24 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(videoLab, /pinch or scroll to zoom/);
   assert.match(videoLab, /Top map/);
   assert.match(videoLab, /Removing camera shake and false turns/);
+  assert.match(videoLab, /turnPenalty/);
+  assert.match(videoLab, /forwardFiltered/);
+  assert.match(videoLab, /straightness/);
   assert.match(videoLab, /Tracked airtime/);
   assert.match(videoLab, /Flight curve/);
   assert.match(videoLab, /Path stability/);
   assert.match(videoLab, /Relative speed/);
   assert.match(videoLab, /Your video stays on this device/);
+});
+
+test("keeps Pro mobile layout vertical and uses full-size controls", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /html \{ max-width: 100%; overflow-x: hidden/);
+  assert.match(styles, /\.pro-dashboard \{[\s\S]*?overflow-x: clip/);
+  assert.match(styles, /\.path-toolbar button \{ min-height: 50px/);
+  assert.match(styles, /\.pro-history-tabs button \{ min-height: 54px/);
+  assert.match(styles, /\.pro-plane-panel\.panel-left/);
+  assert.match(styles, /\.pro-plane-nose/);
 });
 
 test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", async () => {

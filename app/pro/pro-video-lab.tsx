@@ -169,10 +169,33 @@ function buildBestTrack(frames: Candidate[][]) {
           const predictedY = previous.y + previous.velocityY * lookback;
           const predictionError = Math.hypot(candidate.x - predictedX, candidate.y - predictedY);
           const rawDistance = Math.hypot(candidate.x - previous.x, candidate.y - previous.y);
-          if (rawDistance > .32 || predictionError > .27) continue;
+          if (rawDistance > .24 || predictionError > .18) continue;
           const areaChange = Math.abs(Math.log((candidate.area + 1) / (previous.area + 1)));
-          const movementReward = Math.min(.12, rawDistance) * 17;
-          const transition = previous.score + 3.2 + movementReward - predictionError * 24 - areaChange * 1.1 - (lookback - 1) * 1.5;
+          const nextVelocityX = (candidate.x - previous.x) / lookback;
+          const nextVelocityY = (candidate.y - previous.y) / lookback;
+          const previousSpeed = Math.hypot(previous.velocityX, previous.velocityY);
+          const nextSpeed = Math.hypot(nextVelocityX, nextVelocityY);
+          let turnPenalty = 0;
+          if (previousSpeed > .006 && nextSpeed > .006) {
+            const similarity = clampNumber(
+              (previous.velocityX * nextVelocityX + previous.velocityY * nextVelocityY) / (previousSpeed * nextSpeed),
+              -1,
+              1,
+            );
+            const turn = Math.acos(similarity);
+            if (turn > Math.PI * .72) continue;
+            turnPenalty = turn * 5.8;
+          }
+          const speedPenalty = previousSpeed > .006
+            ? Math.abs(Math.log((nextSpeed + .006) / (previousSpeed + .006))) * 1.8
+            : 0;
+          const movementReward = Math.min(.08, rawDistance) * 13;
+          const transition = previous.score + 3.1 + movementReward
+            - predictionError * 31
+            - areaChange * 1.25
+            - turnPenalty
+            - speedPenalty
+            - (lookback - 1) * 1.7;
           if (transition > bestScore) {
             bestScore = transition;
             bestPrevious = previous;
@@ -195,10 +218,11 @@ function buildBestTrack(frames: Candidate[][]) {
   });
 
   const reversed: Candidate[] = [];
-  let cursor: Node | null = best;
-  while (cursor) {
-    reversed.push(cursor);
-    cursor = cursor.previous;
+  let cursor = best as Node | null;
+  while (cursor !== null) {
+    const current: Node = cursor;
+    reversed.push(current);
+    cursor = current.previous;
   }
   return reversed.reverse();
 }
@@ -207,21 +231,69 @@ function cleanTrack(raw: Candidate[], totalSamples: number) {
   if (raw.length < 6) return [];
   const distances = raw.slice(1).map((point, index) => Math.hypot(point.x - raw[index].x, point.y - raw[index].y)).sort((a, b) => a - b);
   const medianStep = distances[Math.floor(distances.length / 2)] || .03;
-  const filtered = raw.filter((point, index, all) => {
-    if (!index) return true;
-    const step = Math.hypot(point.x - all[index - 1].x, point.y - all[index - 1].y);
-    return step < Math.max(.12, medianStep * 4.2);
+  const stepFiltered: Candidate[] = [];
+  raw.forEach((point) => {
+    const previous = stepFiltered.at(-1);
+    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) < Math.max(.095, medianStep * 3.2)) {
+      stepFiltered.push(point);
+    }
   });
-  return filtered.map((point, index, all) => {
-    const nearby = all.slice(Math.max(0, index - 2), Math.min(all.length, index + 3));
-    const weightTotal = nearby.reduce((sum, item, nearbyIndex) => sum + (nearbyIndex === 2 ? 2 : 1), 0);
-    const x = nearby.reduce((sum, item, nearbyIndex) => sum + item.x * (nearbyIndex === 2 ? 2 : 1), 0) / weightTotal;
-    const y = nearby.reduce((sum, item, nearbyIndex) => sum + item.y * (nearbyIndex === 2 ? 2 : 1), 0) / weightTotal;
+  if (stepFiltered.length < 6) return [];
+
+  const first = stepFiltered[0];
+  const last = stepFiltered.at(-1)!;
+  const directX = last.x - first.x;
+  const directY = last.y - first.y;
+  const directLength = Math.hypot(directX, directY);
+  if (directLength < .06) return [];
+  const directionX = directX / directLength;
+  const directionY = directY / directLength;
+  const forwardFiltered: Candidate[] = [];
+  let furthestProgress = -Infinity;
+  stepFiltered.forEach((point) => {
+    const progress = (point.x - first.x) * directionX + (point.y - first.y) * directionY;
+    if (!forwardFiltered.length || progress >= furthestProgress - Math.max(.025, medianStep * 1.25)) {
+      forwardFiltered.push(point);
+      furthestProgress = Math.max(furthestProgress, progress);
+    }
+  });
+  if (forwardFiltered.length < 6) return [];
+
+  const smoothed = forwardFiltered.map((point, index, all) => {
+    const from = Math.max(0, index - 2);
+    const to = Math.min(all.length - 1, index + 2);
+    let weightTotal = 0;
+    let xTotal = 0;
+    let yTotal = 0;
+    for (let nearbyIndex = from; nearbyIndex <= to; nearbyIndex++) {
+      const weight = 3 - Math.abs(nearbyIndex - index);
+      weightTotal += weight;
+      xTotal += all[nearbyIndex].x * weight;
+      yTotal += all[nearbyIndex].y * weight;
+    }
+    return { ...point, x: xTotal / weightTotal, y: yTotal / weightTotal };
+  });
+
+  let pathLength = 0;
+  for (let index = 1; index < smoothed.length; index++) {
+    pathLength += Math.hypot(smoothed[index].x - smoothed[index - 1].x, smoothed[index].y - smoothed[index - 1].y);
+  }
+  const straightness = directLength / Math.max(directLength, pathLength);
+  const correction = clampNumber((.78 - straightness) * 1.7, 0, .68);
+
+  return smoothed.map((point, index, all) => {
+    const progress = index / Math.max(1, all.length - 1);
+    const lineX = first.x + directX * progress;
+    const lineY = first.y + directY * progress;
     return {
-      x,
-      y,
+      x: point.x * (1 - correction) + lineX * correction,
+      y: point.y * (1 - correction) + lineY * correction,
       time: point.time,
-      confidence: Math.round(clampNumber(45 + point.energy / Math.max(1, point.area) * 2 + filtered.length / totalSamples * 38, 0, 99)),
+      confidence: Math.round(clampNumber(
+        48 + point.energy / Math.max(1, point.area) * 1.8 + forwardFiltered.length / totalSamples * 38 - correction * 18,
+        0,
+        97,
+      )),
     };
   });
 }
@@ -322,16 +394,14 @@ function projectPath(
   const directLength = Math.max(.001, Math.hypot(directX, directY));
   const directionX = directX / directLength;
   const directionY = directY / directLength;
-  const timeSpan = Math.max(.001, last.time - first.time);
   return report.points.map((point) => {
-    const timeProgress = (point.time - first.time) / timeSpan;
     const relativeX = point.x - first.x;
     const relativeY = point.y - first.y;
     const along = relativeX * directionX + relativeY * directionY;
     const lateral = relativeX * -directionY + relativeY * directionX;
     let x = (along / directLength - .5) * 2.2;
     let y = (.5 - point.y) * 1.65;
-    let z = lateral / directLength * 1.45 + (timeProgress - .5) * .16;
+    let z = lateral / Math.max(.34, directLength) * .82;
     const yawX = x * Math.cos(yaw) - z * Math.sin(yaw);
     const yawZ = x * Math.sin(yaw) + z * Math.cos(yaw);
     const pitchY = y * Math.cos(pitch) - yawZ * Math.sin(pitch);

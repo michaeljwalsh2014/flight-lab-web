@@ -19,6 +19,8 @@ type PlaneReport = {
   nextTest: string;
   signals: ImageSignals;
 };
+type StoredPlane = { id: number; name: string };
+type StoredThrow = { id: number; planeId: number; distance: number; createdAt: string };
 
 const unrelatedClasses = new Set([
   "person", "bird", "cat", "dog", "horse", "car", "motorcycle", "bus", "train",
@@ -239,6 +241,9 @@ function ProSmartMeasure() {
   const [maxDrift, setMaxDrift] = useState(0);
   const [result, setResult] = useState<{ distance: number; confidence: number; drift: number } | null>(null);
   const [message, setMessage] = useState("");
+  const [planes, setPlanes] = useState<StoredPlane[]>([]);
+  const [flightHistory, setFlightHistory] = useState<StoredThrow[]>([]);
+  const [historyView, setHistoryView] = useState<"latest" | "all">("latest");
   const motionArmed = useRef(true);
   const lastStepAt = useRef(0);
   const initialHeading = useRef<number | null>(null);
@@ -246,6 +251,15 @@ function ProSmartMeasure() {
   useEffect(() => {
     const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
     if (saved >= 1.1 && saved <= 4) setStride(saved);
+    try {
+      const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+      const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+      setPlanes(savedPlanes);
+      setFlightHistory(savedThrows.sort((first, second) => second.id - first.id));
+    } catch {
+      setPlanes([]);
+      setFlightHistory([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -322,15 +336,32 @@ function ProSmartMeasure() {
       setMessage(stride ? "Count at least one step before finishing." : "Calibrate your stride first.");
       return;
     }
-    const distance = steps * stride;
+    const distance = Math.round(steps * stride * 10) / 10;
     const driftPenalty = Math.min(28, maxDrift * .7);
     const confidence = Math.round(Math.max(55, Math.min(96, 94 - driftPenalty - (steps < 6 ? 8 : 0))));
     setResult({ distance, confidence, drift: maxDrift });
+    const savedFlight: StoredThrow = {
+      id: Date.now(),
+      planeId: planes[0]?.id ?? 0,
+      distance,
+      createdAt: "Just now",
+    };
+    const nextHistory = [savedFlight, ...flightHistory];
+    setFlightHistory(nextHistory);
+    window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
     setMode("idle");
     setMessage("");
   }
 
   const liveDistance = steps * (stride || 0);
+  const averageDistance = flightHistory.length
+    ? flightHistory.reduce((sum, flight) => sum + flight.distance, 0) / flightHistory.length
+    : 0;
+  const bestDistance = flightHistory.length
+    ? Math.max(...flightHistory.map((flight) => flight.distance))
+    : 0;
+  const visibleFlights = historyView === "latest" ? flightHistory.slice(0, 5) : flightHistory;
+  const planeNames = new Map(planes.map((plane) => [plane.id, plane.name]));
 
   return (
     <section className="pro-tool-section pro-measure-section" id="smart-measure">
@@ -365,6 +396,31 @@ function ProSmartMeasure() {
           <ol><li><b>01</b><div><strong>Your real stride</strong><small>No generic height-based guess.</small></div></li><li><b>02</b><div><strong>Motion filtering</strong><small>Rejects quick shakes that do not look like steps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Lowers confidence when the walking path bends.</small></div></li></ol>
           <p>For official records, confirm with a tape or laser. Smart Measure reports confidence instead of claiming impossible precision.</p>
         </aside>
+      </div>
+      <div className="pro-flight-history">
+        <div className="pro-history-heading">
+          <div><span>Saved performance</span><h3>Your flights</h3></div>
+          <div className="pro-history-tabs" aria-label="Choose how many flights to show">
+            <button type="button" className={historyView === "latest" ? "active" : ""} onClick={() => setHistoryView("latest")}>Newest 5</button>
+            <button type="button" className={historyView === "all" ? "active" : ""} onClick={() => setHistoryView("all")}>Show all flights</button>
+          </div>
+        </div>
+        <div className="pro-history-stats">
+          <article><span>Average distance</span><b>{averageDistance.toFixed(1)} <small>ft</small></b></article>
+          <article><span>Best throw</span><b>{bestDistance.toFixed(1)} <small>ft</small></b></article>
+          <article><span>Flights logged</span><b>{flightHistory.length}</b></article>
+        </div>
+        {visibleFlights.length ? (
+          <ol className="pro-history-list">
+            {visibleFlights.map((flight, index) => (
+              <li key={flight.id}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div><b>{flight.distance.toFixed(1)} ft</b><small>{planeNames.get(flight.planeId) ?? "Paper airplane"} · {flight.createdAt}</small></div>
+                <i><b style={{ width: `${Math.max(8, flight.distance / Math.max(1, bestDistance) * 100)}%` }} /></i>
+              </li>
+            ))}
+          </ol>
+        ) : <p className="pro-history-empty">Your measured flights will appear here. Finish a Smart Measure walk to save the first one.</p>}
       </div>
     </section>
   );

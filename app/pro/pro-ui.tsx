@@ -8,8 +8,11 @@ export function SpinningPlane({ compact = false }: { compact?: boolean }) {
       <div className="pro-plane-3d">
         <span className="pro-plane-wing wing-left" />
         <span className="pro-plane-wing wing-right" />
+        <span className="pro-plane-panel panel-left" />
+        <span className="pro-plane-panel panel-right" />
         <span className="pro-plane-body" />
         <span className="pro-plane-fold" />
+        <span className="pro-plane-nose" />
       </div>
     </div>
   );
