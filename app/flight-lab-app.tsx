@@ -31,8 +31,8 @@ type DetectedObject = { class: string; score: number; bbox: [number, number, num
 type ObjectDetector = { detect: (image: HTMLImageElement, maxResults?: number, minimumScore?: number) => Promise<DetectedObject[]> };
 
 const planePresets: Array<{ id: Exclude<PlanePreset, "custom">; name: string; image: string; description: string; baseline: number }> = [
-  { id: "dart", name: "Paper Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
-  { id: "glider", name: "Wide Glider", image: "/plane-presets/glider.png", description: "Broad wings for a slower, stable glide", baseline: 25 },
+  { id: "dart", name: "Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
+  { id: "glider", name: "Glider", image: "/plane-presets/glider.png", description: "Broad wings for a slower, stable glide", baseline: 25 },
 ];
 
 const definitelyNotPlanes = new Set(["person", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "car", "motorcycle", "bus", "train", "truck", "bottle", "cup", "cell phone", "laptop", "teddy bear"]);

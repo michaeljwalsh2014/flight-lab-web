@@ -21,8 +21,20 @@ type PlaneReport = {
   nextTest: string;
   signals: ImageSignals;
 };
-type StoredPlane = { id: number; name: string };
+type StoredPlane = {
+  id: number;
+  name: string;
+  createdAt?: string;
+  image?: string;
+  preset?: "dart" | "glider" | "custom";
+};
 type StoredThrow = { id: number; planeId: number; distance: number; createdAt: string };
+
+const proPlanePresets = [
+  { id: "dart" as const, name: "Dart", image: "/plane-presets/dart.png", description: "Narrow wings for speed and distance" },
+  { id: "glider" as const, name: "Glider", image: "/plane-presets/glider.png", description: "Wide wings for a smooth, stable glide" },
+];
+const planesUpdatedEvent = "flight-lab-planes-updated";
 
 const unrelatedClasses = new Set([
   "person", "bird", "cat", "dog", "horse", "car", "motorcycle", "bus", "train",
@@ -68,6 +80,75 @@ const nextTests: Record<FlightBehavior, string> = {
   wobbles: "Sharpen the center crease and check that both wings have the same stiffness.",
   spirals: "Flatten both wings and remove unequal curl from the wingtips before retesting.",
 };
+
+function ProPlaneHangar() {
+  const [planes, setPlanes] = useState<StoredPlane[]>([]);
+  const [presetId, setPresetId] = useState<"dart" | "glider">("dart");
+  const [planeName, setPlaneName] = useState("Dart");
+
+  useEffect(() => {
+    try {
+      setPlanes(JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[]);
+    } catch {
+      setPlanes([]);
+    }
+  }, []);
+
+  function choosePreset(preset: typeof proPlanePresets[number]) {
+    const currentPresetName = proPlanePresets.find((item) => item.id === presetId)?.name;
+    setPresetId(preset.id);
+    if (!planeName.trim() || planeName === currentPresetName) setPlaneName(preset.name);
+  }
+
+  function addPlane() {
+    const preset = proPlanePresets.find((item) => item.id === presetId) ?? proPlanePresets[0];
+    const plane: StoredPlane = {
+      id: Date.now(),
+      name: planeName.trim() || preset.name,
+      createdAt: "Just now",
+      image: preset.image,
+      preset: preset.id,
+    };
+    const nextPlanes = [plane, ...planes];
+    setPlanes(nextPlanes);
+    window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(nextPlanes));
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: nextPlanes }));
+    setPlaneName(preset.name);
+  }
+
+  return (
+    <section className="pro-tool-section pro-hangar-section" id="plane-hangar">
+      <div className="pro-tool-heading">
+        <div><span className="pro-index">PLANES</span><p>Your shared hangar</p><h2>Add a plane</h2></div>
+        <p>Planes added here also appear in normal Flight Lab, with the same saved flights and measurements.</p>
+      </div>
+      <div className="pro-hangar-grid">
+        <div className="pro-preset-picker" aria-label="Choose a plane design">
+          {proPlanePresets.map((preset) => (
+            <button
+              type="button"
+              key={preset.id}
+              className={presetId === preset.id ? "selected" : ""}
+              onClick={() => choosePreset(preset)}
+              aria-pressed={presetId === preset.id}
+            >
+              <img src={preset.image} alt={`${preset.name} paper airplane`} />
+              <span><b>{preset.name}</b><small>{preset.description}</small></span>
+            </button>
+          ))}
+        </div>
+        <div className="pro-plane-builder">
+          <label>Plane name<input value={planeName} onChange={(event) => setPlaneName(event.target.value)} maxLength={32} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} /></label>
+          <button className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
+          <div className="pro-saved-planes">
+            <span>{planes.length ? `${planes.length} saved ${planes.length === 1 ? "plane" : "planes"}` : "No planes saved yet"}</span>
+            {planes.slice(0, 4).map((plane) => <b key={plane.id}>{plane.name}</b>)}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function ProPlaneCoach() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -214,7 +295,7 @@ function ProPlaneCoach() {
             <i className="target-corner corner-a" /><i className="target-corner corner-b" /><i className="target-corner corner-c" /><i className="target-corner corner-d" />
           </button>
           <div className="pro-form-grid">
-            <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Distance dart</option><option value="glider">Wide glider</option><option value="stunt">Stunt plane</option><option value="custom">Custom design</option></select></label>
+            <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
             <label>Last flight<select value={behavior} onChange={(event) => setBehavior(event.target.value as FlightBehavior)}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
             <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
             <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
@@ -261,6 +342,7 @@ function ProSmartMeasure() {
   const [result, setResult] = useState<{ distance: number; confidence: number; drift: number } | null>(null);
   const [message, setMessage] = useState("");
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
+  const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [flightHistory, setFlightHistory] = useState<StoredThrow[]>([]);
   const [historyView, setHistoryView] = useState<"latest" | "all">("latest");
   const motionArmed = useRef(true);
@@ -268,17 +350,24 @@ function ProSmartMeasure() {
   const initialHeading = useRef<number | null>(null);
 
   useEffect(() => {
-    const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
-    if (saved >= 1.1 && saved <= 4) setStride(saved);
-    try {
-      const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
-      const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
-      setPlanes(savedPlanes);
-      setFlightHistory(savedThrows.sort((first, second) => second.id - first.id));
-    } catch {
-      setPlanes([]);
-      setFlightHistory([]);
-    }
+    const loadSavedData = () => {
+      const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
+      if (saved >= 1.1 && saved <= 4) setStride(saved);
+      try {
+        const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+        const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        setPlanes(savedPlanes);
+        setActivePlaneId((current) => savedPlanes.some((plane) => plane.id === current) ? current : savedPlanes[0]?.id ?? null);
+        setFlightHistory(savedThrows.sort((first, second) => second.id - first.id));
+      } catch {
+        setPlanes([]);
+        setActivePlaneId(null);
+        setFlightHistory([]);
+      }
+    };
+    loadSavedData();
+    window.addEventListener(planesUpdatedEvent, loadSavedData);
+    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
   }, []);
 
   useEffect(() => {
@@ -361,7 +450,7 @@ function ProSmartMeasure() {
     setResult({ distance, confidence, drift: maxDrift });
     const savedFlight: StoredThrow = {
       id: Date.now(),
-      planeId: planes[0]?.id ?? 0,
+      planeId: activePlaneId ?? planes[0]?.id ?? 0,
       distance,
       createdAt: "Just now",
     };
@@ -391,9 +480,10 @@ function ProSmartMeasure() {
       <div className="smart-measure-grid">
         <div className="measure-control-card">
           <div className="calibration-status"><span>Personal calibration</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>
+          {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => setActivePlaneId(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
           {mode === "idle" && !result && <>
             <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>
-            <div className="measure-button-row"><button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button><button type="button" className="primary" onClick={() => begin("measuring")} disabled={!stride}>Measure a throw</button></div>
+            <div className="measure-button-row"><button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button><button type="button" className="primary" onClick={() => begin("measuring")} disabled={!stride || !planes.length}>Measure a throw</button></div>
           </>}
           {mode !== "idle" && <div className="active-measure">
             <span>{mode === "calibrating" ? `Walk exactly ${calibrationDistance} feet` : "Walk straight to the landing point"}</span>
@@ -486,7 +576,7 @@ export default function ProDashboard({
     <main className="pro-dashboard">
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
-        <nav aria-label="Pro tools"><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
+        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
         <a className="back-to-lab" href="/">Free Flight Lab</a>
       </header>
 
@@ -500,7 +590,7 @@ export default function ProDashboard({
           <small>{displayName} · Videos and photos are analyzed on this device.</small>
         </div>
         <div className="pro-hero-visual">
-          <SpinningPlane />
+          <img className="pro-hero-plane-photo" src="/plane-presets/glider.png" alt="A realistic handmade Glider paper airplane" />
           <div className="pro-visual-readout"><span>LIVE MODEL</span><b>Flight vector ready</b><small>Drag the finished path to inspect it from every angle.</small></div>
           <i className="visual-axis axis-x">X</i><i className="visual-axis axis-y">Y</i><i className="visual-axis axis-z">Z</i>
         </div>
@@ -513,6 +603,7 @@ export default function ProDashboard({
         <a href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>
 
+      <ProPlaneHangar />
       <ProPlaneCoach />
       <ProVideoLab displayName={displayName} />
       <ProSmartMeasure />

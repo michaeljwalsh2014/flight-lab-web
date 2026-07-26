@@ -62,8 +62,9 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /Analyze this plane/);
   assert.match(page, /Estimated next flight/);
   assert.match(page, /Estimate—not a measurement/);
-  assert.match(page, /Paper Dart/);
-  assert.match(page, /Wide Glider/);
+  assert.match(page, /name: "Dart"/);
+  assert.match(page, /name: "Glider"/);
+  assert.doesNotMatch(page, /Paper Dart|Wide Glider/);
   assert.match(page, /Take a picture or choose one/);
   assert.match(page, /\/plane-presets\/dart\.png/);
   assert.match(page, /\/plane-presets\/glider\.png/);
@@ -99,6 +100,11 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(dashboard, /Experiment Builder/);
   assert.match(dashboard, /Age range · optional/);
   assert.match(dashboard, /Measured best · optional/);
+  assert.match(dashboard, /Your shared hangar/);
+  assert.match(dashboard, /＋ Add \{presetId === "dart" \? "Dart" : "Glider"\}/);
+  assert.match(dashboard, /flight-lab-v2-planes/);
+  assert.match(dashboard, /planesUpdatedEvent/);
+  assert.match(dashboard, /pro-hero-plane-photo/);
   assert.match(videoLab, /accept="video\/\*"/);
   assert.match(videoLab, /analyzeVideo/);
   assert.match(videoLab, /Drag to rotate/);
