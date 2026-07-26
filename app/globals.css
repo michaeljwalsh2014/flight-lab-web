@@ -710,7 +710,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach { position: fixed; z-index: 80; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); display: grid; justify-items: end; gap: 12px; color: white; }
 .pro-coach-launcher { min-width: 190px; min-height: 64px; padding: 10px 19px 10px 10px; display: flex; align-items: center; gap: 11px; border: 1px solid rgba(200,243,75,.66); border-radius: 18px; color: #071523; background: var(--lime); box-shadow: 0 18px 55px rgba(0,0,0,.48); font-size: 14px; font-weight: 950; letter-spacing: .025em; }
 .pro-coach-launcher span { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 13px; color: var(--lime); background: #071a2e; font-size: 12px; letter-spacing: .08em; }
-.pro-coach-panel { width: min(410px, calc(100vw - 36px)); height: min(650px, calc(100dvh - 118px)); min-height: 440px; display: grid; grid-template-rows: auto auto minmax(0,1fr) auto auto; overflow: hidden; border: 1px solid rgba(100,199,255,.32); border-radius: 22px; background: rgba(3,16,29,.98); box-shadow: 0 30px 100px rgba(0,0,0,.68); backdrop-filter: blur(22px); }
+.pro-coach-panel { width: min(410px, calc(100vw - 36px)); height: min(680px, calc(100dvh - 118px)); min-height: 440px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(100,199,255,.32); border-radius: 22px; background: rgba(3,16,29,.98); box-shadow: 0 30px 100px rgba(0,0,0,.68); backdrop-filter: blur(22px); }
 .pro-coach-panel > header { min-height: 76px; padding: 14px 16px 14px 19px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(133,181,219,.18); background: linear-gradient(100deg, rgba(23,105,255,.19), rgba(67,220,255,.05)); }
 .pro-coach-panel > header > div { min-width: 0; display: grid; gap: 5px; }
 .pro-coach-panel > header span { color: var(--cyan); font-size: 11px; font-weight: 950; letter-spacing: .11em; text-transform: uppercase; }
@@ -718,7 +718,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-panel > header b { overflow: hidden; color: #d9e8f5; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .pro-coach-panel > header button { width: 48px; min-width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; color: white; background: rgba(255,255,255,.04); font-size: 28px; line-height: 1; }
 .pro-coach-context { margin: 0; padding: 12px 17px; border-bottom: 1px solid rgba(133,181,219,.15); color: #8fa9c0; background: rgba(67,220,255,.035); font-size: 11px; line-height: 1.5; }
-.pro-coach-messages { min-height: 0; padding: 18px; display: flex; overflow-y: auto; overscroll-behavior: contain; flex-direction: column; gap: 13px; }
+.pro-coach-messages { min-height: 0; padding: 18px; display: flex; flex: 1; overflow-y: auto; overscroll-behavior: contain; flex-direction: column; gap: 13px; }
 .pro-coach-messages > div { max-width: 88%; }
 .pro-coach-messages .user { align-self: flex-end; }
 .pro-coach-messages small { display: block; margin: 0 0 5px 4px; color: #6f8ca7; font-size: 9px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
@@ -731,6 +731,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @keyframes coach-pulse { 50% { opacity: .25; transform: translateY(-3px); } }
 .pro-coach-prompts { padding: 0 14px 11px; display: flex; overflow-x: auto; gap: 7px; scrollbar-width: none; }
 .pro-coach-prompts button { min-height: 44px; padding: 8px 12px; flex: 0 0 auto; border: 1px solid rgba(67,220,255,.25); border-radius: 99px; color: #bcd3e7; background: rgba(67,220,255,.055); font-size: 11px; font-weight: 850; }
+.pro-chatgpt-handoff { padding: 0 14px 12px; display: grid; gap: 7px; }
+.pro-chatgpt-handoff button { min-height: 48px; padding: 10px 14px; border: 1px solid rgba(200,243,75,.48); border-radius: 12px; color: var(--lime); background: rgba(200,243,75,.07); font-size: 12px; font-weight: 950; }
+.pro-chatgpt-handoff small { color: #8fa9c0; font-size: 10px; line-height: 1.4; }
 .pro-coach-panel form { padding: 12px; display: grid; grid-template-columns: 1fr 56px; gap: 9px; border-top: 1px solid rgba(133,181,219,.18); background: #061626; }
 .pro-coach-panel textarea { width: 100%; min-height: 58px; max-height: 120px; padding: 12px 14px; resize: vertical; border: 2px solid rgba(145,185,215,.32); border-radius: 13px; outline: none; color: white; background: #03101d; font: 750 14px/1.4 Arial, Helvetica, sans-serif; }
 .pro-coach-panel textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(67,220,255,.1); }

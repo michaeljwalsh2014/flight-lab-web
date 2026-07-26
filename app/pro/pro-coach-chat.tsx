@@ -37,28 +37,158 @@ function loadFlightHistory(): FlightHistoryContext {
   }
 }
 
-function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext) {
+function nextDeviceVariant() {
+  const key = "flight-lab-pro-coach-variation";
+  const current = Number(window.localStorage.getItem(key)) || 0;
+  const next = (current + 1) % 997;
+  window.localStorage.setItem(key, String(next));
+  return next;
+}
+
+function choice(options: string[], variant: number, offset = 0) {
+  return options[(variant + offset) % options.length];
+}
+
+function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, recentReplies: string[]) {
   const question = message.toLowerCase();
   const flight = context.flight;
   const plane = context.plane;
-  const advice: string[] = [];
+  let variant = nextDeviceVariant();
 
-  if (question.includes("turn") && flight) {
-    if (flight.driftDirection === "straight") advice.push("The latest tracked path did not show a strong left or right drift.");
-    else advice.push(`The latest path drifted ${flight.driftDirection}. First, compare both wingtips and gently flatten any uneven curl.`);
-  }
-  if (plane && plane.symmetry < 82) advice.push(`The plane scan measured ${plane.symmetry}% symmetry. Matching the wings is the clearest first improvement.`);
-  if (flight && flight.stability < 72) advice.push(`Path stability was ${flight.stability}/100. Sharpen the center crease and try a smoother, level release.`);
-  if (flight && flight.curve > 38) advice.push(`Flight curve was ${flight.curve}/100. Make one tiny adjustment to the outside rear edge, then retest.`);
-  if (plane?.nextTest) advice.push(plane.nextTest);
-  if (question.includes("best") || question.includes("distance")) {
-    if (history.flightsLogged) advice.push(`Your best saved throw is ${history.bestDistance.toFixed(1)} ft and your average is ${history.averageDistance.toFixed(1)} ft.`);
-    else advice.push("Measure three throws before changing the plane so you have a fair starting average.");
-  }
-  if (!advice.length && flight) advice.push(...flight.observations.slice(0, 2));
-  if (!advice.length) advice.push("Run a plane scan or flight-video analysis first. Then I can use the on-device measurements to recommend one specific change.");
+  function compose(currentVariant: number) {
+    if (!plane && !flight) {
+      return choice([
+        "I need one real measurement before I choose an adjustment. Run Rate My Plane or analyze a flight, then ask again.",
+        "Let’s start with evidence instead of guessing. Scan the plane or track one flight so I can identify the first useful change.",
+        "No scan is loaded yet. Add a top-view plane scan or a flight video and I’ll turn its measurements into one focused test.",
+      ], currentVariant);
+    }
 
-  return `${advice.slice(0, 2).join(" ")} Change only one thing, make three similar throws, and compare the average.`;
+    const asksAboutTurn = /turn|left|right|curve|drift/.test(question);
+    const asksAboutDistance = /distance|far|best|range/.test(question);
+    const asksForTest = /test|next|try|improve|change/.test(question);
+    let issue: "drift" | "symmetry" | "stability" | "curve" | "outline" | "distance" | "general" = "general";
+    if (asksAboutTurn && flight?.driftDirection && flight.driftDirection !== "straight") issue = "drift";
+    else if (asksAboutDistance) issue = "distance";
+    else if (plane && plane.symmetry < 82) issue = "symmetry";
+    else if (flight && flight.stability < 72) issue = "stability";
+    else if (flight && flight.curve > 38) issue = "curve";
+    else if (plane && plane.outline < 68) issue = "outline";
+
+    const evidence = {
+      drift: flight ? `The tracked path drifted ${flight.driftDirection} with a curve score of ${flight.curve}/100.` : "",
+      symmetry: plane ? `The clearest scan signal is wing symmetry at ${plane.symmetry}%.` : "",
+      stability: flight ? `The clearest flight signal is stability at ${flight.stability}/100.` : "",
+      curve: flight ? `The path curve measured ${flight.curve}/100 and drifted ${flight.driftDirection}.` : "",
+      outline: plane ? `The plane outline scored ${plane.outline}/100, so the wing shape deserves the first check.` : "",
+      distance: history.flightsLogged
+        ? `Your saved best is ${history.bestDistance.toFixed(1)} ft and your average is ${history.averageDistance.toFixed(1)} ft across ${history.flightsLogged} flights.`
+        : "There are no saved distances yet, so the first goal is a trustworthy three-throw average.",
+      general: plane
+        ? `The plane scan scored ${plane.score}/100 with ${plane.symmetry}% symmetry and a predicted ${plane.range} range.`
+        : flight
+          ? `The latest ${flight.profile.toLowerCase()} path scored ${flight.stability}/100 for stability with ${flight.confidence}% tracking confidence.`
+          : "",
+    }[issue];
+
+    const action = {
+      drift: choice([
+        `Compare both wingtips, then gently flatten any extra curl on the ${flight?.driftDirection} side.`,
+        `Set the plane on a table and check whether the ${flight?.driftDirection} wingtip sits higher; correct only that tiny mismatch.`,
+        `Make one very small adjustment to the outside rear edge opposite the ${flight?.driftDirection} drift.`,
+      ], currentVariant, 1),
+      symmetry: choice([
+        "Line up the wing edges and press the center crease again without changing the wing angle.",
+        "Fold the wings together and correct only the side that does not match.",
+        "Check the two wingtips at eye level, then flatten the higher one by a tiny amount.",
+      ], currentVariant, 1),
+      stability: choice([
+        "Sharpen the center crease and use a smoother, level release.",
+        "Check that both wings have the same stiffness, then throw at less upward angle.",
+        "Flatten any uneven wingtip curl and keep the next release level.",
+      ], currentVariant, 1),
+      curve: choice([
+        "Make one tiny correction to the outside rear edge and leave every other fold alone.",
+        "Match the wingtip angles first; if they already match, flatten the more curved rear edge slightly.",
+        "Correct only the wingtip that points higher when the plane rests on a level table.",
+      ], currentVariant, 1),
+      outline: choice([
+        "Compare the wing widths and straighten the edge that is narrower or more curled.",
+        "Refold the two wings together so their outlines match from nose to tail.",
+        "Check the nose-to-wing alignment and fix only the side with the uneven outline.",
+      ], currentVariant, 1),
+      distance: history.flightsLogged
+        ? choice([
+          "Keep the current folds and test a smoother, level release before modifying the plane.",
+          "Use the same launch spot and compare one normal throw with one slightly gentler throw.",
+          "Leave the design unchanged for the next set so the average shows whether the release is the real difference.",
+        ], currentVariant, 1)
+        : "Measure three normal throws with the current design before making any fold changes.",
+      general: asksForTest && plane?.nextTest
+        ? plane.nextTest
+        : choice([
+          "Keep the plane unchanged and collect three comparable throws so the next adjustment is based on a pattern.",
+          "Repeat the same launch three times and watch whether the same behavior appears each time.",
+          "Use one controlled three-throw set before deciding whether the design or the release needs work.",
+        ], currentVariant, 1),
+    }[issue];
+
+    const closer = choice([
+      "Change only that one thing, then compare three throws.",
+      "Retest it three times from the same spot before making another adjustment.",
+      "Use three similar throws so the average—not one lucky flight—decides whether it helped.",
+      "Keep every other fold unchanged for the next three-flight test.",
+    ], currentVariant, 2);
+    return `${evidence} ${action} ${closer}`.trim();
+  }
+
+  let reply = compose(variant);
+  if (recentReplies.includes(reply)) {
+    variant += 1;
+    reply = compose(variant);
+  }
+  return reply;
+}
+
+function buildChatGptPrompt(context: ProAiContext, history: FlightHistoryContext) {
+  const plane = context.plane;
+  const flight = context.flight;
+  const lines = [
+    "Act as my paper-airplane flight coach. Use only the measurements below, explain the most important issue in plain language, and recommend one safe change followed by three comparable test throws. Do not invent measurements.",
+    "",
+    "PLANE SCAN",
+    plane
+      ? `Style: ${plane.planeStyle}; score: ${plane.score}/100; symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
+      : "No plane scan is loaded.",
+    "",
+    "FLIGHT TRACKER",
+    flight
+      ? `Profile: ${flight.profile}; airtime: ${flight.airtime}s; curve: ${flight.curve}/100; stability: ${flight.stability}/100; relative speed: ${flight.relativeSpeed}/100; drift: ${flight.driftDirection}; confidence: ${flight.confidence}%; observations: ${flight.observations.join(" | ")}`
+      : "No tracked flight is loaded.",
+    "",
+    "SAVED FLIGHTS",
+    history.flightsLogged
+      ? `${history.flightsLogged} flights; average ${history.averageDistance.toFixed(1)} ft; best ${history.bestDistance.toFixed(1)} ft; recent distances ${history.recentDistances.map((value) => `${value.toFixed(1)} ft`).join(", ")}`
+      : "No saved distance measurements.",
+    "",
+    "Start by telling me the single best thing to test next and why.",
+  ];
+  return lines.join("\n");
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
 }
 
 function getCoachId() {
@@ -75,6 +205,7 @@ export default function ProCoachChat() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [handoffStatus, setHandoffStatus] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", source: "device", text: "Hi! I’m your Pro Coach. Analyze a plane or flight, then ask what to improve or test next." },
@@ -130,7 +261,7 @@ export default function ProCoachChat() {
       setMessages((current) => [...current, {
         role: "assistant",
         source: "device",
-        text: deviceReply(clean, context, history),
+        text: deviceReply(clean, context, history, current.filter((item) => item.role === "assistant").slice(-4).map((item) => item.text)),
       }]);
     } finally {
       setSending(false);
@@ -140,6 +271,15 @@ export default function ProCoachChat() {
   function submit(event: FormEvent) {
     event.preventDefault();
     void askCoach(input);
+  }
+
+  function askChatGPT() {
+    const history = loadFlightHistory();
+    const prompt = buildChatGptPrompt(context, history);
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    void copyText(prompt).then(() => {
+      setHandoffStatus("Scan report copied. Paste it into the ChatGPT tab that just opened.");
+    });
   }
 
   return (
@@ -160,6 +300,10 @@ export default function ProCoachChat() {
         </div>
         <div className="pro-coach-prompts">
           {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => void askCoach(prompt)}>{prompt}</button>)}
+        </div>
+        <div className="pro-chatgpt-handoff">
+          <button type="button" onClick={askChatGPT}>Open ChatGPT with this scan</button>
+          {handoffStatus && <small role="status">{handoffStatus}</small>}
         </div>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Pro Coach</label>

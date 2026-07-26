@@ -157,6 +157,12 @@ test("adds a secure Terra Pro Coach with an on-device fallback", async () => {
   assert.match(coach, /Ask Pro Coach/);
   assert.match(coach, /What should I improve/);
   assert.match(coach, /On-device coach/);
+  assert.match(coach, /nextDeviceVariant/);
+  assert.match(coach, /recentReplies\.includes/);
+  assert.match(coach, /single best thing to test next/);
+  assert.match(coach, /Open ChatGPT with this scan/);
+  assert.match(coach, /https:\/\/chatgpt\.com\//);
+  assert.match(coach, /navigator\.clipboard\.writeText/);
   assert.match(coach, /Photos and videos stay on your device/);
   assert.match(context, /flight-lab-local-v2/);
   assert.match(videoLab, /publishProAiContext/);
