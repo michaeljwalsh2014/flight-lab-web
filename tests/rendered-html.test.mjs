@@ -141,6 +141,28 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
+test("adds a secure Terra Pro Coach with an on-device fallback", async () => {
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
+  const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
+  const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
+  assert.match(dashboard, /ProCoachChat/);
+  assert.match(coach, /Ask Pro Coach/);
+  assert.match(coach, /What should I improve/);
+  assert.match(coach, /On-device coach/);
+  assert.match(coach, /Photos and videos stay on your device/);
+  assert.match(context, /flight-lab-local-v2/);
+  assert.match(videoLab, /publishProAiContext/);
+  assert.match(videoLab, /driftDirection/);
+  assert.match(videoLab, /On-device coach observations/);
+  assert.match(route, /gpt-5\.6-terra/);
+  assert.match(route, /OPENAI_API_KEY/);
+  assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
+  assert.match(route, /safety_identifier/);
+  assert.doesNotMatch(coach, /OPENAI_API_KEY/);
+});
+
 test("can delete a plane or an individual saved flight", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /function deletePlane/);

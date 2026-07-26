@@ -3,6 +3,8 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/flight-lab-app";
+import ProCoachChat from "./pro-coach-chat";
+import { publishProAiContext } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader, SpinningPlane } from "./pro-ui";
 
@@ -93,6 +95,23 @@ function ProPlaneCoach() {
   useEffect(() => () => {
     if (photoUrl) URL.revokeObjectURL(photoUrl);
   }, [photoUrl]);
+
+  useEffect(() => {
+    if (!report) return;
+    publishProAiContext({
+      plane: {
+        score: report.score,
+        range: report.range,
+        confidence: report.confidence,
+        headline: report.headline,
+        nextTest: report.nextTest,
+        symmetry: report.signals.symmetry,
+        outline: report.signals.outline,
+        planeStyle: planeKind,
+        lastFlight: behavior,
+      },
+    });
+  }, [behavior, planeKind, report]);
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -498,6 +517,7 @@ export default function ProDashboard({
       <ProVideoLab displayName={displayName} />
       <ProSmartMeasure />
       <ExperimentLab />
+      <ProCoachChat />
 
       <footer className="pro-footer"><a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a><p>Build smarter. Track the truth. Fly farther.</p></footer>
     </main>

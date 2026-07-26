@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, PointerEvent as ReactPointerEvent, WheelEvent, useEffect, useMemo, useRef, useState } from "react";
+import { publishProAiContext } from "./pro-ai-context";
 import { AnalysisLoader } from "./pro-ui";
 
 type TrackPoint = { x: number; y: number; time: number; confidence: number };
@@ -12,6 +13,8 @@ type VideoReport = {
   relativeSpeed: number;
   confidence: number;
   profile: string;
+  driftDirection: "left" | "right" | "straight";
+  observations: string[];
   points: TrackPoint[];
   sampledFrames: number;
 };
@@ -363,6 +366,18 @@ async function analyzeVideo(url: string, onProgress: (progress: number, stage: s
   const profile = verticalTravel > .17 ? "Descending finish" : verticalTravel < -.17 ? "Climbing finish" : curve > 52 ? "Curved flight" : stability > 76 ? "Stable flight" : "Mostly level";
   const averagePointConfidence = points.reduce((sum, point) => sum + point.confidence, 0) / points.length;
   const confidence = Math.round(clampNumber(averagePointConfidence * .72 + points.length / sampleCount * 42, 0, 98));
+  const middle = points[Math.floor(points.length / 2)];
+  const middleProgress = (middle.time - points[0].time) / Math.max(.001, points.at(-1)!.time - points[0].time);
+  const expectedMiddleX = points[0].x + (points.at(-1)!.x - points[0].x) * middleProgress;
+  const horizontalBend = middle.x - expectedMiddleX;
+  const driftDirection = curve < 18 || Math.abs(horizontalBend) < .018
+    ? "straight"
+    : horizontalBend > 0 ? "right" : "left";
+  const observations = [
+    stability >= 78 ? "The tracked path stayed stable through most of the flight." : "The path changed direction enough to suggest wobble, a rough release, or uneven wings.",
+    curve <= 24 ? "The flight stayed close to a straight screen path." : `The path bent ${driftDirection === "straight" ? "away from a straight line" : `toward the ${driftDirection}`}.`,
+    verticalTravel > .17 ? "The flight finished with a noticeable descent." : verticalTravel < -.17 ? "The flight was still climbing near the end of the visible track." : "The visible flight finished mostly level.",
+  ];
   onProgress(94, "Building the interactive flight model");
   await new Promise((resolve) => window.setTimeout(resolve, 120));
   onProgress(100, "Flight model ready");
@@ -374,6 +389,8 @@ async function analyzeVideo(url: string, onProgress: (progress: number, stage: s
     relativeSpeed: pathLength / airtime,
     confidence,
     profile,
+    driftDirection,
+    observations,
     points,
     sampledFrames: sampleCount,
   };
@@ -596,6 +613,24 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
   }, [videoUrl]);
 
+  useEffect(() => {
+    if (!report) return;
+    publishProAiContext({
+      flight: {
+        engine: "flight-lab-local-v2",
+        airtime: Number(report.airtime.toFixed(2)),
+        curve: report.curve,
+        stability: report.stability,
+        relativeSpeed: Number(report.relativeSpeed.toFixed(2)),
+        confidence: report.confidence,
+        profile: report.profile,
+        driftDirection: report.driftDirection,
+        sampledFrames: report.sampledFrames,
+        observations: report.observations,
+      },
+    });
+  }, [report]);
+
   function chooseVideo(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -661,6 +696,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
         <VideoPathReplay url={videoUrl} report={report} />
         <InteractiveFlightPath report={report} />
         <div className="pro-report-metrics"><article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article><article><span>Relative speed</span><b>{report.relativeSpeed.toFixed(2)} <small>screen/sec</small></b></article></div>
+        <div className="pro-video-observations"><span>On-device coach observations</span><ul>{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></div>
         <p className="pro-report-note">Tracked from {report.sampledFrames} sampled video frames. Orange uncertainty points deserve review. These are screen-motion measurements, not radar speed or true three-dimensional distance.</p>
       </div>}
     </section>
