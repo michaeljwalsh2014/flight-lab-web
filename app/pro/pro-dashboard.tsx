@@ -35,6 +35,7 @@ const proPlanePresets = [
   { id: "glider" as const, name: "Glider", image: "/plane-presets/glider.png", description: "Wide wings for a smooth, stable glide" },
 ];
 const planesUpdatedEvent = "flight-lab-planes-updated";
+const activePlaneStorageKey = "flight-lab-v2-active-plane-id";
 
 const unrelatedClasses = new Set([
   "person", "bird", "cat", "dog", "horse", "car", "motorcycle", "bus", "train",
@@ -83,16 +84,45 @@ const nextTests: Record<FlightBehavior, string> = {
 
 function ProPlaneHangar() {
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
+  const [throws, setThrows] = useState<StoredThrow[]>([]);
+  const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [presetId, setPresetId] = useState<"dart" | "glider">("dart");
   const [planeName, setPlaneName] = useState("Dart");
 
   useEffect(() => {
-    try {
-      setPlanes(JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[]);
-    } catch {
-      setPlanes([]);
-    }
+    const loadSavedData = () => {
+      try {
+        const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+        const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
+        setPlanes(savedPlanes);
+        setThrows(savedThrows);
+        setActivePlaneId(savedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : savedPlanes[0]?.id ?? null);
+      } catch {
+        setPlanes([]);
+        setThrows([]);
+        setActivePlaneId(null);
+      }
+    };
+    loadSavedData();
+    window.addEventListener(planesUpdatedEvent, loadSavedData);
+    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
   }, []);
+
+  function saveHangar(nextPlanes: StoredPlane[], nextThrows: StoredThrow[], nextActivePlaneId: number | null) {
+    setPlanes(nextPlanes);
+    setThrows(nextThrows);
+    setActivePlaneId(nextActivePlaneId);
+    window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(nextPlanes));
+    window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextThrows));
+    if (nextActivePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
+    else window.localStorage.setItem(activePlaneStorageKey, String(nextActivePlaneId));
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: nextPlanes }));
+  }
+
+  function selectPlane(planeId: number) {
+    saveHangar(planes, throws, planeId);
+  }
 
   function choosePreset(preset: typeof proPlanePresets[number]) {
     const currentPresetName = proPlanePresets.find((item) => item.id === presetId)?.name;
@@ -110,10 +140,18 @@ function ProPlaneHangar() {
       preset: preset.id,
     };
     const nextPlanes = [plane, ...planes];
-    setPlanes(nextPlanes);
-    window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(nextPlanes));
-    window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: nextPlanes }));
+    saveHangar(nextPlanes, throws, plane.id);
     setPlaneName(preset.name);
+  }
+
+  function deletePlane(plane: StoredPlane) {
+    const flightCount = throws.filter((item) => item.planeId === plane.id).length;
+    const historyNote = flightCount === 1 ? " and its 1 saved flight" : flightCount > 1 ? ` and its ${flightCount} saved flights` : "";
+    if (!window.confirm(`Delete ${plane.name}${historyNote}? This cannot be undone.`)) return;
+    const nextPlanes = planes.filter((item) => item.id !== plane.id);
+    const nextThrows = throws.filter((item) => item.planeId !== plane.id);
+    const nextActivePlaneId = activePlaneId === plane.id ? nextPlanes[0]?.id ?? null : activePlaneId;
+    saveHangar(nextPlanes, nextThrows, nextActivePlaneId);
   }
 
   return (
@@ -142,7 +180,15 @@ function ProPlaneHangar() {
           <button className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
           <div className="pro-saved-planes">
             <span>{planes.length ? `${planes.length} saved ${planes.length === 1 ? "plane" : "planes"}` : "No planes saved yet"}</span>
-            {planes.slice(0, 4).map((plane) => <b key={plane.id}>{plane.name}</b>)}
+            {planes.map((plane) => (
+              <div className={`pro-saved-plane ${activePlaneId === plane.id ? "selected" : ""}`} key={plane.id}>
+                <button type="button" className="pro-plane-select" onClick={() => selectPlane(plane.id)} aria-pressed={activePlaneId === plane.id}>
+                  <b>{plane.name}</b>
+                  <small>{throws.filter((item) => item.planeId === plane.id).length} throws · {activePlaneId === plane.id ? "In use" : "Select plane"}</small>
+                </button>
+                <button type="button" className="pro-plane-delete" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`}>Delete</button>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -356,8 +402,9 @@ function ProSmartMeasure() {
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(savedPlanes);
-        setActivePlaneId((current) => savedPlanes.some((plane) => plane.id === current) ? current : savedPlanes[0]?.id ?? null);
+        setActivePlaneId(savedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : savedPlanes[0]?.id ?? null);
         setFlightHistory(savedThrows.sort((first, second) => second.id - first.id));
       } catch {
         setPlanes([]);
@@ -461,14 +508,21 @@ function ProSmartMeasure() {
     setMessage("");
   }
 
+  function chooseActivePlane(planeId: number) {
+    setActivePlaneId(planeId);
+    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: planes }));
+  }
+
   const liveDistance = steps * (stride || 0);
-  const averageDistance = flightHistory.length
-    ? flightHistory.reduce((sum, flight) => sum + flight.distance, 0) / flightHistory.length
+  const activeFlightHistory = flightHistory.filter((flight) => flight.planeId === activePlaneId);
+  const averageDistance = activeFlightHistory.length
+    ? activeFlightHistory.reduce((sum, flight) => sum + flight.distance, 0) / activeFlightHistory.length
     : 0;
-  const bestDistance = flightHistory.length
-    ? Math.max(...flightHistory.map((flight) => flight.distance))
+  const bestDistance = activeFlightHistory.length
+    ? Math.max(...activeFlightHistory.map((flight) => flight.distance))
     : 0;
-  const visibleFlights = historyView === "latest" ? flightHistory.slice(0, 5) : flightHistory;
+  const visibleFlights = historyView === "latest" ? activeFlightHistory.slice(0, 5) : activeFlightHistory;
   const planeNames = new Map(planes.map((plane) => [plane.id, plane.name]));
 
   return (
@@ -480,7 +534,7 @@ function ProSmartMeasure() {
       <div className="smart-measure-grid">
         <div className="measure-control-card">
           <div className="calibration-status"><span>Personal calibration</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>
-          {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => setActivePlaneId(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
+          {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => chooseActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
           {mode === "idle" && !result && <>
             <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>
             <div className="measure-button-row"><button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button><button type="button" className="primary" onClick={() => begin("measuring")} disabled={!stride || !planes.length}>Measure a throw</button></div>
@@ -517,7 +571,7 @@ function ProSmartMeasure() {
         <div className="pro-history-stats">
           <article><span>Average distance</span><b>{averageDistance.toFixed(1)} <small>ft</small></b></article>
           <article><span>Best throw</span><b>{bestDistance.toFixed(1)} <small>ft</small></b></article>
-          <article><span>Flights logged</span><b>{flightHistory.length}</b></article>
+          <article><span>Flights logged</span><b>{activeFlightHistory.length}</b></article>
         </div>
         {visibleFlights.length ? (
           <ol className="pro-history-list">

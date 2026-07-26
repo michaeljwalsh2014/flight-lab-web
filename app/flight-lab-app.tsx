@@ -10,6 +10,7 @@ type FlightBehavior = "straight" | "dives" | "stalls" | "left" | "right" | "wobb
 type MeasureStage = "ready" | "locating" | "walking";
 type MeasureMethod = "choose" | "pace" | "gps" | "manual";
 type PlanePhoto = { url: string; name: string };
+const activePlaneStorageKey = "flight-lab-v2-active-plane-id";
 type ProAccess =
   | { status: "loading" }
   | { status: "anonymous" }
@@ -222,6 +223,7 @@ export default function FlightLabApp({
   const [planes, setPlanes] = useState<PlaneRecord[]>([]);
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
+  const [savedDataLoaded, setSavedDataLoaded] = useState(false);
   const [planeModalOpen, setPlaneModalOpen] = useState(false);
   const [newPlaneName, setNewPlaneName] = useState("");
   const [newPlaneImage, setNewPlaneImage] = useState(planePresets[0].image);
@@ -267,9 +269,10 @@ export default function FlightLabApp({
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as PlaneRecord[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as ThrowRecord[];
+        const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(savedPlanes);
         setThrows(savedThrows);
-        setActivePlaneId(savedPlanes[0]?.id ?? null);
+        setActivePlaneId(savedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : savedPlanes[0]?.id ?? null);
         const savedHeight = Number(window.localStorage.getItem("flight-lab-v3-height"));
         if (savedHeight >= 36 && savedHeight <= 96) {
           setHeightInches(savedHeight);
@@ -278,13 +281,24 @@ export default function FlightLabApp({
       } catch {
         window.localStorage.removeItem("flight-lab-v2-planes");
         window.localStorage.removeItem("flight-lab-v2-throws");
+      } finally {
+        setSavedDataLoaded(true);
       }
     }, 0);
     return () => window.clearTimeout(loadSavedData);
   }, []);
 
-  useEffect(() => { window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(planes)); }, [planes]);
-  useEffect(() => { window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(throws)); }, [throws]);
+  useEffect(() => {
+    if (savedDataLoaded) window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(planes));
+  }, [planes, savedDataLoaded]);
+  useEffect(() => {
+    if (savedDataLoaded) window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(throws));
+  }, [throws, savedDataLoaded]);
+  useEffect(() => {
+    if (!savedDataLoaded) return;
+    if (activePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
+    else window.localStorage.setItem(activePlaneStorageKey, String(activePlaneId));
+  }, [activePlaneId, savedDataLoaded]);
   useEffect(() => { window.localStorage.setItem("flight-lab-v3-height", String(heightInches)); }, [heightInches]);
   useEffect(() => {
     if (sharedProPass) return;
@@ -368,11 +382,6 @@ export default function FlightLabApp({
     setThrows((current) => current.filter((item) => item.planeId !== plane.id));
     if (activePlaneId === plane.id) setActivePlaneId(remainingPlanes[0]?.id ?? null);
     setReport(null);
-  }
-
-  function deleteFlight(flight: ThrowRecord) {
-    if (!window.confirm(`Delete this ${flight.distance.toFixed(1)} ft flight? This cannot be undone.`)) return;
-    setThrows((current) => current.filter((item) => item.id !== flight.id));
   }
 
   function choosePlanePreset(preset: typeof planePresets[number]) {
@@ -725,7 +734,7 @@ export default function FlightLabApp({
         <div className="stat-strip"><div><span>Average distance</span><b>{average.toFixed(1)} <small>ft</small></b></div><div><span>Best throw</span><b>{best.toFixed(1)} <small>ft</small></b></div><div><span>Throws logged</span><b>{activeThrows.length}</b></div><div className="trend"><span>Flight trend</span><b>{activeThrows.length >= 3 ? "↑ Tracking" : "Needs 3 throws"}</b></div></div>
         <div className="performance-grid">
           <article className="throw-card"><div className="card-title"><div><p className="kicker">Flight log</p><h3>Flight history</h3></div><button onClick={openMeasure}>Measure throw</button></div>
-            {activeThrows.length ? <ol className="throw-list">{activeThrows.map((item, index) => <li key={item.id}><span className="throw-rank">{String(index + 1).padStart(2, "0")}</span><span className="throw-bar"><i style={{ width: `${Math.max(18, (item.distance / Math.max(best, 1)) * 100)}%` }} /></span><b>{item.distance.toFixed(1)} ft</b><small>{item.createdAt}</small><button className="throw-delete" type="button" onClick={() => deleteFlight(item)} aria-label={`Delete ${item.distance.toFixed(1)} foot flight`} title="Delete this flight">Delete</button></li>)}</ol> : <div className="empty-state"><b>No throws yet</b><p>Your measurements will appear here after your first flight.</p><button type="button" onClick={openMeasure}>{activePlane ? "Measure first throw" : "Add a plane first"}</button></div>}
+            {activeThrows.length ? <ol className="throw-list">{activeThrows.map((item, index) => <li key={item.id}><span className="throw-rank">{String(index + 1).padStart(2, "0")}</span><span className="throw-bar"><i style={{ width: `${Math.max(18, (item.distance / Math.max(best, 1)) * 100)}%` }} /></span><b>{item.distance.toFixed(1)} ft</b><small>{item.createdAt}</small></li>)}</ol> : <div className="empty-state"><b>No throws yet</b><p>Your measurements will appear here after your first flight.</p><button type="button" onClick={openMeasure}>{activePlane ? "Measure first throw" : "Add a plane first"}</button></div>}
           </article>
           <aside className="coach-card"><span className="coach-label">Coach&apos;s next move</span><div className="coach-number">01</div><h3>{activeThrows.length >= 3 ? "Test one change" : "Build a baseline"}</h3><p>{activeThrows.length >= 3 ? "Change one fold, then measure three more throws to see if your average improves." : "Measure at least three throws with the same plane before changing the design."}</p><div className="test-plan"><span>Next test</span><b>{Math.max(0, 3 - activeThrows.length)} throws</b><small>needed for a useful average</small></div></aside>
         </div>

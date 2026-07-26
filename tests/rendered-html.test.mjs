@@ -104,6 +104,10 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(dashboard, /＋ Add \{presetId === "dart" \? "Dart" : "Glider"\}/);
   assert.match(dashboard, /flight-lab-v2-planes/);
   assert.match(dashboard, /planesUpdatedEvent/);
+  assert.match(dashboard, /activePlaneStorageKey/);
+  assert.match(dashboard, /selectPlane/);
+  assert.match(dashboard, /deletePlane/);
+  assert.match(dashboard, /activeFlightHistory/);
   assert.match(dashboard, /pro-hero-plane-photo/);
   assert.match(videoLab, /accept="video\/\*"/);
   assert.match(videoLab, /analyzeVideo/);
@@ -176,14 +180,15 @@ test("adds a secure GPT-4 Pro Coach with an on-device fallback", async () => {
   assert.doesNotMatch(coach, /OPENAI_API_KEY/);
 });
 
-test("can delete a plane or an individual saved flight", async () => {
+test("can select and delete planes without offering individual throw deletion", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /function deletePlane/);
   assert.match(page, /item\.planeId !== plane\.id/);
-  assert.match(page, /function deleteFlight/);
-  assert.match(page, /item\.id !== flight\.id/);
+  assert.match(page, /activePlaneStorageKey/);
+  assert.match(page, /savedDataLoaded/);
   assert.match(page, /activeThrows\.map/);
   assert.doesNotMatch(page, /activeThrows\.slice\(0, 5\)/);
   assert.match(page, /aria-label={`Delete \$\{plane\.name\}`}/);
-  assert.match(page, /title="Delete this flight"/);
+  assert.doesNotMatch(page, /function deleteFlight/);
+  assert.doesNotMatch(page, /title="Delete this flight"/);
 });
