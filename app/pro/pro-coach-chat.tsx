@@ -6,7 +6,7 @@ import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
-  source?: "terra" | "device";
+  source?: "gpt4" | "device";
 };
 
 type FlightHistoryContext = {
@@ -256,7 +256,7 @@ export default function ProCoachChat() {
       });
       const payload = await response.json() as { reply?: string };
       if (!response.ok || !payload.reply) throw new Error("Cloud coach unavailable");
-      setMessages((current) => [...current, { role: "assistant", source: "terra", text: payload.reply! }]);
+      setMessages((current) => [...current, { role: "assistant", source: "gpt4", text: payload.reply! }]);
     } catch {
       setMessages((current) => [...current, {
         role: "assistant",
@@ -289,10 +289,10 @@ export default function ProCoachChat() {
           <div><span><i /> Pro Coach</span><b>{status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Pro Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, run a plane scan or video analysis first. Photos and videos stay on your device; only the measurements and your message can be sent to Terra.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, run a plane scan or video analysis first. Photos and videos stay on your device; only the measurements and your message can be sent to GPT-4.</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "terra" ? "Terra cloud coach" : "On-device coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "gpt4" ? "GPT-4 cloud coach" : "On-device coach"}</small>}
             <p>{message.text}</p>
           </div>)}
           {sending && <div className="assistant thinking"><small>Pro Coach</small><p><i /><i /><i /></p></div>}

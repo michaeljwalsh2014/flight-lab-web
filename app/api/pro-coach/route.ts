@@ -12,7 +12,8 @@ type RequestBody = {
 };
 
 const requestWindows = new Map<string, number[]>();
-const MODEL = "gpt-5.6-terra";
+const MODEL = "gpt-4";
+const COACH_INSTRUCTIONS = "You are Flight Lab Pro Coach, an encouraging expert in paper-airplane design and fair experiments. Give a concise, practical answer in plain language. Use the supplied measurements, name uncertainty, and never invent measurements. Recommend one change at a time followed by three comparable test throws. Explain why. Photos and videos were analyzed locally; you only receive summarized measurements. Avoid unsafe throwing advice and never tell someone to throw near people, roads, glass, or animals.";
 
 function json(body: object, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -60,17 +61,12 @@ function withinRateLimit(identifier: string) {
 
 function extractOutput(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
-  const output = (payload as { output?: unknown }).output;
-  if (!Array.isArray(output)) return "";
-  for (const item of output) {
-    if (!item || typeof item !== "object" || !Array.isArray((item as { content?: unknown }).content)) continue;
-    for (const content of (item as { content: unknown[] }).content) {
-      if (content && typeof content === "object" && (content as { type?: unknown }).type === "output_text" && typeof (content as { text?: unknown }).text === "string") {
-        return (content as { text: string }).text.trim();
-      }
-    }
-  }
-  return "";
+  const choices = (payload as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return "";
+  const message = (choices[0] as { message?: unknown }).message;
+  if (!message || typeof message !== "object") return "";
+  const content = (message as { content?: unknown }).content;
+  return typeof content === "string" ? content.trim() : "";
 }
 
 export async function POST(request: Request) {
@@ -95,33 +91,31 @@ export async function POST(request: Request) {
 
   const context = safeContext(body.context);
   const conversation = safeHistory(body.history);
-  const input = [
+  const messages = [
+    {
+      role: "system",
+      content: COACH_INSTRUCTIONS,
+    },
     ...conversation.map((item) => ({
       role: item.role,
       content: item.text,
     })),
     {
       role: "user",
-      content: [{
-        type: "input_text",
-        text: `Latest on-device Flight Lab measurements:\n${JSON.stringify(context)}\n\nQuestion: ${message}`,
-      }],
+      content: `Latest on-device Flight Lab measurements:\n${JSON.stringify(context)}\n\nQuestion: ${message}`,
     },
   ];
 
   let upstream: Response;
   try {
-    upstream = await fetch("https://api.openai.com/v1/responses", {
+    upstream = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        instructions: "You are Flight Lab Pro Coach, an encouraging expert in paper-airplane design and fair experiments. Give a concise, practical answer in plain language. Use the supplied measurements, name uncertainty, and never invent measurements. Recommend one change at a time followed by three comparable test throws. Explain why. Photos and videos were analyzed locally; you only receive summarized measurements. Avoid unsafe throwing advice and never tell someone to throw near people, roads, glass, or animals.",
-        input,
-        reasoning: { effort: "low" },
-        text: { verbosity: "low" },
-        max_output_tokens: 450,
-        safety_identifier: identifier,
+        messages,
+        max_tokens: 450,
+        user: identifier,
       }),
     });
   } catch {

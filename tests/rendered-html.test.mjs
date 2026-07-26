@@ -147,7 +147,7 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
-test("adds a secure Terra Pro Coach with an on-device fallback", async () => {
+test("adds a secure GPT-4 Pro Coach with an on-device fallback", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
@@ -168,10 +168,11 @@ test("adds a secure Terra Pro Coach with an on-device fallback", async () => {
   assert.match(videoLab, /publishProAiContext/);
   assert.match(videoLab, /driftDirection/);
   assert.match(videoLab, /On-device coach observations/);
-  assert.match(route, /gpt-5\.6-terra/);
+  assert.match(route, /const MODEL = "gpt-4"/);
+  assert.match(route, /v1\/chat\/completions/);
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
-  assert.match(route, /safety_identifier/);
+  assert.match(route, /user: identifier/);
   assert.doesNotMatch(coach, /OPENAI_API_KEY/);
 });
 
