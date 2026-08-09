@@ -544,8 +544,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-preset-picker small { color: var(--pro-muted); line-height: 1.4; }
 .pro-plane-builder { padding: 25px; border: 1px solid var(--pro-line); border-radius: 20px; background: linear-gradient(145deg, rgba(13,39,67,.94), rgba(5,21,38,.94)); }
 .pro-plane-builder .pro-command-button { margin-top: 15px; }
+.pro-hangar-notice { margin: 12px 0 0; padding: 10px 12px; border: 1px solid rgba(67,220,255,.24); border-radius: 9px; color: #b9d7ea; background: rgba(67,220,255,.055); font-size: 11px; line-height: 1.45; }
 .pro-saved-planes { max-height: 340px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--pro-line); display: grid; gap: 9px; overflow-y: auto; }
 .pro-saved-planes span { width: 100%; color: var(--pro-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+.pro-saved-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pro-saved-header button { flex: 0 0 auto; padding: 7px 9px; border: 1px solid rgba(255,120,120,.3); border-radius: 8px; color: #ffaaaa; background: rgba(255,80,80,.055); font-size: 9px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
 .pro-saved-plane { min-height: 82px; padding: 7px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border: 1px solid var(--pro-line); border-radius: 13px; background: rgba(255,255,255,.025); }
 .pro-saved-plane.selected { border-color: var(--lime); background: rgba(200,243,75,.07); }
 .pro-plane-select { min-width: 0; padding: 5px; display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 11px; border: 0; color: white; background: transparent; text-align: left; }
@@ -599,6 +602,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-scan-view-grid button img { width: 100%; height: 94px; object-fit: cover; border-radius: 7px; }
 .pro-scan-view-grid button b { font-size: 12px; }
 .pro-scan-view-grid button small { max-width: 180px; color: #708ba4; font-size: 9px; line-height: 1.35; }
+.pro-scan-capture.quick .pro-scan-view-grid button { min-height: 180px; gap: 8px; }
+.pro-scan-capture.quick .pro-scan-view-grid button > span { width: 64px; height: 50px; border-width: 2px; border-radius: 11px; font-size: 15px; font-weight: 950; }
+.pro-scan-capture.quick .pro-scan-view-grid button b { font-size: 17px; }
+.pro-scan-capture.quick .pro-scan-view-grid button small { max-width: 440px; color: #91abc2; font-size: 13px; line-height: 1.45; }
 .pro-cloud-vision-choice { margin: 12px 0 0; padding: 13px 14px; display: flex !important; grid-template-columns: none !important; flex-direction: row; align-items: flex-start; gap: 11px !important; border: 1px solid rgba(67,220,255,.22); border-radius: 11px; background: rgba(67,220,255,.055); text-transform: none !important; letter-spacing: 0 !important; }
 .pro-dashboard .pro-cloud-vision-choice input { width: 19px !important; height: 19px !important; min-height: 0 !important; margin-top: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; box-shadow: none; accent-color: var(--cyan); }
 .pro-cloud-vision-choice span { display: grid; gap: 3px; }

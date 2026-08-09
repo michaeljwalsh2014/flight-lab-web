@@ -19,6 +19,7 @@ type FlightHistoryContext = {
 };
 
 const QUICK_PROMPTS = [
+  "How’s it going?",
   "What should I improve?",
   "Why did my plane turn?",
   "What should I test next?",
@@ -61,6 +62,24 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const plane = context.plane;
   const lastTest = context.coachMemory?.filter((item) => item.planeId === history.planeId).slice(-1)[0];
   let variant = nextDeviceVariant();
+
+  if (/\b(how('?s| is) (your )?day|how are you|how('?s| is) it going|what'?s up)\b/.test(question)) {
+    return choice([
+      "I’m doing well—thanks for asking! I’m here to chat, and whenever you feel like working on a plane, I can help with that too.",
+      "Pretty good! I’ve been thinking about tiny wings and big flights, but we can just talk too. How’s your day going?",
+      "I’m doing great. No photo required—we can chat normally, or look at your plane whenever you’re ready.",
+    ], variant);
+  }
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening)[!. ]*$/.test(question.trim())) {
+    return choice([
+      "Hey! Good to see you. What’s on your mind?",
+      "Hi! How’s it going?",
+      "Hey there—I’m listening.",
+    ], variant);
+  }
+  if (/\b(thank you|thanks|appreciate it)\b/.test(question)) {
+    return choice(["You’re welcome!", "Anytime!", "Of course—happy to help."], variant);
+  }
 
   function compose(currentVariant: number) {
     if (!plane && !flight) {
@@ -235,7 +254,7 @@ export default function ProCoachChat() {
   const [handoffStatus, setHandoffStatus] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", source: "device", text: "Hi! I’m your Pro Coach. Analyze a plane or flight, then ask what to improve or test next." },
+    { role: "assistant", source: "device", text: "Hey! I’m your Pro Coach. We can talk normally, and whenever you’re ready I can help analyze a plane, understand a flight, or plan the next test." },
   ]);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -316,10 +335,10 @@ export default function ProCoachChat() {
           <div><span><i /> Pro Coach</span><b>{status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Pro Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, reconstruct the plane or analyze a flight first. A 3D scan can optionally send six compressed photos for one cloud visual inspection. The chat coach receives the structured findings, measurements, test results, and your message—not the raw photos.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. If you want evidence-based plane advice later, a photo, 3D scan, or tracked flight gives me more to work with.</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "cloud" ? "Evidence-aware cloud coach" : "On-device coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "cloud" ? "Pro Coach AI" : "Offline coach"}</small>}
             <p>{message.text}</p>
           </div>)}
           {sending && <div className="assistant thinking"><small>Pro Coach</small><p><i /><i /><i /></p></div>}
@@ -334,7 +353,7 @@ export default function ProCoachChat() {
         </div>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Pro Coach</label>
-          <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask what to change, test, or improve…" />
+          <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything…" />
           <button type="submit" disabled={!input.trim() || sending} aria-label="Send message">➤</button>
         </form>
       </div>}

@@ -151,7 +151,7 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
-test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", async () => {
+test("adds a conversational, evidence-aware GPT-5.6 Pro Coach with an offline fallback", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
@@ -160,22 +160,25 @@ test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", asyn
   assert.match(dashboard, /ProCoachChat/);
   assert.match(coach, /Ask Pro Coach/);
   assert.match(coach, /What should I improve/);
-  assert.match(coach, /On-device coach/);
+  assert.match(coach, /Offline coach/);
+  assert.match(coach, /How’s it going/);
+  assert.match(coach, /no upload required/i);
   assert.match(coach, /nextDeviceVariant/);
   assert.match(coach, /recentReplies\.includes/);
   assert.match(coach, /single best thing to test next/);
   assert.match(coach, /Open ChatGPT with this scan/);
   assert.match(coach, /https:\/\/chatgpt\.com\//);
   assert.match(coach, /navigator\.clipboard\.writeText/);
-  assert.match(coach, /chat coach receives the structured findings/i);
+  assert.match(coach, /We can talk normally/i);
   assert.match(context, /flight-lab-local-v2/);
   assert.match(videoLab, /publishProAiContext/);
   assert.match(videoLab, /driftDirection/);
   assert.match(videoLab, /On-device coach observations/);
   assert.match(route, /const MODEL = "gpt-5\.6-terra"/);
   assert.match(route, /v1\/responses/);
-  assert.match(route, /json_schema/);
-  assert.match(route, /do not repeat or paraphrase an action/i);
+  assert.match(route, /Respond to the user's actual message first/);
+  assert.doesNotMatch(route, /json_schema/);
+  assert.match(route, /Do not repeat an action marked same or worse/i);
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
   assert.match(route, /safety_identifier: identifier/);

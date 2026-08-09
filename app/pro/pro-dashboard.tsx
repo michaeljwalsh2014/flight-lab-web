@@ -172,6 +172,7 @@ function ProPlaneHangar() {
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [presetId, setPresetId] = useState<"dart" | "glider">("dart");
   const [planeName, setPlaneName] = useState("Dart");
+  const [hangarNotice, setHangarNotice] = useState("");
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
   const activeAverage = activeThrows.length ? activeThrows.reduce((sum, item) => sum + item.distance, 0) / activeThrows.length : 0;
@@ -182,10 +183,27 @@ function ProPlaneHangar() {
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const seenEmptyPlanes = new Set<string>();
+        const keysWithFlights = new Set(savedPlanes.filter((plane) => savedThrows.some((item) => item.planeId === plane.id)).map((plane) => `${plane.preset ?? "custom"}:${plane.name.trim().toLowerCase()}`));
+        const cleanedPlanes = savedPlanes.filter((plane) => {
+          const hasFlights = savedThrows.some((item) => item.planeId === plane.id);
+          const key = `${plane.preset ?? "custom"}:${plane.name.trim().toLowerCase()}`;
+          if (hasFlights) return true;
+          if (keysWithFlights.has(key) || seenEmptyPlanes.has(key)) return false;
+          seenEmptyPlanes.add(key);
+          return true;
+        });
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
-        setPlanes(savedPlanes);
+        setPlanes(cleanedPlanes);
         setThrows(savedThrows);
-        setActivePlaneId(savedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : savedPlanes[0]?.id ?? null);
+        const nextActivePlaneId = cleanedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : cleanedPlanes[0]?.id ?? null;
+        setActivePlaneId(nextActivePlaneId);
+        if (cleanedPlanes.length !== savedPlanes.length) {
+          window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(cleanedPlanes));
+          if (nextActivePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
+          else window.localStorage.setItem(activePlaneStorageKey, String(nextActivePlaneId));
+          setHangarNotice(`${savedPlanes.length - cleanedPlanes.length} empty duplicate ${savedPlanes.length - cleanedPlanes.length === 1 ? "plane was" : "planes were"} removed from this device.`);
+        }
       } catch {
         setPlanes([]);
         setThrows([]);
@@ -220,9 +238,16 @@ function ProPlaneHangar() {
 
   function addPlane() {
     const preset = proPlanePresets.find((item) => item.id === presetId) ?? proPlanePresets[0];
+    const nextName = planeName.trim() || preset.name;
+    const duplicate = planes.find((item) => item.preset === preset.id && item.name.trim().toLowerCase() === nextName.toLowerCase());
+    if (duplicate) {
+      selectPlane(duplicate.id);
+      setHangarNotice(`${duplicate.name} is already saved on this device. Rename it first if this is a different plane.`);
+      return;
+    }
     const plane: StoredPlane = {
       id: Date.now(),
-      name: planeName.trim() || preset.name,
+      name: nextName,
       createdAt: "Just now",
       image: preset.image,
       preset: preset.id,
@@ -230,6 +255,15 @@ function ProPlaneHangar() {
     const nextPlanes = [plane, ...planes];
     saveHangar(nextPlanes, throws, plane.id);
     setPlaneName(preset.name);
+    setHangarNotice(`${plane.name} was saved on this device.`);
+  }
+
+  function clearHangar() {
+    if (!window.confirm("Remove every saved plane, flight, scan report, and coach test from this device? This cannot be undone.")) return;
+    saveHangar([], [], null);
+    window.localStorage.removeItem(planeReportsStorageKey);
+    window.localStorage.removeItem(coachMemoryStorageKey);
+    setHangarNotice("The hangar is empty. Nothing from another visitor was stored here.");
   }
 
   function deletePlane(plane: StoredPlane) {
@@ -246,7 +280,7 @@ function ProPlaneHangar() {
     <section className="pro-tool-section pro-hangar-section" id="plane-hangar">
       <div className="pro-tool-heading">
         <div><span className="pro-index">PLANES</span><p>Your shared hangar</p><h2>Add a plane</h2></div>
-        <p>Planes added here also appear in normal Flight Lab, with the same saved flights and measurements.</p>
+        <p>Planes added here also appear in normal Flight Lab. They are saved only in this browser on this device—not to the public site or other visitors.</p>
       </div>
       <div className="pro-hangar-grid">
         <div className="pro-preset-picker" aria-label="Choose a plane design">
@@ -266,8 +300,9 @@ function ProPlaneHangar() {
         <div className="pro-plane-builder">
           <label>Plane name<input value={planeName} onChange={(event) => setPlaneName(event.target.value)} maxLength={32} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} /></label>
           <button className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
+          {hangarNotice && <p className="pro-hangar-notice" role="status">{hangarNotice}</p>}
           <div className="pro-saved-planes">
-            <span>{planes.length ? `${planes.length} saved ${planes.length === 1 ? "plane" : "planes"}` : "No planes saved yet"}</span>
+            <div className="pro-saved-header"><span>{planes.length ? `${planes.length} saved on this device` : "No planes saved on this device"}</span>{planes.length ? <button type="button" onClick={clearHangar}>Clear hangar</button> : null}</div>
             {planes.map((plane) => (
               <div className={`pro-saved-plane ${activePlaneId === plane.id ? "selected" : ""}`} key={plane.id}>
                 <button type="button" className="pro-plane-select" onClick={() => selectPlane(plane.id)} aria-pressed={activePlaneId === plane.id}>

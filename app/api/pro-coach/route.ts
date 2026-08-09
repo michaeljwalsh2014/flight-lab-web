@@ -13,31 +13,15 @@ type RequestBody = {
 
 const requestWindows = new Map<string, number[]>();
 const MODEL = "gpt-5.6-terra";
-const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach, an evidence-first paper-airplane experiment coach.
-Use only supplied measurements and saved results. Never invent a visual detail, measurement, or causal claim.
-Separate observation from inference. If evidence is weak, say what scan or throw would reduce uncertainty.
-Prioritize direct cloud-vision observations, reconstructed-mesh measurements, and tracked-flight measurements over generic paper-airplane advice. Name the specific evidence you used.
-Recommend exactly one small, reversible change followed by three comparable throws.
-Read previous test results and recent assistant replies. Do not repeat or paraphrase an action that was marked same or worse. If an earlier action helped, preserve it and test a different variable.
-Use the currently selected plane only. Do not combine flights from different planes.
-Keep the language clear for a young builder without sounding childish.
+const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach: a warm, natural conversational AI with deep paper-airplane coaching expertise.
+Respond to the user's actual message first. You can greet them, make light conversation, answer ordinary questions, and acknowledge feelings naturally. Never treat every message as a request for airplane analysis.
+Do not demand a photo, scan, flight, or measurement. If the user is chatting casually, reply conversationally; you may offer airplane help in one brief, optional sentence only when it feels natural. Do not repeat that offer in every reply.
+When the user asks about a paper airplane, use supplied evidence when it exists. Never invent a visual detail, measurement, or causal claim. Clearly distinguish observations from inferences and say when a photo, scan, or measured throw would reduce uncertainty.
+For an evidence-based coaching request, prioritize cloud-vision observations, reconstructed-mesh measurements, and tracked-flight measurements. Name the specific evidence used, then recommend one small, reversible change followed by three comparable throws.
+Read previous test results and recent assistant replies. Do not repeat an action marked same or worse. If an earlier action helped, preserve it and test a different variable.
+Use only the currently selected plane for plane-specific advice. Do not combine flights from different planes.
+Keep replies concise, friendly, and clear for a young builder without sounding childish or robotic.
 Avoid unsafe throwing advice and never suggest throwing near people, roads, glass, or animals.`;
-
-const coachSchema = {
-  type: "object",
-  properties: {
-    observation: { type: "string" },
-    evidenceUsed: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 },
-    inference: { type: "string" },
-    confidence: { type: "string", enum: ["low", "medium", "high"] },
-    action: { type: "string" },
-    whyThisAction: { type: "string" },
-    testPlan: { type: "string" },
-    memoryNote: { type: "string" },
-  },
-  required: ["observation", "evidenceUsed", "inference", "confidence", "action", "whyThisAction", "testPlan", "memoryNote"],
-  additionalProperties: false,
-};
 
 function json(body: object, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -98,14 +82,6 @@ function extractOutput(payload: unknown) {
   return "";
 }
 
-function formatCoachReply(value: unknown) {
-  if (!value || typeof value !== "object") return "";
-  const item = value as Record<string, unknown>;
-  if (!["observation", "inference", "confidence", "action", "whyThisAction", "testPlan", "memoryNote"].every((key) => typeof item[key] === "string") || !Array.isArray(item.evidenceUsed)) return "";
-  const evidence = item.evidenceUsed.filter((value): value is string => typeof value === "string").slice(0, 3);
-  return `What I observed: ${item.observation}\n\nEvidence used: ${evidence.join(" · ")}\n\nWhat it may mean (${item.confidence} confidence): ${item.inference}\n\nChange one thing: ${item.action}\n\nWhy this test: ${item.whyThisAction}\n\nTest it: ${item.testPlan}\n\n${item.memoryNote}`.trim();
-}
-
 export async function POST(request: Request) {
   const { user, isOwner } = await getProAccess();
   if (!(user && isOwner) && !validSharePath(request)) return json({ error: "pro_access_required" }, 403);
@@ -153,10 +129,7 @@ export async function POST(request: Request) {
         input,
         max_output_tokens: 700,
         reasoning: { effort: "low" },
-        text: {
-          verbosity: "low",
-          format: { type: "json_schema", name: "flight_lab_coach", strict: true, schema: coachSchema },
-        },
+        text: { verbosity: "low" },
         safety_identifier: identifier,
       }),
     });
@@ -169,9 +142,7 @@ export async function POST(request: Request) {
     return json({ error: "coach_unavailable", requestId }, 502);
   }
   const payload = await upstream.json() as unknown;
-  const raw = extractOutput(payload);
-  let reply = "";
-  try { reply = formatCoachReply(JSON.parse(raw)); } catch { reply = ""; }
+  const reply = extractOutput(payload);
   if (!reply) return json({ error: "coach_unavailable" }, 502);
   return json({ reply, model: MODEL });
 }
