@@ -16,8 +16,9 @@ const MODEL = "gpt-5.6-terra";
 const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach, an evidence-first paper-airplane experiment coach.
 Use only supplied measurements and saved results. Never invent a visual detail, measurement, or causal claim.
 Separate observation from inference. If evidence is weak, say what scan or throw would reduce uncertainty.
+Prioritize direct cloud-vision observations, reconstructed-mesh measurements, and tracked-flight measurements over generic paper-airplane advice. Name the specific evidence you used.
 Recommend exactly one small, reversible change followed by three comparable throws.
-Read previous test results and do not repeat an action that was marked same or worse unless you clearly explain why new evidence justifies retrying it.
+Read previous test results and recent assistant replies. Do not repeat or paraphrase an action that was marked same or worse. If an earlier action helped, preserve it and test a different variable.
 Use the currently selected plane only. Do not combine flights from different planes.
 Keep the language clear for a young builder without sounding childish.
 Avoid unsafe throwing advice and never suggest throwing near people, roads, glass, or animals.`;
@@ -26,13 +27,15 @@ const coachSchema = {
   type: "object",
   properties: {
     observation: { type: "string" },
+    evidenceUsed: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3 },
     inference: { type: "string" },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
     action: { type: "string" },
+    whyThisAction: { type: "string" },
     testPlan: { type: "string" },
     memoryNote: { type: "string" },
   },
-  required: ["observation", "inference", "confidence", "action", "testPlan", "memoryNote"],
+  required: ["observation", "evidenceUsed", "inference", "confidence", "action", "whyThisAction", "testPlan", "memoryNote"],
   additionalProperties: false,
 };
 
@@ -98,8 +101,9 @@ function extractOutput(payload: unknown) {
 function formatCoachReply(value: unknown) {
   if (!value || typeof value !== "object") return "";
   const item = value as Record<string, unknown>;
-  if (!["observation", "inference", "confidence", "action", "testPlan", "memoryNote"].every((key) => typeof item[key] === "string")) return "";
-  return `What I observed: ${item.observation}\n\nWhat it may mean (${item.confidence} confidence): ${item.inference}\n\nChange one thing: ${item.action}\n\nTest it: ${item.testPlan}\n\n${item.memoryNote}`.trim();
+  if (!["observation", "inference", "confidence", "action", "whyThisAction", "testPlan", "memoryNote"].every((key) => typeof item[key] === "string") || !Array.isArray(item.evidenceUsed)) return "";
+  const evidence = item.evidenceUsed.filter((value): value is string => typeof value === "string").slice(0, 3);
+  return `What I observed: ${item.observation}\n\nEvidence used: ${evidence.join(" · ")}\n\nWhat it may mean (${item.confidence} confidence): ${item.inference}\n\nChange one thing: ${item.action}\n\nWhy this test: ${item.whyThisAction}\n\nTest it: ${item.testPlan}\n\n${item.memoryNote}`.trim();
 }
 
 export async function POST(request: Request) {
@@ -135,7 +139,7 @@ export async function POST(request: Request) {
     })),
     {
       role: "user",
-      content: `Latest on-device Flight Lab measurements:\n${JSON.stringify(context)}\n\nQuestion: ${message}`,
+      content: `Latest Flight Lab evidence (on-device measurements plus optional cloud-vision findings):\n${JSON.stringify(context)}\n\nQuestion: ${message}`,
     },
   ];
 

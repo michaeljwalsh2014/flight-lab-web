@@ -16,6 +16,23 @@ export type PlaneCoachContext = {
   lastFlight: string;
   scanMode: "quick" | "multiview";
   viewCount: number;
+  mesh: {
+    vertices: number;
+    faces: number;
+    leftRightBalance: number;
+    estimatedDihedral: number;
+    estimatedThickness: number;
+  };
+  vision?: {
+    source: "gpt-5.6-terra-vision";
+    confidence: number;
+    observations: string[];
+    issues: string[];
+    uncertainties: string[];
+    noseAlignment: string;
+    wingDihedral: string;
+    foldDefinition: string;
+  };
 };
 
 export type CoachTestMemory = {
@@ -46,7 +63,7 @@ export type ProAiContext = {
 };
 
 export const PRO_AI_CONTEXT_EVENT = "flight-lab-pro-ai-context";
-const STORAGE_KEY = "flight-lab-pro-ai-context-v2";
+const STORAGE_KEY = "flight-lab-pro-ai-context-v3";
 
 export function readProAiContext(): ProAiContext {
   if (typeof window === "undefined") return {};

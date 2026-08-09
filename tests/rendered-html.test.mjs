@@ -54,11 +54,11 @@ test("requires one top-view airplane photo and can reject invalid images", async
   assert.doesNotMatch(page, /Math\.max\(55/);
 });
 
-test("uses on-device AI, plane pictures, and a labeled distance estimate", async () => {
+test("uses on-device shape analysis, plane pictures, and a labeled distance estimate", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
-  assert.match(page, /@tensorflow-models\/coco-ssd/);
-  assert.match(page, /The AI sees a \$\{unrelated\.class\}, not a plane/);
-  assert.match(page, /Loading the on-device AI model/);
+  assert.match(page, /inspectPlanePhoto/);
+  assert.match(page, /on-device silhouette and fold analyzer/i);
+  assert.match(page, /Running on-device shape checks/);
   assert.match(page, /Analyze this plane/);
   assert.match(page, /Estimated next flight/);
   assert.match(page, /Estimate—not a measurement/);
@@ -167,7 +167,7 @@ test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", asyn
   assert.match(coach, /Open ChatGPT with this scan/);
   assert.match(coach, /https:\/\/chatgpt\.com\//);
   assert.match(coach, /navigator\.clipboard\.writeText/);
-  assert.match(coach, /Photos and videos stay on your device/);
+  assert.match(coach, /chat coach receives the structured findings/i);
   assert.match(context, /flight-lab-local-v2/);
   assert.match(videoLab, /publishProAiContext/);
   assert.match(videoLab, /driftDirection/);
@@ -175,7 +175,7 @@ test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", asyn
   assert.match(route, /const MODEL = "gpt-5\.6-terra"/);
   assert.match(route, /v1\/responses/);
   assert.match(route, /json_schema/);
-  assert.match(route, /do not repeat an action/i);
+  assert.match(route, /do not repeat or paraphrase an action/i);
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
   assert.match(route, /safety_identifier: identifier/);
@@ -185,10 +185,23 @@ test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", asyn
 test("guides a six-angle plane scan and remembers experiment outcomes", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
-  assert.match(dashboard, /Guided 3D scan/);
+  const reconstruction = await readFile(new URL("../app/pro/plane-reconstruction.ts", import.meta.url), "utf8");
+  const meshViewer = await readFile(new URL("../app/pro/plane-mesh-viewer.tsx", import.meta.url), "utf8");
+  const scanRoute = await readFile(new URL("../app/api/pro-scan/route.ts", import.meta.url), "utf8");
+  assert.match(dashboard, /3D reconstruction/);
   assert.match(dashboard, /id: "underside"/);
   assert.match(dashboard, /id: "tail"/);
-  assert.match(dashboard, /InteractiveScanModel/);
+  assert.match(dashboard, /ReconstructedPlaneModel/);
+  assert.match(dashboard, /reconstructPlaneMesh/);
+  assert.match(dashboard, /Deep visual inspection/);
+  assert.match(reconstruction, /PlaneMeshData/);
+  assert.match(reconstruction, /triangles/);
+  assert.match(meshViewer, /Drag to rotate/);
+  assert.match(meshViewer, /canvas/);
+  assert.match(scanRoute, /input_image/);
+  assert.match(scanRoute, /detail: "high"/);
+  assert.match(scanRoute, /paper_plane_scan/);
+  assert.match(scanRoute, /gpt-5\.6-terra/);
   assert.match(dashboard, /what happened\?/i);
   assert.match(dashboard, /recordOutcome\("better"\)/);
   assert.match(dashboard, /chooseFreshTest/);

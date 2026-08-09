@@ -74,9 +74,10 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
     const asksAboutTurn = /turn|left|right|curve|drift/.test(question);
     const asksAboutDistance = /distance|far|best|range/.test(question);
     const asksForTest = /test|next|try|improve|change/.test(question);
-    let issue: "drift" | "symmetry" | "stability" | "curve" | "outline" | "distance" | "general" = "general";
+    let issue: "drift" | "visual" | "symmetry" | "stability" | "curve" | "outline" | "distance" | "general" = "general";
     if (asksAboutTurn && flight?.driftDirection && flight.driftDirection !== "straight") issue = "drift";
     else if (asksAboutDistance) issue = "distance";
+    else if (plane?.vision?.issues.length) issue = "visual";
     else if (plane && plane.symmetry < 82) issue = "symmetry";
     else if (flight && flight.stability < 72) issue = "stability";
     else if (flight && flight.curve > 38) issue = "curve";
@@ -84,6 +85,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
     const evidence = {
       drift: flight ? `The tracked path drifted ${flight.driftDirection} with a curve score of ${flight.curve}/100.` : "",
+      visual: plane?.vision ? `Cloud vision found “${plane.vision.issues[0]}” at ${plane.vision.confidence}% inspection confidence; the reconstructed mesh measured ${plane.mesh?.leftRightBalance ?? plane.symmetry}% left/right balance.` : "",
       symmetry: plane ? `${plane.planeName}'s clearest scan signal is wing symmetry at ${plane.symmetry}%.` : "",
       stability: flight ? `The clearest flight signal is stability at ${flight.stability}/100.` : "",
       curve: flight ? `The path curve measured ${flight.curve}/100 and drifted ${flight.driftDirection}.` : "",
@@ -104,6 +106,13 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
         `Set the plane on a table and check whether the ${flight?.driftDirection} wingtip sits higher; correct only that tiny mismatch.`,
         `Make one very small adjustment to the outside rear edge opposite the ${flight?.driftDirection} drift.`,
       ], currentVariant, 1),
+      visual: plane?.vision?.noseAlignment === "left" || plane?.vision?.noseAlignment === "right"
+        ? `Set the plane on a table and realign only the nose fold that points ${plane.vision.noseAlignment}; leave both wings unchanged.`
+        : plane?.vision?.wingDihedral === "uneven"
+          ? "View the plane directly from the nose and match the two wing-rise angles without changing the rear edges."
+          : plane?.vision?.foldDefinition === "soft"
+            ? "Sharpen only the center crease from nose to tail, keeping the wing angles unchanged."
+            : (plane?.nextTest ?? "Correct only the clearest mismatch from the visual inspection, then keep every other fold fixed."),
       symmetry: choice([
         "Line up the wing edges and press the center crease again without changing the wing angle.",
         "Fold the wings together and correct only the side that does not match.",
@@ -169,11 +178,11 @@ function buildChatGptPrompt(context: ProAiContext, history: FlightHistoryContext
   const plane = context.plane;
   const flight = context.flight;
   const lines = [
-    "Act as my paper-airplane flight coach. Use only the measurements below, explain the most important issue in plain language, and recommend one safe change followed by three comparable test throws. Do not invent measurements.",
+    "Act as my paper-airplane flight coach. Use only the reconstructed geometry, visual observations, flight measurements, and experiment outcomes below. Explain the most important issue in plain language and recommend one safe change followed by three comparable test throws. Do not invent measurements and do not repeat a failed or unchanged adjustment.",
     "",
     "PLANE SCAN",
     plane
-      ? `Plane: ${plane.planeName}; style: ${plane.planeStyle}; scan: ${plane.scanMode} with ${plane.viewCount} views; score: ${plane.score}/100; symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; evidence: ${plane.evidence.join(" | ")}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
+      ? `Plane: ${plane.planeName}; style: ${plane.planeStyle}; scan: ${plane.scanMode} with ${plane.viewCount} views; reconstructed mesh: ${plane.mesh?.vertices ?? 0} vertices and ${plane.mesh?.faces ?? 0} faces, ${plane.mesh?.leftRightBalance ?? plane.symmetry}% left/right balance, ${plane.mesh?.estimatedDihedral ?? 0}/100 estimated wing rise; score: ${plane.score}/100; top-view symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; cloud visual observations: ${plane.vision?.observations.join(" | ") ?? "not used"}; visual issues: ${plane.vision?.issues.join(" | ") ?? "none reported"}; visual uncertainties: ${plane.vision?.uncertainties.join(" | ") ?? "not available"}; nose: ${plane.vision?.noseAlignment ?? "not inspected"}; dihedral: ${plane.vision?.wingDihedral ?? "not inspected"}; folds: ${plane.vision?.foldDefinition ?? "not inspected"}; other evidence: ${plane.evidence.join(" | ")}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
       : "No plane scan is loaded.",
     "",
     "FLIGHT TRACKER",
@@ -307,7 +316,7 @@ export default function ProCoachChat() {
           <div><span><i /> Pro Coach</span><b>{status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Pro Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, run a plane scan or video analysis first. Photos and videos stay on your device; only measurements, test results, and your message can be sent to the cloud coach.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, reconstruct the plane or analyze a flight first. A 3D scan can optionally send six compressed photos for one cloud visual inspection. The chat coach receives the structured findings, measurements, test results, and your message—not the raw photos.</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
             {message.role === "assistant" && <small>{message.source === "cloud" ? "Evidence-aware cloud coach" : "On-device coach"}</small>}

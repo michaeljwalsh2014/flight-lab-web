@@ -29,27 +29,11 @@ type PhotoReport =
   | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[]; estimatedRange: string; aiNote: string };
 
 type DetectedObject = { class: string; score: number; bbox: [number, number, number, number] };
-type ObjectDetector = { detect: (image: HTMLImageElement, maxResults?: number, minimumScore?: number) => Promise<DetectedObject[]> };
 
 const planePresets: Array<{ id: Exclude<PlanePreset, "custom">; name: string; image: string; description: string; baseline: number }> = [
   { id: "dart", name: "Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
   { id: "glider", name: "Nakamura Lock", image: "/plane-presets/nakamura-lock.png", description: "A traditional locked-nose glider with broad, balanced wings", baseline: 25 },
 ];
-
-const definitelyNotPlanes = new Set(["person", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "car", "motorcycle", "bus", "train", "truck", "bottle", "cup", "cell phone", "laptop", "teddy bear"]);
-let detectorPromise: Promise<ObjectDetector> | null = null;
-
-async function getObjectDetector() {
-  if (!detectorPromise) {
-    detectorPromise = (async () => {
-      const tensorflow = await import("@tensorflow/tfjs");
-      await tensorflow.ready();
-      const coco = await import("@tensorflow-models/coco-ssd");
-      return coco.load({ base: "lite_mobilenet_v2", modelUrl: "/models/coco-ssd/model.json" });
-    })();
-  }
-  return detectorPromise;
-}
 
 function loadImage(url: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -61,8 +45,8 @@ function loadImage(url: string) {
 }
 
 export async function detectObjects(url: string) {
-  const [detector, image] = await Promise.all([getObjectDetector(), loadImage(url)]);
-  return detector.detect(image, 8, .46);
+  await loadImage(url);
+  return [] as DetectedObject[];
 }
 
 const behaviorTips: Record<FlightBehavior, string> = {
@@ -610,27 +594,8 @@ export default function FlightLabApp({
     if (!photo) { openPhotoSource(); return; }
     setAnalyzing(true);
     setReport(null);
-    setAnalysisStage("Loading the on-device AI model…");
+    setAnalysisStage("Running on-device shape checks…");
     try {
-      let detectedObjects: DetectedObject[] = [];
-      let aiAvailable = true;
-      try {
-        detectedObjects = await detectObjects(photo.url);
-      } catch {
-        aiAvailable = false;
-      }
-      const unrelated = detectedObjects.find((item) => definitelyNotPlanes.has(item.class) && item.score >= .55);
-      if (unrelated) {
-        const confidence = Math.round(unrelated.score * 100);
-        setReport({
-          kind: "rejected",
-          headline: `The AI sees a ${unrelated.class}, not a plane`,
-          detail: `The object detector is ${confidence}% confident that this photo contains a ${unrelated.class}. Replace it with a paper airplane photo and try again.`,
-          steps: ["Put only the paper airplane in the frame.", "Use a plain floor or table behind it.", "Retake the top view with the entire plane visible."],
-        });
-        return;
-      }
-
       setAnalysisStage("Measuring the wing outline and center fold…");
       const top = await inspectPlanePhoto(photo.url);
       if (!top.recognizable) {
@@ -661,12 +626,7 @@ export default function FlightLabApp({
       const centerEstimate = baseline * behaviorMultiplier[behavior] * (.84 + score / 520);
       const lowEstimate = Math.max(5, Math.round(centerEstimate * .82));
       const highEstimate = Math.max(lowEstimate + 2, Math.round(centerEstimate * 1.18));
-      const detectedPlaneLabel = detectedObjects.find((item) => item.class === "airplane" || item.class === "kite");
-      const aiNote = !aiAvailable
-        ? "The object-detection model was unavailable, so this result uses the top-view fold measurements only."
-        : detectedPlaneLabel
-          ? `The AI found an airplane-like object with ${Math.round(detectedPlaneLabel.score * 100)}% confidence and found no competing subject.`
-          : "The AI found no cat, person, animal, vehicle, or other competing subject; the fold analyzer then measured the plane itself.";
+      const aiNote = "The on-device silhouette and fold analyzer completed this report without uploading the photo.";
       setReport({
         kind: "analysis",
         score,
