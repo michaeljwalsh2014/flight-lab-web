@@ -33,7 +33,7 @@ type ObjectDetector = { detect: (image: HTMLImageElement, maxResults?: number, m
 
 const planePresets: Array<{ id: Exclude<PlanePreset, "custom">; name: string; image: string; description: string; baseline: number }> = [
   { id: "dart", name: "Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
-  { id: "glider", name: "Glider", image: "/plane-presets/glider.png", description: "Broad wings for a slower, stable glide", baseline: 25 },
+  { id: "glider", name: "Nakamura Lock", image: "/plane-presets/nakamura-lock.png", description: "A traditional locked-nose glider with broad, balanced wings", baseline: 25 },
 ];
 
 const definitelyNotPlanes = new Set(["person", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "car", "motorcycle", "bus", "train", "truck", "bottle", "cup", "cell phone", "laptop", "teddy bear"]);

@@ -4,7 +4,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/flight-lab-app";
 import ProCoachChat from "./pro-coach-chat";
-import { publishProAiContext } from "./pro-ai-context";
+import { publishProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader, SpinningPlane } from "./pro-ui";
 
@@ -12,13 +12,21 @@ type PlaneKind = "dart" | "glider" | "stunt" | "custom";
 type ThrowStrength = "gentle" | "normal" | "strong";
 type AgeRange = "not-set" | "under-8" | "8-10" | "11-13" | "14-17" | "adult";
 type FlightBehavior = "straight" | "dives" | "stalls" | "turns" | "wobbles" | "spirals";
+type ScanMode = "quick" | "multiview";
+type ScanView = "top" | "nose" | "left" | "right" | "underside" | "tail";
 type PlaneReport = {
+  planeId: number | null;
+  planeName: string;
   score: number;
   range: string;
   confidence: number;
   headline: string;
   detail: string;
   nextTest: string;
+  recommendationId: string;
+  evidence: string[];
+  scanMode: ScanMode;
+  viewCount: number;
   signals: ImageSignals;
 };
 type StoredPlane = {
@@ -32,10 +40,21 @@ type StoredThrow = { id: number; planeId: number; distance: number; createdAt: s
 
 const proPlanePresets = [
   { id: "dart" as const, name: "Dart", image: "/plane-presets/dart.png", description: "Narrow wings for speed and distance" },
-  { id: "glider" as const, name: "Glider", image: "/plane-presets/glider.png", description: "Wide wings for a smooth, stable glide" },
+  { id: "glider" as const, name: "Nakamura Lock", image: "/plane-presets/nakamura-lock.png", description: "Traditional locked nose with broad, balanced glider wings" },
 ];
 const planesUpdatedEvent = "flight-lab-planes-updated";
 const activePlaneStorageKey = "flight-lab-v2-active-plane-id";
+const coachMemoryStorageKey = "flight-lab-pro-coach-tests-v1";
+const planeReportsStorageKey = "flight-lab-pro-plane-reports-v1";
+
+const scanViews: Array<{ id: ScanView; label: string; instruction: string }> = [
+  { id: "top", label: "Top", instruction: "Camera directly above · both wingtips visible" },
+  { id: "nose", label: "Nose", instruction: "Move low and face the nose straight on" },
+  { id: "left", label: "Left wing", instruction: "Circle to the left at about 45 degrees" },
+  { id: "right", label: "Right wing", instruction: "Circle to the right at about 45 degrees" },
+  { id: "underside", label: "Underside", instruction: "Turn the plane over and capture all folds" },
+  { id: "tail", label: "Tail", instruction: "Capture the rear edges and wing angles" },
+];
 
 const unrelatedClasses = new Set([
   "person", "bird", "cat", "dog", "horse", "car", "motorcycle", "bus", "train",
@@ -73,14 +92,53 @@ const behaviorFactors: Record<FlightBehavior, number> = {
   spirals: .72,
 };
 
-const nextTests: Record<FlightBehavior, string> = {
-  straight: "Keep the folds unchanged and compare three launches at the same angle.",
-  dives: "Bend both rear edges upward by about 2 mm, then repeat three level throws.",
-  stalls: "Flatten the rear edges slightly and use a smoother, more level release.",
-  turns: "Match both wingtips, then make one tiny adjustment on the outside rear edge.",
-  wobbles: "Sharpen the center crease and check that both wings have the same stiffness.",
-  spirals: "Flatten both wings and remove unequal curl from the wingtips before retesting.",
+const testOptions: Record<FlightBehavior, string[]> = {
+  straight: [
+    "Keep the folds unchanged and compare three launches at the same angle.",
+    "Keep the design fixed and compare three slightly gentler, level releases.",
+    "Mark the launch line and test three throws with the nose held exactly level.",
+  ],
+  dives: [
+    "Bend both rear edges upward by about 2 mm, then repeat three level throws.",
+    "Move the center of lift back by raising both rear edges only 1 mm, then test three throws.",
+    "Leave the folds alone and compare three gentler, level releases before adding more elevator.",
+  ],
+  stalls: [
+    "Flatten the rear edges slightly and use a smoother, more level release.",
+    "Reduce both elevator bends by about 1 mm, then repeat three level throws.",
+    "Keep the folds fixed and lower the launch angle for three comparable throws.",
+  ],
+  turns: [
+    "Match both wingtips, then make one tiny adjustment on the outside rear edge.",
+    "Rest the plane at eye level and flatten only the higher wingtip, then test three throws.",
+    "Refold the wings together so their trailing edges match, then repeat three level throws.",
+  ],
+  wobbles: [
+    "Sharpen the center crease and check that both wings have the same stiffness.",
+    "Flatten unequal wingtip curl without changing the main wing angle, then test three throws.",
+    "Use a gentler release for three throws to separate launch wobble from fold wobble.",
+  ],
+  spirals: [
+    "Flatten both wings and remove unequal curl from the wingtips before retesting.",
+    "Match the two rear edges exactly and test three throws without changing the nose.",
+    "Check the center crease for twist, correct only that twist, then repeat three throws.",
+  ],
 };
+
+const nextTests = Object.fromEntries(Object.entries(testOptions).map(([key, options]) => [key, options[0]])) as Record<FlightBehavior, string>;
+
+function readCoachMemory(): CoachTestMemory[] {
+  try {
+    return JSON.parse(window.localStorage.getItem(coachMemoryStorageKey) ?? "[]") as CoachTestMemory[];
+  } catch {
+    return [];
+  }
+}
+
+function chooseFreshTest(behavior: FlightBehavior, planeId: number | null) {
+  const used = new Set(readCoachMemory().filter((item) => item.planeId === planeId).map((item) => item.action));
+  return testOptions[behavior].find((option) => !used.has(option)) ?? testOptions[behavior][used.size % testOptions[behavior].length];
+}
 
 function ProPlaneHangar() {
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
@@ -88,6 +146,10 @@ function ProPlaneHangar() {
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [presetId, setPresetId] = useState<"dart" | "glider">("dart");
   const [planeName, setPlaneName] = useState("Dart");
+  const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
+  const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
+  const activeAverage = activeThrows.length ? activeThrows.reduce((sum, item) => sum + item.distance, 0) / activeThrows.length : 0;
+  const activeBest = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : 0;
 
   useEffect(() => {
     const loadSavedData = () => {
@@ -183,8 +245,8 @@ function ProPlaneHangar() {
             {planes.map((plane) => (
               <div className={`pro-saved-plane ${activePlaneId === plane.id ? "selected" : ""}`} key={plane.id}>
                 <button type="button" className="pro-plane-select" onClick={() => selectPlane(plane.id)} aria-pressed={activePlaneId === plane.id}>
-                  <b>{plane.name}</b>
-                  <small>{throws.filter((item) => item.planeId === plane.id).length} throws · {activePlaneId === plane.id ? "In use" : "Select plane"}</small>
+                  {plane.image ? <img src={plane.image} alt="" /> : null}
+                  <span><b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws · {activePlaneId === plane.id ? "Current plane" : "Select this plane"}</small></span>
                 </button>
                 <button type="button" className="pro-plane-delete" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`}>Delete</button>
               </div>
@@ -192,13 +254,37 @@ function ProPlaneHangar() {
           </div>
         </div>
       </div>
+      {activePlane ? <div className="pro-active-plane-bar" aria-live="polite">
+        <img src={activePlane.image ?? "/plane-presets/dart.png"} alt="" />
+        <div><span>Current plane · every new measurement and AI report goes here</span><h3>{activePlane.name}</h3></div>
+        <dl><div><dt>Throws</dt><dd>{activeThrows.length}</dd></div><div><dt>Average</dt><dd>{activeAverage.toFixed(1)} ft</dd></div><div><dt>Best</dt><dd>{activeBest.toFixed(1)} ft</dd></div></dl>
+        <a href="#smart-measure">Measure {activePlane.name}</a>
+      </div> : null}
     </section>
   );
 }
 
+function InteractiveScanModel({ photos, planeName }: { photos: Partial<Record<ScanView, string>>; planeName: string }) {
+  const available = scanViews.filter((view) => photos[view.id]);
+  const [index, setIndex] = useState(0);
+  const current = available[index % Math.max(1, available.length)];
+  return <div className="pro-scan-model" aria-label={`Interactive scan model of ${planeName}`}>
+    <div className="pro-scan-model-stage">
+      {current ? <img src={photos[current.id]} alt={`${planeName} · ${current.label} scan view`} /> : <SpinningPlane compact />}
+      <i className="model-axis model-axis-x">X</i><i className="model-axis model-axis-y">Y</i><i className="model-axis model-axis-z">Z</i>
+    </div>
+    <div className="pro-model-controls"><button type="button" onClick={() => setIndex((value) => (value - 1 + available.length) % available.length)} disabled={available.length < 2}>← Rotate</button><span>{current?.label ?? "Model"} · {available.length} captured views</span><button type="button" onClick={() => setIndex((value) => (value + 1) % available.length)} disabled={available.length < 2}>Rotate →</button></div>
+  </div>;
+}
+
 function ProPlaneCoach() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const pendingViewRef = useRef<ScanView>("top");
+  const [scanMode, setScanMode] = useState<ScanMode>("quick");
+  const [scanPhotos, setScanPhotos] = useState<Partial<Record<ScanView, string>>>({});
+  const [planes, setPlanes] = useState<StoredPlane[]>([]);
+  const [throws, setThrows] = useState<StoredThrow[]>([]);
+  const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [planeKind, setPlaneKind] = useState<PlaneKind>("glider");
   const [ageRange, setAgeRange] = useState<AgeRange>("not-set");
   const [strength, setStrength] = useState<ThrowStrength>("normal");
@@ -207,168 +293,173 @@ function ProPlaneCoach() {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
   const [report, setReport] = useState<PlaneReport | null>(null);
+  const [testOutcome, setTestOutcome] = useState<CoachTestMemory["result"] | null>(null);
   const [error, setError] = useState("");
+  const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
+  const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
+  const capturedViews = scanViews.filter((view) => scanPhotos[view.id]);
+  const requiredViews = scanMode === "multiview" ? scanViews : scanViews.slice(0, 1);
 
   useEffect(() => {
-    try {
-      const throws = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as Array<{ distance?: number }>;
-      const best = Math.max(0, ...throws.map((throwRecord) => Number(throwRecord.distance) || 0));
-      if (best > 0) setKnownBest(best.toFixed(1));
-    } catch {
-      // A manual calibration can still be entered.
-    }
+    const loadSavedData = () => {
+      try {
+        const nextPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+        const nextThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const savedId = Number(window.localStorage.getItem(activePlaneStorageKey));
+        const nextId = nextPlanes.some((plane) => plane.id === savedId) ? savedId : nextPlanes[0]?.id ?? null;
+        setPlanes(nextPlanes);
+        setThrows(nextThrows);
+        setActivePlaneId(nextId);
+      } catch {
+        setPlanes([]); setThrows([]); setActivePlaneId(null);
+      }
+    };
+    loadSavedData();
+    window.addEventListener(planesUpdatedEvent, loadSavedData);
+    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
   }, []);
 
-  useEffect(() => () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-  }, [photoUrl]);
+  useEffect(() => {
+    if (!activePlane) { setKnownBest(""); return; }
+    const distances = throws.filter((item) => item.planeId === activePlane.id).map((item) => item.distance);
+    setKnownBest(distances.length ? Math.max(...distances).toFixed(1) : "");
+    setPlaneKind(activePlane.preset === "dart" || activePlane.preset === "glider" ? activePlane.preset : "custom");
+    setReport(null); setTestOutcome(null);
+  }, [activePlaneId, planes, throws]);
 
   useEffect(() => {
     if (!report) return;
+    const memory = readCoachMemory().filter((item) => item.planeId === report.planeId).slice(-8);
     publishProAiContext({
       plane: {
-        score: report.score,
-        range: report.range,
-        confidence: report.confidence,
-        headline: report.headline,
-        nextTest: report.nextTest,
-        symmetry: report.signals.symmetry,
-        outline: report.signals.outline,
-        planeStyle: planeKind,
-        lastFlight: behavior,
+        planeId: report.planeId, planeName: report.planeName, score: report.score, range: report.range,
+        confidence: report.confidence, headline: report.headline, nextTest: report.nextTest,
+        recommendationId: report.recommendationId, evidence: report.evidence,
+        symmetry: report.signals.symmetry, outline: report.signals.outline, planeStyle: planeKind,
+        lastFlight: behavior, scanMode: report.scanMode, viewCount: report.viewCount,
       },
+      coachMemory: memory,
     });
   }, [behavior, planeKind, report]);
+
+  function selectActivePlane(planeId: number) {
+    setActivePlaneId(planeId);
+    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+  }
+
+  function requestView(view: ScanView) {
+    pendingViewRef.current = view;
+    inputRef.current?.click();
+  }
 
   function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Choose a photo of one paper airplane.");
-      return;
-    }
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-    setPhotoUrl(URL.createObjectURL(file));
-    setReport(null);
-    setError("");
+    if (!file.type.startsWith("image/")) { setError("Choose a photo of one paper airplane."); return; }
+    const view = pendingViewRef.current;
+    const previous = scanPhotos[view];
+    if (previous) URL.revokeObjectURL(previous);
+    setScanPhotos((current) => ({ ...current, [view]: URL.createObjectURL(file) }));
+    setReport(null); setTestOutcome(null); setError("");
     event.target.value = "";
   }
 
+  function recordOutcome(result: CoachTestMemory["result"]) {
+    if (!report) return;
+    const item: CoachTestMemory = { planeId: report.planeId, recommendationId: report.recommendationId, action: report.nextTest, result, createdAt: new Date().toISOString() };
+    const next = [...readCoachMemory(), item].slice(-40);
+    window.localStorage.setItem(coachMemoryStorageKey, JSON.stringify(next));
+    setTestOutcome(result);
+    publishProAiContext({ coachMemory: next.filter((entry) => entry.planeId === report.planeId).slice(-8) });
+  }
+
   async function analyzePlane() {
-    if (!photoUrl) {
-      inputRef.current?.click();
-      return;
-    }
-    setError("");
-    setReport(null);
-    setProgress(6);
-    setStage("Preparing your plane");
+    const topPhoto = scanPhotos.top;
+    if (!topPhoto) { requestView("top"); return; }
+    const missing = requiredViews.filter((view) => !scanPhotos[view.id]);
+    if (missing.length) { setError(`Finish the guided scan: add ${missing.map((view) => view.label.toLowerCase()).join(", ")}.`); return; }
+    setError(""); setReport(null); setTestOutcome(null); setProgress(6); setStage("Verifying the airplane");
     try {
-      setProgress(16);
-      setStage("Checking the photo");
       let detections: Awaited<ReturnType<typeof detectObjects>> = [];
-      try {
-        detections = await detectObjects(photoUrl);
-      } catch {
-        // Shape analysis continues when the optional object detector is unavailable.
-      }
+      try { detections = await detectObjects(topPhoto); } catch { /* Local shape analysis remains available. */ }
       const unrelated = detections.find((item) => unrelatedClasses.has(item.class) && item.score >= .58);
-      if (unrelated) throw new Error(`The photo looks like it contains a ${unrelated.class}. Use a clear top-view photo of only the plane.`);
-
-      setProgress(43);
-      setStage("Measuring wings and folds");
-      const signals = await inspectPlanePhoto(photoUrl);
+      if (unrelated) throw new Error(`The top view appears to contain a ${unrelated.class}. Use a plain surface with only the airplane in frame.`);
+      setProgress(34); setStage("Measuring wing symmetry and fold geometry");
+      const signals = await inspectPlanePhoto(topPhoto);
       if (!signals.recognizable) throw new Error(signals.reason);
-
-      setProgress(72);
-      setStage("Calibrating throw power");
+      setProgress(62); setStage(scanMode === "multiview" ? "Combining six scan angles" : "Building the top-view model");
       const score = Math.round(Math.max(0, Math.min(100, signals.symmetry * .56 + signals.outline * .29 + signals.foldVisibility * .15)));
-      const enteredBest = Number(knownBest);
-      const base = enteredBest > 0
-        ? enteredBest
-        : planeBaselines[planeKind] * ageFactors[ageRange] * strengthFactors[strength];
+      const measuredBest = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : Number(knownBest);
+      const base = measuredBest > 0 ? measuredBest : planeBaselines[planeKind] * ageFactors[ageRange] * strengthFactors[strength];
       const designFactor = .88 + score / 710;
       const center = base * behaviorFactors[behavior] * designFactor;
-      const uncertainty = enteredBest > 0 ? .12 : ageRange === "not-set" ? .24 : .18;
+      const baseUncertainty = measuredBest > 0 ? .12 : ageRange === "not-set" ? .24 : .18;
+      const uncertainty = Math.max(.08, baseUncertainty - (scanMode === "multiview" ? .035 : 0));
       const low = Math.max(5, Math.round(center * (1 - uncertainty)));
       const high = Math.max(low + 2, Math.round(center * (1 + uncertainty)));
-      const confidence = Math.round(Math.max(38, Math.min(96,
-        48 + (enteredBest > 0 ? 24 : 0) + (ageRange !== "not-set" ? 8 : 0) + signals.symmetry * .16,
-      )));
-      const headline = score >= 84
-        ? "Strong build with real distance potential"
-        : score >= 70
-          ? "A solid plane with one useful adjustment"
-          : "The scan found a fold worth correcting";
-      const detail = enteredBest > 0
-        ? `The estimate is anchored to your measured ${enteredBest.toFixed(1)} ft best, then adjusted for this scan and the reported flight behavior.`
-        : "This estimate uses the plane style, optional age range, throw strength, scan quality, and reported flight behavior.";
-
-      setProgress(93);
-      setStage("Building your flight report");
-      await new Promise((resolve) => window.setTimeout(resolve, 180));
-      setReport({
-        score,
-        range: `${low}–${high} ft`,
-        confidence,
-        headline,
-        detail,
-        nextTest: nextTests[behavior],
-        signals,
-      });
-      setProgress(100);
-      setStage("Report ready");
+      const confidence = Math.round(Math.max(38, Math.min(97, 44 + (measuredBest > 0 ? 24 : 0) + (ageRange !== "not-set" ? 7 : 0) + signals.symmetry * .13 + capturedViews.length * 2.6)));
+      const nextTest = chooseFreshTest(behavior, activePlaneId);
+      const recommendationId = `${activePlaneId ?? "custom"}-${behavior}-${Date.now()}`;
+      const planeName = activePlane?.name ?? "Unsaved plane";
+      const evidence = [
+        `Top-view wing symmetry measured ${signals.symmetry}%.`,
+        `The visible outline scored ${signals.outline}/100 and the center fold scored ${signals.foldVisibility}/100.`,
+        scanMode === "multiview" ? "All six guided angles were captured, including the underside and tail." : "This is a quick top-view scan; hidden folds were not measured.",
+        activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
+        `The last reported flight behavior was ${behavior}.`,
+      ];
+      const headline = signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
+      const detail = `Flight Lab matched ${capturedViews.length} scan ${capturedViews.length === 1 ? "view" : "views"} with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"} for ${planeName}. It is separating what the camera measured from what the coach inferred.`;
+      setProgress(88); setStage("Checking previous advice for repetition");
+      await new Promise((resolve) => window.setTimeout(resolve, 160));
+      const nextReport: PlaneReport = { planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals };
+      setReport(nextReport); setProgress(100); setStage("Evidence report ready");
+      try {
+        const profiles = JSON.parse(window.localStorage.getItem(planeReportsStorageKey) ?? "{}") as Record<string, PlaneReport>;
+        window.localStorage.setItem(planeReportsStorageKey, JSON.stringify({ ...profiles, [String(activePlaneId ?? "custom")]: nextReport }));
+      } catch { /* The current report still works if storage is unavailable. */ }
     } catch (analysisError) {
-      setError(analysisError instanceof Error ? analysisError.message : "The plane could not be analyzed.");
-      setProgress(0);
-      setStage("");
+      setError(analysisError instanceof Error ? analysisError.message : "The plane could not be analyzed."); setProgress(0); setStage("");
     }
   }
 
   const analyzing = progress > 0 && progress < 100 && !report;
-
-  return (
-    <section className="pro-tool-section" id="plane-coach">
-      <div className="pro-tool-heading">
-        <div><span className="pro-index">01</span><p>Pro plane intelligence</p><h2>Rate my plane</h2></div>
-        <p>One top photo plus optional throw calibration creates a more personal, honest range estimate.</p>
-      </div>
-      <div className="pro-plane-grid">
-        <div className="pro-upload-panel">
-          <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label="Choose a top-view plane photo" />
-          <button type="button" className={`pro-photo-target ${photoUrl ? "has-photo" : ""}`} onClick={() => inputRef.current?.click()}>
-            {photoUrl ? <img src={photoUrl} alt="Selected paper airplane from above" /> : <><span>TOP VIEW</span><b>Add your airplane</b><small>Use a plain background and include both wingtips</small></>}
-            <i className="target-corner corner-a" /><i className="target-corner corner-b" /><i className="target-corner corner-c" /><i className="target-corner corner-d" />
-          </button>
-          <div className="pro-form-grid">
-            <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
-            <label>Last flight<select value={behavior} onChange={(event) => setBehavior(event.target.value as FlightBehavior)}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
-            <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
-            <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
-            <label className="span-two">Measured best · optional<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="Example: 51" /><span>feet</span></div><small>Using a real throw is more accurate than age alone.</small></label>
-          </div>
-          <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing…" : "AI · Rate my plane"}</button>
-          {error && <p className="pro-inline-error" role="alert">{error}</p>}
+  return <section className="pro-tool-section" id="plane-coach">
+    <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Evidence-based plane intelligence</p><h2>Scan your plane</h2></div><p>Choose a fast top view or build a guided six-angle scan. The coach uses only measured geometry, this plane&apos;s throws, and your reported flight behavior.</p></div>
+    <div className="pro-plane-grid">
+      <div className="pro-upload-panel">
+        <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
+        <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
+        <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}>Quick top scan <small>1 photo</small></button><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}>Guided 3D scan <small>6 angles</small></button></div>
+        <div className={`pro-scan-capture ${scanMode}`}>
+          <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
+          <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
         </div>
-        <div className="pro-result-panel">
-          {analyzing ? <AnalysisLoader progress={progress} label={stage} /> : report ? (
-            <div className="pro-plane-report" aria-live="polite">
-              <div className="pro-report-orbit"><SpinningPlane compact /></div>
-              <span>Analysis complete · {report.confidence}% confidence</span>
-              <h3>{report.headline}</h3>
-              <div className="pro-range"><small>Predicted next flight</small><b>{report.range}</b></div>
-              <p>{report.detail}</p>
-              <div className="pro-signal-row"><span><b>{report.signals.symmetry}%</b> symmetry</span><span><b>{report.signals.outline}%</b> outline</span><span><b>{report.score}</b> build score</span></div>
-              <div className="pro-next-test"><small>Next controlled test</small><b>{report.nextTest}</b></div>
-              <p className="pro-honesty-note">Prediction is an estimate. A measured best throw greatly improves calibration.</p>
-            </div>
-          ) : (
-            <div className="pro-empty-result"><SpinningPlane compact /><span>Personal flight model</span><h3>Your plane report will appear here.</h3><p>Add a top photo and any calibration you know. Flight Lab will show what affected the prediction instead of pretending the estimate is exact.</p></div>
-          )}
+        <div className="pro-form-grid">
+          <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Nakamura Lock / glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
+          <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
+          <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
+          <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
+          <label className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
         </div>
+        <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Building evidence report…" : scanMode === "multiview" ? "Analyze guided 3D scan" : "Analyze top view"}</button>
+        {error && <p className="pro-inline-error" role="alert">{error}</p>}
       </div>
-    </section>
-  );
+      <div className="pro-result-panel">
+        {analyzing ? <AnalysisLoader progress={progress} label={stage} /> : report ? <div className="pro-plane-report" aria-live="polite">
+          <InteractiveScanModel photos={scanPhotos} planeName={report.planeName} />
+          <span>Analysis complete · {report.confidence}% confidence · {report.planeName}</span><h3>{report.headline}</h3>
+          <div className="pro-range"><small>Estimated next flight</small><b>{report.range}</b></div><p>{report.detail}</p>
+          <ul className="pro-evidence-list">{report.evidence.map((item) => <li key={item}>{item}</li>)}</ul>
+          <div className="pro-signal-row"><span><b>{report.signals.symmetry}%</b> symmetry</span><span><b>{report.signals.outline}%</b> outline</span><span><b>{report.score}</b> build score</span></div>
+          <div className="pro-next-test"><small>One change · then three throws</small><b>{report.nextTest}</b></div>
+          <div className="pro-test-feedback"><span>After testing, what happened?</span><button type="button" className={testOutcome === "better" ? "selected" : ""} onClick={() => recordOutcome("better")}>Better</button><button type="button" className={testOutcome === "same" ? "selected" : ""} onClick={() => recordOutcome("same")}>Same</button><button type="button" className={testOutcome === "worse" ? "selected" : ""} onClick={() => recordOutcome("worse")}>Worse</button></div>
+          <p className="pro-honesty-note">Observed facts are listed above. The range and recommended adjustment are inferences to verify with three measured throws.</p>
+        </div> : <div className="pro-empty-result"><InteractiveScanModel photos={scanPhotos} planeName={activePlane?.name ?? "your plane"} /><span>Personal plane model</span><h3>{scanMode === "multiview" ? "Build a six-angle scan." : "Start with a clear top view."}</h3><p>The finished report will separate camera measurements, flight-history evidence, and the coach&apos;s recommended experiment.</p></div>}
+      </div>
+    </div>
+  </section>;
 }
 
 type MeasureMode = "idle" | "calibrating" | "measuring";
@@ -644,8 +735,8 @@ export default function ProDashboard({
           <small>{displayName} · Videos and photos are analyzed on this device.</small>
         </div>
         <div className="pro-hero-visual">
-          <img className="pro-hero-plane-photo" src="/plane-presets/glider.png" alt="A realistic handmade Glider paper airplane" />
-          <div className="pro-visual-readout"><span>LIVE MODEL</span><b>Flight vector ready</b><small>Drag the finished path to inspect it from every angle.</small></div>
+          <img className="pro-hero-plane-photo" src="/plane-presets/nakamura-lock.png" alt="A realistic handmade Nakamura Lock paper airplane glider" />
+          <div className="pro-visual-readout"><span>NAKAMURA LOCK</span><b>Traditional glider profile</b><small>Build a guided six-angle scan to inspect your own plane.</small></div>
           <i className="visual-axis axis-x">X</i><i className="visual-axis axis-y">Y</i><i className="visual-axis axis-z">Z</i>
         </div>
       </section>

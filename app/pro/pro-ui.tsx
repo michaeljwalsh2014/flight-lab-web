@@ -28,9 +28,15 @@ export function AnalysisLoader({
   const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
   return (
     <div className="pro-analysis-loader" role="status" aria-live="polite">
-      <SpinningPlane compact />
+      <div className="pro-evidence-loader" aria-hidden="true">
+        <span className={safeProgress >= 15 ? "done" : "active"}>01<b>Verify plane</b></span>
+        <span className={safeProgress >= 45 ? "done" : safeProgress >= 15 ? "active" : ""}>02<b>Measure folds</b></span>
+        <span className={safeProgress >= 75 ? "done" : safeProgress >= 45 ? "active" : ""}>03<b>Match flights</b></span>
+        <span className={safeProgress >= 96 ? "done" : safeProgress >= 75 ? "active" : ""}>04<b>Choose new test</b></span>
+        <i style={{ height: `${safeProgress}%` }} />
+      </div>
       <div className="pro-loader-copy">
-        <span>Flight Lab intelligence</span>
+        <span>Evidence pipeline</span>
         <b>{label}</b>
         <div className="pro-progress-track" aria-label={`${safeProgress}% complete`}>
           <i style={{ width: `${safeProgress}%` }} />

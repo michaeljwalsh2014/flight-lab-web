@@ -1,15 +1,29 @@
 "use client";
 
 export type PlaneCoachContext = {
+  planeId: number | null;
+  planeName: string;
   score: number;
   range: string;
   confidence: number;
   headline: string;
   nextTest: string;
+  recommendationId: string;
+  evidence: string[];
   symmetry: number;
   outline: number;
   planeStyle: string;
   lastFlight: string;
+  scanMode: "quick" | "multiview";
+  viewCount: number;
+};
+
+export type CoachTestMemory = {
+  planeId: number | null;
+  recommendationId: string;
+  action: string;
+  result: "better" | "same" | "worse";
+  createdAt: string;
 };
 
 export type FlightTrackerContext = {
@@ -28,6 +42,7 @@ export type FlightTrackerContext = {
 export type ProAiContext = {
   plane?: PlaneCoachContext;
   flight?: FlightTrackerContext;
+  coachMemory?: CoachTestMemory[];
 };
 
 export const PRO_AI_CONTEXT_EVENT = "flight-lab-pro-ai-context";

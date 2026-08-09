@@ -63,11 +63,11 @@ test("uses on-device AI, plane pictures, and a labeled distance estimate", async
   assert.match(page, /Estimated next flight/);
   assert.match(page, /Estimate—not a measurement/);
   assert.match(page, /name: "Dart"/);
-  assert.match(page, /name: "Glider"/);
+  assert.match(page, /name: "Nakamura Lock"/);
   assert.doesNotMatch(page, /Paper Dart|Wide Glider/);
   assert.match(page, /Take a picture or choose one/);
   assert.match(page, /\/plane-presets\/dart\.png/);
-  assert.match(page, /\/plane-presets\/glider\.png/);
+  assert.match(page, /\/plane-presets\/nakamura-lock\.png/);
 });
 
 test("offers a normal Pro upgrade and recognizes the owner account", async () => {
@@ -99,7 +99,7 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(dashboard, /flight-lab-v2-throws/);
   assert.match(dashboard, /Experiment Builder/);
   assert.match(dashboard, /Age range · optional/);
-  assert.match(dashboard, /Measured best · optional/);
+  assert.match(dashboard, /This plane&apos;s measured best/);
   assert.match(dashboard, /Your shared hangar/);
   assert.match(dashboard, /＋ Add \{presetId === "dart" \? "Dart" : "Glider"\}/);
   assert.match(dashboard, /flight-lab-v2-planes/);
@@ -151,7 +151,7 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
-test("adds a secure GPT-4 Pro Coach with an on-device fallback", async () => {
+test("adds an evidence-aware GPT-5.6 Pro Coach with an on-device fallback", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
@@ -172,12 +172,29 @@ test("adds a secure GPT-4 Pro Coach with an on-device fallback", async () => {
   assert.match(videoLab, /publishProAiContext/);
   assert.match(videoLab, /driftDirection/);
   assert.match(videoLab, /On-device coach observations/);
-  assert.match(route, /const MODEL = "gpt-4"/);
-  assert.match(route, /v1\/chat\/completions/);
+  assert.match(route, /const MODEL = "gpt-5\.6-terra"/);
+  assert.match(route, /v1\/responses/);
+  assert.match(route, /json_schema/);
+  assert.match(route, /do not repeat an action/i);
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
-  assert.match(route, /user: identifier/);
+  assert.match(route, /safety_identifier: identifier/);
   assert.doesNotMatch(coach, /OPENAI_API_KEY/);
+});
+
+test("guides a six-angle plane scan and remembers experiment outcomes", async () => {
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
+  assert.match(dashboard, /Guided 3D scan/);
+  assert.match(dashboard, /id: "underside"/);
+  assert.match(dashboard, /id: "tail"/);
+  assert.match(dashboard, /InteractiveScanModel/);
+  assert.match(dashboard, /what happened\?/i);
+  assert.match(dashboard, /recordOutcome\("better"\)/);
+  assert.match(dashboard, /chooseFreshTest/);
+  assert.match(dashboard, /activeThrows/);
+  assert.match(context, /CoachTestMemory/);
+  assert.match(context, /recommendationId/);
 });
 
 test("can select and delete planes without offering individual throw deletion", async () => {

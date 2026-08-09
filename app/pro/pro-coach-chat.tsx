@@ -6,10 +6,12 @@ import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
-  source?: "gpt4" | "device";
+  source?: "cloud" | "device";
 };
 
 type FlightHistoryContext = {
+  planeId: number | null;
+  planeName: string;
   flightsLogged: number;
   averageDistance: number;
   bestDistance: number;
@@ -24,16 +26,20 @@ const QUICK_PROMPTS = [
 
 function loadFlightHistory(): FlightHistoryContext {
   try {
-    const throws = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as Array<{ distance?: number }>;
-    const distances = throws.map((item) => Number(item.distance)).filter((value) => Number.isFinite(value) && value > 0);
+    const planeId = Number(window.localStorage.getItem("flight-lab-v2-active-plane-id")) || null;
+    const planes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as Array<{ id?: number; name?: string }>;
+    const throws = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as Array<{ planeId?: number; distance?: number }>;
+    const distances = throws.filter((item) => item.planeId === planeId).map((item) => Number(item.distance)).filter((value) => Number.isFinite(value) && value > 0);
     return {
+      planeId,
+      planeName: planes.find((plane) => plane.id === planeId)?.name ?? "Current plane",
       flightsLogged: distances.length,
       averageDistance: distances.length ? distances.reduce((sum, value) => sum + value, 0) / distances.length : 0,
       bestDistance: distances.length ? Math.max(...distances) : 0,
       recentDistances: distances.slice(0, 5),
     };
   } catch {
-    return { flightsLogged: 0, averageDistance: 0, bestDistance: 0, recentDistances: [] };
+    return { planeId: null, planeName: "Current plane", flightsLogged: 0, averageDistance: 0, bestDistance: 0, recentDistances: [] };
   }
 }
 
@@ -53,6 +59,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const question = message.toLowerCase();
   const flight = context.flight;
   const plane = context.plane;
+  const lastTest = context.coachMemory?.filter((item) => item.planeId === history.planeId).slice(-1)[0];
   let variant = nextDeviceVariant();
 
   function compose(currentVariant: number) {
@@ -77,7 +84,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
     const evidence = {
       drift: flight ? `The tracked path drifted ${flight.driftDirection} with a curve score of ${flight.curve}/100.` : "",
-      symmetry: plane ? `The clearest scan signal is wing symmetry at ${plane.symmetry}%.` : "",
+      symmetry: plane ? `${plane.planeName}'s clearest scan signal is wing symmetry at ${plane.symmetry}%.` : "",
       stability: flight ? `The clearest flight signal is stability at ${flight.stability}/100.` : "",
       curve: flight ? `The path curve measured ${flight.curve}/100 and drifted ${flight.driftDirection}.` : "",
       outline: plane ? `The plane outline scored ${plane.outline}/100, so the wing shape deserves the first check.` : "",
@@ -85,7 +92,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
         ? `Your saved best is ${history.bestDistance.toFixed(1)} ft and your average is ${history.averageDistance.toFixed(1)} ft across ${history.flightsLogged} flights.`
         : "There are no saved distances yet, so the first goal is a trustworthy three-throw average.",
       general: plane
-        ? `The plane scan scored ${plane.score}/100 with ${plane.symmetry}% symmetry and a predicted ${plane.range} range.`
+        ? `${plane.planeName}'s ${plane.viewCount}-view scan scored ${plane.score}/100 with ${plane.symmetry}% symmetry. ${plane.evidence[0] ?? ""}`
         : flight
           ? `The latest ${flight.profile.toLowerCase()} path scored ${flight.stability}/100 for stability with ${flight.confidence}% tracking confidence.`
           : "",
@@ -139,7 +146,15 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
       "Use three similar throws so the average—not one lucky flight—decides whether it helped.",
       "Keep every other fold unchanged for the next three-flight test.",
     ], currentVariant, 2);
-    return `${evidence} ${action} ${closer}`.trim();
+    const outcomeNote = lastTest
+      ? lastTest.result === "better"
+        ? `Your last change helped, so keep it while testing the next variable.`
+        : `Your last test was ${lastTest.result}; I will not repeat “${lastTest.action}”.`
+      : "";
+    const safeAction = lastTest && lastTest.result !== "better" && action === lastTest.action
+      ? (plane?.nextTest ?? "Keep the folds unchanged and collect three comparable throws.")
+      : action;
+    return `${evidence} ${outcomeNote} ${safeAction} ${closer}`.trim();
   }
 
   let reply = compose(variant);
@@ -158,7 +173,7 @@ function buildChatGptPrompt(context: ProAiContext, history: FlightHistoryContext
     "",
     "PLANE SCAN",
     plane
-      ? `Style: ${plane.planeStyle}; score: ${plane.score}/100; symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
+      ? `Plane: ${plane.planeName}; style: ${plane.planeStyle}; scan: ${plane.scanMode} with ${plane.viewCount} views; score: ${plane.score}/100; symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; evidence: ${plane.evidence.join(" | ")}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
       : "No plane scan is loaded.",
     "",
     "FLIGHT TRACKER",
@@ -168,8 +183,11 @@ function buildChatGptPrompt(context: ProAiContext, history: FlightHistoryContext
     "",
     "SAVED FLIGHTS",
     history.flightsLogged
-      ? `${history.flightsLogged} flights; average ${history.averageDistance.toFixed(1)} ft; best ${history.bestDistance.toFixed(1)} ft; recent distances ${history.recentDistances.map((value) => `${value.toFixed(1)} ft`).join(", ")}`
+      ? `${history.planeName}: ${history.flightsLogged} flights; average ${history.averageDistance.toFixed(1)} ft; best ${history.bestDistance.toFixed(1)} ft; recent distances ${history.recentDistances.map((value) => `${value.toFixed(1)} ft`).join(", ")}`
       : "No saved distance measurements.",
+    "",
+    "PREVIOUS TEST RESULTS",
+    context.coachMemory?.length ? context.coachMemory.map((item) => `${item.action} => ${item.result}`).join(" | ") : "No completed coach tests yet.",
     "",
     "Start by telling me the single best thing to test next and why.",
   ];
@@ -256,7 +274,7 @@ export default function ProCoachChat() {
       });
       const payload = await response.json() as { reply?: string };
       if (!response.ok || !payload.reply) throw new Error("Cloud coach unavailable");
-      setMessages((current) => [...current, { role: "assistant", source: "gpt4", text: payload.reply! }]);
+      setMessages((current) => [...current, { role: "assistant", source: "cloud", text: payload.reply! }]);
     } catch {
       setMessages((current) => [...current, {
         role: "assistant",
@@ -289,10 +307,10 @@ export default function ProCoachChat() {
           <div><span><i /> Pro Coach</span><b>{status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Pro Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, run a plane scan or video analysis first. Photos and videos stay on your device; only the measurements and your message can be sent to GPT-4.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">For the smartest answer, run a plane scan or video analysis first. Photos and videos stay on your device; only measurements, test results, and your message can be sent to the cloud coach.</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "gpt4" ? "GPT-4 cloud coach" : "On-device coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "cloud" ? "Evidence-aware cloud coach" : "On-device coach"}</small>}
             <p>{message.text}</p>
           </div>)}
           {sending && <div className="assistant thinking"><small>Pro Coach</small><p><i /><i /><i /></p></div>}

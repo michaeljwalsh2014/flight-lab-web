@@ -12,8 +12,29 @@ type RequestBody = {
 };
 
 const requestWindows = new Map<string, number[]>();
-const MODEL = "gpt-4";
-const COACH_INSTRUCTIONS = "You are Flight Lab Pro Coach, an encouraging expert in paper-airplane design and fair experiments. Give a concise, practical answer in plain language. Use the supplied measurements, name uncertainty, and never invent measurements. Recommend one change at a time followed by three comparable test throws. Explain why. Photos and videos were analyzed locally; you only receive summarized measurements. Avoid unsafe throwing advice and never tell someone to throw near people, roads, glass, or animals.";
+const MODEL = "gpt-5.6-terra";
+const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach, an evidence-first paper-airplane experiment coach.
+Use only supplied measurements and saved results. Never invent a visual detail, measurement, or causal claim.
+Separate observation from inference. If evidence is weak, say what scan or throw would reduce uncertainty.
+Recommend exactly one small, reversible change followed by three comparable throws.
+Read previous test results and do not repeat an action that was marked same or worse unless you clearly explain why new evidence justifies retrying it.
+Use the currently selected plane only. Do not combine flights from different planes.
+Keep the language clear for a young builder without sounding childish.
+Avoid unsafe throwing advice and never suggest throwing near people, roads, glass, or animals.`;
+
+const coachSchema = {
+  type: "object",
+  properties: {
+    observation: { type: "string" },
+    inference: { type: "string" },
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    action: { type: "string" },
+    testPlan: { type: "string" },
+    memoryNote: { type: "string" },
+  },
+  required: ["observation", "inference", "confidence", "action", "testPlan", "memoryNote"],
+  additionalProperties: false,
+};
 
 function json(body: object, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -61,12 +82,24 @@ function withinRateLimit(identifier: string) {
 
 function extractOutput(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
-  const choices = (payload as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return "";
-  const message = (choices[0] as { message?: unknown }).message;
-  if (!message || typeof message !== "object") return "";
-  const content = (message as { content?: unknown }).content;
-  return typeof content === "string" ? content.trim() : "";
+  const output = (payload as { output?: unknown }).output;
+  if (!Array.isArray(output)) return "";
+  for (const item of output) {
+    if (!item || typeof item !== "object" || (item as { type?: unknown }).type !== "message") continue;
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (part && typeof part === "object" && (part as { type?: unknown }).type === "output_text" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text.trim();
+    }
+  }
+  return "";
+}
+
+function formatCoachReply(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+  const item = value as Record<string, unknown>;
+  if (!["observation", "inference", "confidence", "action", "testPlan", "memoryNote"].every((key) => typeof item[key] === "string")) return "";
+  return `What I observed: ${item.observation}\n\nWhat it may mean (${item.confidence} confidence): ${item.inference}\n\nChange one thing: ${item.action}\n\nTest it: ${item.testPlan}\n\n${item.memoryNote}`.trim();
 }
 
 export async function POST(request: Request) {
@@ -91,7 +124,7 @@ export async function POST(request: Request) {
 
   const context = safeContext(body.context);
   const conversation = safeHistory(body.history);
-  const messages = [
+  const input = [
     {
       role: "system",
       content: COACH_INSTRUCTIONS,
@@ -108,14 +141,19 @@ export async function POST(request: Request) {
 
   let upstream: Response;
   try {
-    upstream = await fetch("https://api.openai.com/v1/chat/completions", {
+    upstream = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: MODEL,
-        messages,
-        max_tokens: 450,
-        user: identifier,
+        input,
+        max_output_tokens: 700,
+        reasoning: { effort: "low" },
+        text: {
+          verbosity: "low",
+          format: { type: "json_schema", name: "flight_lab_coach", strict: true, schema: coachSchema },
+        },
+        safety_identifier: identifier,
       }),
     });
   } catch {
@@ -127,7 +165,9 @@ export async function POST(request: Request) {
     return json({ error: "coach_unavailable", requestId }, 502);
   }
   const payload = await upstream.json() as unknown;
-  const reply = extractOutput(payload);
+  const raw = extractOutput(payload);
+  let reply = "";
+  try { reply = formatCoachReply(JSON.parse(raw)); } catch { reply = ""; }
   if (!reply) return json({ error: "coach_unavailable" }, 502);
   return json({ reply, model: MODEL });
 }
