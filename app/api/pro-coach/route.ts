@@ -67,24 +67,19 @@ function withinRateLimit(identifier: string) {
   return true;
 }
 
-function extractOutput(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "";
-  const output = (payload as { output?: unknown }).output;
-  if (!Array.isArray(output)) return "";
-  for (const item of output) {
-    if (!item || typeof item !== "object" || (item as { type?: unknown }).type !== "message") continue;
-    const content = (item as { content?: unknown }).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (part && typeof part === "object" && (part as { type?: unknown }).type === "output_text" && typeof (part as { text?: unknown }).text === "string") return (part as { text: string }).text.trim();
-    }
-  }
-  return "";
+async function hasProAccess(request: Request) {
+  const { user, isOwner } = await getProAccess();
+  return Boolean((user && isOwner) || validSharePath(request));
+}
+
+export async function GET(request: Request) {
+  if (!(await hasProAccess(request))) return json({ error: "pro_access_required" }, 403);
+  const available = Boolean((process.env.OPENAI_API_KEY ?? "").trim());
+  return json({ available, typedModel: MODEL, voiceModel: "gpt-realtime-2.1" });
 }
 
 export async function POST(request: Request) {
-  const { user, isOwner } = await getProAccess();
-  if (!(user && isOwner) && !validSharePath(request)) return json({ error: "pro_access_required" }, 403);
+  if (!(await hasProAccess(request))) return json({ error: "pro_access_required" }, 403);
 
   let body: RequestBody;
   try {
@@ -131,6 +126,7 @@ export async function POST(request: Request) {
         reasoning: { effort: "low" },
         text: { verbosity: "low" },
         safety_identifier: identifier,
+        stream: true,
       }),
     });
   } catch {
@@ -141,8 +137,45 @@ export async function POST(request: Request) {
     const requestId = upstream.headers.get("x-request-id");
     return json({ error: "coach_unavailable", requestId }, 502);
   }
-  const payload = await upstream.json() as unknown;
-  const reply = extractOutput(payload);
-  if (!reply) return json({ error: "coach_unavailable" }, 502);
-  return json({ reply, model: MODEL });
+  if (!upstream.body) return json({ error: "coach_unavailable" }, 502);
+
+  const output = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = upstream.body!.getReader();
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+          let boundary = buffer.indexOf("\n\n");
+          while (boundary >= 0) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const data = frame.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+            if (data && data !== "[DONE]") {
+              const event = JSON.parse(data) as { type?: string; delta?: string };
+              if (event.type === "response.output_text.delta" && typeof event.delta === "string") controller.enqueue(encoder.encode(event.delta));
+            }
+            boundary = buffer.indexOf("\n\n");
+          }
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+
+  return new Response(output, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "private, no-store",
+      "X-Flight-Lab-Model": MODEL,
+    },
+  });
 }

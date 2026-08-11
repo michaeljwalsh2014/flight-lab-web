@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
 
 type ChatMessage = {
+  id?: string;
   role: "user" | "assistant";
   text: string;
   source?: "cloud" | "device";
@@ -63,7 +64,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const lastTest = context.coachMemory?.filter((item) => item.planeId === history.planeId).slice(-1)[0];
   let variant = nextDeviceVariant();
 
-  if (/\b(how('?s| is) (your )?day|how are you|how('?s| is) it going|what'?s up)\b/.test(question)) {
+  if (/\b(how((?:['’]s)| is) (your )?day|how are you|how((?:['’]s)| is) it going|what['’]?s up)\b/.test(question)) {
     return choice([
       "I’m doing well—thanks for asking! I’m here to chat, and whenever you feel like working on a plane, I can help with that too.",
       "Pretty good! I’ve been thinking about tiny wings and big flights, but we can just talk too. How’s your day going?",
@@ -193,50 +194,6 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   return reply;
 }
 
-function buildChatGptPrompt(context: ProAiContext, history: FlightHistoryContext) {
-  const plane = context.plane;
-  const flight = context.flight;
-  const lines = [
-    "Act as my paper-airplane flight coach. Use only the reconstructed geometry, visual observations, flight measurements, and experiment outcomes below. Explain the most important issue in plain language and recommend one safe change followed by three comparable test throws. Do not invent measurements and do not repeat a failed or unchanged adjustment.",
-    "",
-    "PLANE SCAN",
-    plane
-      ? `Plane: ${plane.planeName}; style: ${plane.planeStyle}; scan: ${plane.scanMode} with ${plane.viewCount} views; reconstructed mesh: ${plane.mesh?.vertices ?? 0} vertices and ${plane.mesh?.faces ?? 0} faces, ${plane.mesh?.leftRightBalance ?? plane.symmetry}% left/right balance, ${plane.mesh?.estimatedDihedral ?? 0}/100 estimated wing rise; score: ${plane.score}/100; top-view symmetry: ${plane.symmetry}%; outline: ${plane.outline}/100; predicted range: ${plane.range}; confidence: ${plane.confidence}%; last flight: ${plane.lastFlight}; cloud visual observations: ${plane.vision?.observations.join(" | ") ?? "not used"}; visual issues: ${plane.vision?.issues.join(" | ") ?? "none reported"}; visual uncertainties: ${plane.vision?.uncertainties.join(" | ") ?? "not available"}; nose: ${plane.vision?.noseAlignment ?? "not inspected"}; dihedral: ${plane.vision?.wingDihedral ?? "not inspected"}; folds: ${plane.vision?.foldDefinition ?? "not inspected"}; other evidence: ${plane.evidence.join(" | ")}; scan note: ${plane.headline}; suggested test: ${plane.nextTest}`
-      : "No plane scan is loaded.",
-    "",
-    "FLIGHT TRACKER",
-    flight
-      ? `Profile: ${flight.profile}; airtime: ${flight.airtime}s; curve: ${flight.curve}/100; stability: ${flight.stability}/100; relative speed: ${flight.relativeSpeed}/100; drift: ${flight.driftDirection}; confidence: ${flight.confidence}%; observations: ${flight.observations.join(" | ")}`
-      : "No tracked flight is loaded.",
-    "",
-    "SAVED FLIGHTS",
-    history.flightsLogged
-      ? `${history.planeName}: ${history.flightsLogged} flights; average ${history.averageDistance.toFixed(1)} ft; best ${history.bestDistance.toFixed(1)} ft; recent distances ${history.recentDistances.map((value) => `${value.toFixed(1)} ft`).join(", ")}`
-      : "No saved distance measurements.",
-    "",
-    "PREVIOUS TEST RESULTS",
-    context.coachMemory?.length ? context.coachMemory.map((item) => `${item.action} => ${item.result}`).join(" | ") : "No completed coach tests yet.",
-    "",
-    "Start by telling me the single best thing to test next and why.",
-  ];
-  return lines.join("\n");
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand("copy");
-    textarea.remove();
-  }
-}
-
 function getCoachId() {
   const key = "flight-lab-pro-coach-id";
   let value = window.localStorage.getItem(key);
@@ -248,12 +205,14 @@ function getCoachId() {
 }
 
 type VoiceState = "idle" | "connecting" | "listening" | "speaking" | "error";
+type ConnectionState = "checking" | "online" | "offline";
 
 export default function ProCoachChat() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [handoffStatus, setHandoffStatus] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("checking");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [voiceError, setVoiceError] = useState("");
@@ -274,6 +233,22 @@ export default function ProCoachChat() {
     return () => window.removeEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setConnectionState("checking");
+    void fetch("/api/pro-coach", {
+      headers: { "X-Flight-Lab-Pro-Path": window.location.pathname },
+      signal: controller.signal,
+    }).then(async (response) => {
+      const payload = await response.json() as { available?: boolean };
+      if (!controller.signal.aborted) setConnectionState(response.ok && payload.available ? "online" : "offline");
+    }).catch(() => {
+      if (!controller.signal.aborted) setConnectionState("offline");
+    });
+    return () => controller.abort();
+  }, [open]);
+
   useEffect(() => () => {
     channelRef.current?.close();
     peerRef.current?.close();
@@ -291,6 +266,11 @@ export default function ProCoachChat() {
     : context.plane
       ? `${context.plane.score}/100 plane scan`
       : "Ready for your question", [context]);
+  const connectionLabel = connectionState === "online"
+    ? `GPT connected · ${status}`
+    : connectionState === "offline"
+      ? "Offline coach · OpenAI not connected"
+      : "Checking AI connection…";
 
   function stopVoice() {
     channelRef.current?.close();
@@ -334,6 +314,11 @@ export default function ProCoachChat() {
     if (voiceState !== "idle" && voiceState !== "error") return;
     setOpen(true);
     setVoiceError("");
+    if (connectionState === "offline") {
+      setVoiceState("error");
+      setVoiceError("Live voice needs an OpenAI connection. Typed offline coaching is still available.");
+      return;
+    }
     setVoiceState("connecting");
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("microphone_unavailable");
@@ -372,12 +357,13 @@ export default function ProCoachChat() {
       const answer = await response.text();
       if (!response.ok) throw new Error("voice_unavailable");
       await peer.setRemoteDescription({ type: "answer", sdp: answer });
+      setConnectionState("online");
     } catch (error) {
       stopVoice();
       setVoiceState("error");
       setVoiceError(error instanceof DOMException && error.name === "NotAllowedError"
         ? "Microphone access was blocked. Allow it in your browser, or keep chatting by typing."
-        : "Live voice is not available yet. You can keep chatting by typing below.");
+        : "Live voice could not connect to OpenAI. You can keep using the clearly labeled offline coach below.");
     }
   }
 
@@ -398,6 +384,18 @@ export default function ProCoachChat() {
     setSending(true);
     const history = loadFlightHistory();
 
+    if (connectionState === "offline") {
+      setMessages((current) => [...current, {
+        role: "assistant",
+        source: "device",
+        text: deviceReply(clean, context, history, current.filter((item) => item.role === "assistant").slice(-4).map((item) => item.text)),
+      }]);
+      setSending(false);
+      return;
+    }
+
+    const replyId = globalThis.crypto?.randomUUID?.() ?? `reply-${Date.now()}`;
+    let receivedText = "";
     try {
       const response = await fetch("/api/pro-coach", {
         method: "POST",
@@ -412,16 +410,35 @@ export default function ProCoachChat() {
           coachId: getCoachId(),
         }),
       });
-      const payload = await response.json() as { reply?: string };
-      if (!response.ok || !payload.reply) throw new Error("Cloud coach unavailable");
-      setMessages((current) => [...current, { role: "assistant", source: "cloud", text: payload.reply! }]);
+      if (!response.ok || !response.body) {
+        setConnectionState("offline");
+        throw new Error("Cloud coach unavailable");
+      }
+      setConnectionState("online");
+      setStreaming(true);
+      setMessages((current) => [...current, { id: replyId, role: "assistant", source: "cloud", text: "" }]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        receivedText += decoder.decode(value, { stream: true });
+        const nextText = receivedText;
+        setMessages((current) => current.map((item) => item.id === replyId ? { ...item, text: nextText } : item));
+      }
+      receivedText += decoder.decode();
+      if (!receivedText.trim()) throw new Error("Empty cloud reply");
     } catch {
-      setMessages((current) => [...current, {
-        role: "assistant",
-        source: "device",
-        text: deviceReply(clean, context, history, current.filter((item) => item.role === "assistant").slice(-4).map((item) => item.text)),
-      }]);
+      if (!receivedText.trim()) {
+        setConnectionState("offline");
+        setMessages((current) => [...current.filter((item) => item.id !== replyId), {
+          role: "assistant",
+          source: "device",
+          text: deviceReply(clean, context, history, current.filter((item) => item.role === "assistant").slice(-4).map((item) => item.text)),
+        }]);
+      }
     } finally {
+      setStreaming(false);
       setSending(false);
     }
   }
@@ -431,20 +448,11 @@ export default function ProCoachChat() {
     void askCoach(input);
   }
 
-  function askChatGPT() {
-    const history = loadFlightHistory();
-    const prompt = buildChatGptPrompt(context, history);
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-    void copyText(prompt).then(() => {
-      setHandoffStatus("Scan report copied. Paste it into the ChatGPT tab that just opened.");
-    });
-  }
-
   return (
     <aside className={`pro-coach ${open ? "open" : ""}`}>
       {open && <div className="pro-coach-panel" role="dialog" aria-label="Flight Lab Pro Coach">
         <header>
-          <div><span><i /> Pro Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
+          <div><span><i /> Pro Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : connectionLabel}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Pro Coach">×</button>
         </header>
         {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. If you want evidence-based plane advice later, a photo, 3D scan, or tracked flight gives me more to work with.</p>}
@@ -452,25 +460,21 @@ export default function ProCoachChat() {
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "connecting" ? "Connecting…" : voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Pro Coach is talking" : "Have a real conversation"}</b><small>Talk naturally, interrupt anytime, or type below.</small></div>
           {voiceState === "idle" || voiceState === "error"
-            ? <button type="button" onClick={() => void startVoice()}>Start live voice</button>
+            ? <button type="button" onClick={() => void startVoice()} disabled={connectionState === "offline"}>{connectionState === "offline" ? "Voice offline" : "Start live voice"}</button>
             : <div className="voice-actions"><button type="button" onClick={toggleMute}>{voiceMuted ? "Unmute" : "Mute"}</button><button type="button" onClick={stopVoice}>End</button></div>}
         </div>
         <small className="voice-privacy">The live coach hears this conversation only. Saved scans and flights stay separate unless you choose to share them.</small>
         {voiceError && <p className="pro-coach-voice-error" role="status">{voiceError}</p>}
         <div className="pro-coach-messages" aria-live="polite">
-          {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "cloud" ? "Pro Coach AI" : "Quick coach"}</small>}
-            <p>{message.text}</p>
+          {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
+            {message.role === "assistant" && <small>{message.source === "cloud" ? "GPT Pro Coach" : "Offline coach"}</small>}
+            <p>{message.text || "Thinking…"}</p>
           </div>)}
-          {sending && <div className="assistant thinking"><small>Pro Coach</small><p><i /><i /><i /></p></div>}
+          {sending && !streaming && <div className="assistant thinking"><small>Connecting to GPT</small><p><i /><i /><i /></p></div>}
           <div ref={endRef} />
         </div>
         <div className="pro-coach-prompts">
           {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => void askCoach(prompt)}>{prompt}</button>)}
-        </div>
-        <div className="pro-chatgpt-handoff">
-          <button type="button" onClick={askChatGPT}>Open ChatGPT with this scan</button>
-          {handoffStatus && <small role="status">{handoffStatus}</small>}
         </div>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Pro Coach</label>
