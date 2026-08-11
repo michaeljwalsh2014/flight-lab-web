@@ -480,7 +480,7 @@ function ProPlaneCoach() {
       const planeName = activePlane?.name ?? "Unsaved plane";
       const evidence = [
         `Top-view wing symmetry measured ${signals.symmetry}%.`,
-        `The reconstructed mesh contains ${mesh.vertices.length} measured vertices and ${mesh.triangles.length} triangle faces.`,
+        `The reconstructed mesh contains ${mesh.vertices.length} measured vertices and ${mesh.triangles.length} triangle faces across folded upper and lower panels.`,
         `The mesh estimated ${mesh.leftRightBalance}% left/right balance and ${mesh.estimatedDihedral}/100 wing rise.`,
         ...(vision?.observations ?? []),
         scanMode === "multiview" && cloudVisionEnabled && !vision ? "Cloud visual inspection was unavailable; this report uses the on-device mesh and top-view measurements." : scanMode === "multiview" ? "All six guided angles contributed to the reconstruction, including the underside and tail." : "This is a quick top-view reconstruction; hidden folds were not measured.",
@@ -488,7 +488,7 @@ function ProPlaneCoach() {
         `The last reported flight behavior was ${behavior}.`,
       ].slice(0, 9);
       const headline = vision?.issues[0] ? vision.issues[0] : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
-      const detail = `Flight Lab reconstructed ${planeName} as an actual rotatable mesh from ${mesh.sourceViews} camera ${mesh.sourceViews === 1 ? "view" : "views"}, then matched it with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Cloud vision inspected the source photos once; the coach receives its structured findings, not the photos." : "The report currently uses on-device geometry only."}`;
+      const detail = `Flight Lab reconstructed ${planeName} as a rotatable folded shell with separate upper and lower surfaces from ${mesh.sourceViews} camera ${mesh.sourceViews === 1 ? "view" : "views"}, then matched it with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Cloud vision inspected the source photos once; the coach receives its structured findings, not the photos." : "The report currently uses on-device geometry only."}`;
       setProgress(88); setStage("Checking previous advice for repetition");
       await new Promise((resolve) => window.setTimeout(resolve, 160));
       const nextReport: PlaneReport = { planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals, mesh, vision };
@@ -811,7 +811,7 @@ export default function ProDashboard({
           <h1>See what your<br />plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">Track the full flight, rate the build, measure with personal calibration, and test one improvement at a time.</p>
           <div className="pro-hero-actions"><a href="#video-lab">Analyze a flight</a><a href="#plane-coach">Rate my plane</a></div>
-          <small>{displayName} · Videos and photos are analyzed on this device.</small>
+          <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
         <div className="pro-hero-visual">
           <img className="pro-hero-plane-photo" src="/plane-presets/nakamura-lock.png" alt="A realistic handmade Nakamura Lock paper airplane glider" />

@@ -156,11 +156,15 @@ test("adds a conversational, evidence-aware GPT-5.6 Pro Coach with an offline fa
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
   const route = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
+  const realtimeRoute = await readFile(new URL("../app/api/pro-coach/realtime/route.ts", import.meta.url), "utf8");
   const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /ProCoachChat/);
-  assert.match(coach, /Ask Pro Coach/);
+  assert.match(coach, /Talk to Pro Coach/);
+  assert.match(coach, /Start live voice/);
+  assert.match(coach, /RTCPeerConnection/);
+  assert.match(coach, /getUserMedia/);
   assert.match(coach, /What should I improve/);
-  assert.match(coach, /Offline coach/);
+  assert.match(coach, /Quick coach/);
   assert.match(coach, /How’s it going/);
   assert.match(coach, /no upload required/i);
   assert.match(coach, /nextDeviceVariant/);
@@ -183,6 +187,10 @@ test("adds a conversational, evidence-aware GPT-5.6 Pro Coach with an offline fa
   assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
   assert.match(route, /safety_identifier: identifier/);
   assert.doesNotMatch(coach, /OPENAI_API_KEY/);
+  assert.match(realtimeRoute, /gpt-realtime-2\.1/);
+  assert.match(realtimeRoute, /v1\/realtime\/calls/);
+  assert.match(realtimeRoute, /application\/sdp/);
+  assert.match(realtimeRoute, /OPENAI_API_KEY/);
 });
 
 test("guides a six-angle plane scan and remembers experiment outcomes", async () => {
@@ -199,6 +207,8 @@ test("guides a six-angle plane scan and remembers experiment outcomes", async ()
   assert.match(dashboard, /Deep visual inspection/);
   assert.match(reconstruction, /PlaneMeshData/);
   assert.match(reconstruction, /triangles/);
+  assert.match(reconstruction, /shellLayers: 2/);
+  assert.match(reconstruction, /const vertices = \[\.\.\.upper, \.\.\.lower\]/);
   assert.match(meshViewer, /Drag to rotate/);
   assert.match(meshViewer, /canvas/);
   assert.match(scanRoute, /input_image/);

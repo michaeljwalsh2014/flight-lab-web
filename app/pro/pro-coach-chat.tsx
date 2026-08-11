@@ -247,22 +247,38 @@ function getCoachId() {
   return value;
 }
 
+type VoiceState = "idle" | "connecting" | "listening" | "speaking" | "error";
+
 export default function ProCoachChat() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [handoffStatus, setHandoffStatus] = useState("");
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceMuted, setVoiceMuted] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", source: "device", text: "Hey! I’m your Pro Coach. We can talk normally, and whenever you’re ready I can help analyze a plane, understand a flight, or plan the next test." },
   ]);
   const endRef = useRef<HTMLDivElement>(null);
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const channelRef = useRef<RTCDataChannel | null>(null);
+  const microphoneRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setContext(readProAiContext());
     const receiveContext = (event: Event) => setContext((event as CustomEvent<ProAiContext>).detail);
     window.addEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
     return () => window.removeEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
+  }, []);
+
+  useEffect(() => () => {
+    channelRef.current?.close();
+    peerRef.current?.close();
+    microphoneRef.current?.getTracks().forEach((track) => track.stop());
+    if (audioRef.current) audioRef.current.srcObject = null;
   }, []);
 
   useEffect(() => {
@@ -275,6 +291,102 @@ export default function ProCoachChat() {
     : context.plane
       ? `${context.plane.score}/100 plane scan`
       : "Ready for your question", [context]);
+
+  function stopVoice() {
+    channelRef.current?.close();
+    channelRef.current = null;
+    peerRef.current?.close();
+    peerRef.current = null;
+    microphoneRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneRef.current = null;
+    if (audioRef.current) audioRef.current.srcObject = null;
+    audioRef.current = null;
+    setVoiceMuted(false);
+    setVoiceState("idle");
+  }
+
+  function addVoiceTranscript(role: "user" | "assistant", text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    setMessages((current) => {
+      const latest = current[current.length - 1];
+      if (latest?.role === role && latest.text === clean) return current;
+      return [...current, { role, source: role === "assistant" ? "cloud" : undefined, text: clean }];
+    });
+  }
+
+  function handleVoiceEvent(raw: string) {
+    let event: Record<string, unknown>;
+    try { event = JSON.parse(raw) as Record<string, unknown>; } catch { return; }
+    const type = typeof event.type === "string" ? event.type : "";
+    if (type === "input_audio_buffer.speech_started") setVoiceState("listening");
+    if (type === "response.created" || type.includes("output_audio")) setVoiceState("speaking");
+    if (type === "response.done" || type === "response.audio.done") setVoiceState("listening");
+    if (type === "conversation.item.input_audio_transcription.completed" && typeof event.transcript === "string") addVoiceTranscript("user", event.transcript);
+    if ((type === "response.output_audio_transcript.done" || type === "response.audio_transcript.done") && typeof event.transcript === "string") addVoiceTranscript("assistant", event.transcript);
+    if (type === "error") {
+      setVoiceError("The live coach hit a connection problem. You can keep chatting by typing.");
+      setVoiceState("error");
+    }
+  }
+
+  async function startVoice() {
+    if (voiceState !== "idle" && voiceState !== "error") return;
+    setOpen(true);
+    setVoiceError("");
+    setVoiceState("connecting");
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("microphone_unavailable");
+      const microphone = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      microphoneRef.current = microphone;
+      const peer = new RTCPeerConnection();
+      peerRef.current = peer;
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      audioRef.current = audio;
+      peer.ontrack = (event) => { audio.srcObject = event.streams[0]; };
+      microphone.getAudioTracks().forEach((track) => peer.addTrack(track, microphone));
+      const channel = peer.createDataChannel("oai-events");
+      channelRef.current = channel;
+      channel.addEventListener("message", (event) => handleVoiceEvent(String(event.data)));
+      channel.addEventListener("open", () => {
+        channel.send(JSON.stringify({
+          type: "response.create",
+          response: { instructions: "Greet the user naturally in one or two sentences, then let them lead the conversation." },
+        }));
+        setVoiceState("listening");
+      });
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
+          setVoiceError("The live conversation disconnected. Tap Start live voice to reconnect.");
+          stopVoice();
+        }
+      };
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      const response = await fetch(`/api/pro-coach/realtime?coachId=${encodeURIComponent(getCoachId())}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp", "X-Flight-Lab-Pro-Path": window.location.pathname },
+        body: offer.sdp,
+      });
+      const answer = await response.text();
+      if (!response.ok) throw new Error("voice_unavailable");
+      await peer.setRemoteDescription({ type: "answer", sdp: answer });
+    } catch (error) {
+      stopVoice();
+      setVoiceState("error");
+      setVoiceError(error instanceof DOMException && error.name === "NotAllowedError"
+        ? "Microphone access was blocked. Allow it in your browser, or keep chatting by typing."
+        : "Live voice is not available yet. You can keep chatting by typing below.");
+    }
+  }
+
+  function toggleMute() {
+    const track = microphoneRef.current?.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setVoiceMuted(!track.enabled);
+  }
 
   async function askCoach(text: string) {
     const clean = text.trim().slice(0, 600);
@@ -332,13 +444,22 @@ export default function ProCoachChat() {
     <aside className={`pro-coach ${open ? "open" : ""}`}>
       {open && <div className="pro-coach-panel" role="dialog" aria-label="Flight Lab Pro Coach">
         <header>
-          <div><span><i /> Pro Coach</span><b>{status}</b></div>
-          <button type="button" onClick={() => setOpen(false)} aria-label="Close Pro Coach">×</button>
+          <div><span><i /> Pro Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
+          <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Pro Coach">×</button>
         </header>
         {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. If you want evidence-based plane advice later, a photo, 3D scan, or tracked flight gives me more to work with.</p>}
+        <div className={`pro-coach-voice ${voiceState}`}>
+          <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
+          <div><b>{voiceState === "connecting" ? "Connecting…" : voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Pro Coach is talking" : "Have a real conversation"}</b><small>Talk naturally, interrupt anytime, or type below.</small></div>
+          {voiceState === "idle" || voiceState === "error"
+            ? <button type="button" onClick={() => void startVoice()}>Start live voice</button>
+            : <div className="voice-actions"><button type="button" onClick={toggleMute}>{voiceMuted ? "Unmute" : "Mute"}</button><button type="button" onClick={stopVoice}>End</button></div>}
+        </div>
+        <small className="voice-privacy">The live coach hears this conversation only. Saved scans and flights stay separate unless you choose to share them.</small>
+        {voiceError && <p className="pro-coach-voice-error" role="status">{voiceError}</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={`${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "cloud" ? "Pro Coach AI" : "Offline coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "cloud" ? "Pro Coach AI" : "Quick coach"}</small>}
             <p>{message.text}</p>
           </div>)}
           {sending && <div className="assistant thinking"><small>Pro Coach</small><p><i /><i /><i /></p></div>}
@@ -358,7 +479,7 @@ export default function ProCoachChat() {
         </form>
       </div>}
       <button className="pro-coach-launcher" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <span>AI</span><b>{open ? "Close coach" : "Ask Pro Coach"}</b>
+        <span>AI</span><b>{open ? "Close coach" : "Talk to Pro Coach"}</b>
       </button>
     </aside>
   );

@@ -12,6 +12,7 @@ export type PlaneMeshData = {
   estimatedDihedral: number;
   estimatedThickness: number;
   leftRightBalance: number;
+  shellLayers: number;
 };
 
 type ImageSample = {
@@ -169,24 +170,32 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
   const rightAspect = aspect(samples.get("right"));
   const undersideAspect = aspect(samples.get("underside"));
   const dihedral = clamp((noseAspect * .62 + tailAspect * .38) * .7, .035, .34);
-  const thickness = clamp((leftAspect + rightAspect + undersideAspect) / 3 * .42, .035, .24);
+  const thickness = clamp((leftAspect + rightAspect + undersideAspect) / 3 * .42, .055, .24);
   const sideTilt = clamp((rightAspect - leftAspect) * .24, -.09, .09);
   const stations = fallbackProfile.length;
   const lateral = [-1, -.5, 0, .5, 1];
-  const vertices: MeshVertex[] = [];
+  const upper: MeshVertex[] = [];
+  const lower: MeshVertex[] = [];
   for (let row = 0; row < stations; row += 1) {
     const progress = row / (stations - 1);
     const taper = Math.sin(Math.PI * progress);
-    const ridge = thickness * (.48 + taper * .52);
+    const noseDepth = 1 - progress * .48;
+    const ridge = thickness * (.72 + taper * .62) * noseDepth;
     for (const column of lateral) {
       const sideWidth = column < 0 ? profile.leftWidths[row] : profile.rightWidths[row];
       const x = column * sideWidth * 1.52;
       const foldRidge = ridge * (1 - Math.abs(column));
       const wingRise = dihedral * Math.pow(Math.abs(column), 1.35) * (.58 + taper * .42);
-      const z = foldRidge + wingRise + sideTilt * column;
-      vertices.push({ x, y: 1.75 - progress * 3.5, z });
+      const creaseStep = Math.abs(column) === .5 ? thickness * .13 * taper : 0;
+      const z = foldRidge + wingRise + creaseStep + sideTilt * column;
+      const shellDepth = thickness * (.25 + .48 * (1 - Math.abs(column))) * (.7 + taper * .3);
+      const y = 1.75 - progress * 3.5;
+      upper.push({ x, y, z });
+      lower.push({ x, y, z: z - shellDepth });
     }
   }
+  const vertices = [...upper, ...lower];
+  const layerSize = upper.length;
   const triangles: Array<[number, number, number]> = [];
   for (let row = 0; row < stations - 1; row += 1) {
     for (let column = 0; column < lateral.length - 1; column += 1) {
@@ -195,12 +204,29 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
       const c = (row + 1) * lateral.length + column;
       const d = c + 1;
       triangles.push([a, c, b], [b, c, d]);
+      triangles.push([layerSize + a, layerSize + b, layerSize + c], [layerSize + b, layerSize + d, layerSize + c]);
+    }
+  }
+  for (let row = 0; row < stations - 1; row += 1) {
+    const left = row * lateral.length;
+    const nextLeft = (row + 1) * lateral.length;
+    const right = left + lateral.length - 1;
+    const nextRight = nextLeft + lateral.length - 1;
+    triangles.push([left, layerSize + left, nextLeft], [nextLeft, layerSize + left, layerSize + nextLeft]);
+    triangles.push([right, nextRight, layerSize + right], [nextRight, layerSize + nextRight, layerSize + right]);
+  }
+  for (const row of [0, stations - 1]) {
+    for (let column = 0; column < lateral.length - 1; column += 1) {
+      const a = row * lateral.length + column;
+      const b = a + 1;
+      if (row === 0) triangles.push([a, b, layerSize + a], [b, layerSize + b, layerSize + a]);
+      else triangles.push([a, layerSize + a, b], [b, layerSize + a, layerSize + b]);
     }
   }
   return {
     vertices, triangles, stations, columns: lateral.length, sourceViews: entries.length,
     silhouetteCoverage: Math.round(profile.coverage * 100), estimatedDihedral: Math.round(dihedral * 100),
-    estimatedThickness: Math.round(thickness * 100), leftRightBalance: profile.balance,
+    estimatedThickness: Math.round(thickness * 100), leftRightBalance: profile.balance, shellLayers: 2,
   };
 }
 

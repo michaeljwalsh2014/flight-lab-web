@@ -30,13 +30,13 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og.png`, width: 1730, height: 909, alt: "Flight Lab Pro guided plane scanning and evidence-based flight coaching" }],
+      images: [{ url: `${origin}/og-pro-voice.png`, width: 1730, height: 909, alt: "Flight Lab Pro live voice coaching and folded paper-airplane reconstruction" }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [`${origin}/og.png`],
+      images: [`${origin}/og-pro-voice.png`],
     },
   };
 }
