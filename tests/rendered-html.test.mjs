@@ -152,49 +152,34 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
-test("adds a conversational, evidence-aware GPT-5.6 Pro Coach with an offline fallback", async () => {
+test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
-  const route = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
-  const realtimeRoute = await readFile(new URL("../app/api/pro-coach/realtime/route.ts", import.meta.url), "utf8");
   const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /ProCoachChat/);
-  assert.match(coach, /Talk to Pro Coach/);
-  assert.match(coach, /Start live voice/);
-  assert.match(coach, /RTCPeerConnection/);
-  assert.match(coach, /getUserMedia/);
+  assert.match(coach, /Talk to Coach/);
+  assert.match(coach, /Start voice/);
+  assert.match(coach, /SpeechRecognition/);
+  assert.match(coach, /webkitSpeechRecognition/);
+  assert.match(coach, /speechSynthesis/);
   assert.match(coach, /What should I improve/);
-  assert.match(coach, /Offline coach/);
-  assert.match(coach, /GPT connected/);
+  assert.match(coach, /What do you like/);
+  assert.match(coach, /Tell me more about that/);
   assert.match(coach, /How’s it going/);
   assert.match(coach, /no upload required/i);
   assert.match(coach, /nextDeviceVariant/);
   assert.match(coach, /recentReplies\.includes/);
+  assert.match(coach, /flight-lab-coach-conversation/);
+  assert.match(coach, /previousUser/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);
-  assert.match(coach, /response\.body\.getReader/);
+  assert.doesNotMatch(coach, /\/api\/pro-coach|OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);
   assert.match(coach, /We can talk normally/i);
   assert.match(context, /flight-lab-local-v2/);
   assert.match(videoLab, /publishProAiContext/);
   assert.match(videoLab, /driftDirection/);
   assert.match(videoLab, /On-device coach observations/);
-  assert.match(route, /const MODEL = "gpt-5\.6-terra"/);
-  assert.match(route, /v1\/responses/);
-  assert.match(route, /stream: true/);
-  assert.match(route, /response\.output_text\.delta/);
-  assert.match(route, /export async function GET/);
-  assert.match(route, /Respond to the user's actual message first/);
-  assert.doesNotMatch(route, /json_schema/);
-  assert.match(route, /Do not repeat an action marked same or worse/i);
-  assert.match(route, /OPENAI_API_KEY/);
-  assert.match(route, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
-  assert.match(route, /safety_identifier: identifier/);
-  assert.doesNotMatch(coach, /OPENAI_API_KEY/);
-  assert.match(realtimeRoute, /gpt-realtime-2\.1/);
-  assert.match(realtimeRoute, /v1\/realtime\/calls/);
-  assert.match(realtimeRoute, /application\/sdp/);
-  assert.match(realtimeRoute, /OPENAI_API_KEY/);
 });
 
 test("guides a six-angle plane scan and remembers experiment outcomes", async () => {
