@@ -63,7 +63,8 @@ test("uses on-device shape analysis, plane pictures, and a labeled distance esti
   assert.match(page, /Estimated next flight/);
   assert.match(page, /Estimate—not a measurement/);
   assert.match(page, /name: "Dart"/);
-  assert.match(page, /name: "Nakamura Lock"/);
+  assert.match(page, /name: "Glider"/);
+  assert.doesNotMatch(page, /Nakamura Lock/);
   assert.doesNotMatch(page, /Paper Dart|Wide Glider/);
   assert.match(page, /Take a picture or choose one/);
   assert.match(page, /\/plane-presets\/dart\.png/);

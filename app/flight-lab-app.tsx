@@ -32,7 +32,7 @@ type DetectedObject = { class: string; score: number; bbox: [number, number, num
 
 const planePresets: Array<{ id: Exclude<PlanePreset, "custom">; name: string; image: string; description: string; baseline: number }> = [
   { id: "dart", name: "Dart", image: "/plane-presets/dart.png", description: "Fast, narrow, and built for distance", baseline: 32 },
-  { id: "glider", name: "Nakamura Lock", image: "/plane-presets/nakamura-lock.png", description: "A traditional locked-nose glider with broad, balanced wings", baseline: 25 },
+  { id: "glider", name: "Glider", image: "/plane-presets/nakamura-lock.png", description: "A traditional locked-nose glider with broad, balanced wings", baseline: 25 },
 ];
 
 function loadImage(url: string) {

@@ -56,7 +56,7 @@ type StoredThrow = { id: number; planeId: number; distance: number; createdAt: s
 
 const proPlanePresets = [
   { id: "dart" as const, name: "Dart", image: "/plane-presets/dart.png", description: "Narrow wings for speed and distance" },
-  { id: "glider" as const, name: "Nakamura Lock", image: "/plane-presets/nakamura-lock.png", description: "Traditional locked nose with broad, balanced glider wings" },
+  { id: "glider" as const, name: "Glider", image: "/plane-presets/nakamura-lock.png", description: "Traditional locked nose with broad, balanced glider wings" },
 ];
 const planesUpdatedEvent = "flight-lab-planes-updated";
 const activePlaneStorageKey = "flight-lab-v2-active-plane-id";
@@ -516,7 +516,7 @@ function ProPlaneCoach() {
         </div>
         {scanMode === "multiview" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>Send six compressed photos securely to the cloud AI for one inspection. Turn this off for an entirely on-device mesh.</small></span></label> : null}
         <div className="pro-form-grid">
-          <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Nakamura Lock / glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
+          <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
           <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
           <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
@@ -814,8 +814,8 @@ export default function ProDashboard({
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
         <div className="pro-hero-visual">
-          <img className="pro-hero-plane-photo" src="/plane-presets/nakamura-lock.png" alt="A realistic handmade Nakamura Lock paper airplane glider" />
-          <div className="pro-visual-readout"><span>NAKAMURA LOCK</span><b>Traditional glider profile</b><small>Build a guided six-angle scan to inspect your own plane.</small></div>
+          <img className="pro-hero-plane-photo" src="/plane-presets/nakamura-lock.png" alt="A realistic handmade paper airplane glider" />
+          <div className="pro-visual-readout"><span>GLIDER</span><b>Traditional glider profile</b><small>Build a guided six-angle scan to inspect your own plane.</small></div>
           <i className="visual-axis axis-x">X</i><i className="visual-axis axis-y">Y</i><i className="visual-axis axis-z">Z</i>
         </div>
       </section>
