@@ -827,6 +827,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-messages small { display: block; margin: 0 0 5px 4px; color: #6f8ca7; font-size: 9px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .pro-coach-messages p { margin: 0; padding: 12px 14px; border: 1px solid rgba(133,181,219,.18); border-radius: 15px 15px 15px 4px; color: #d7e5f2; background: #0a2138; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
 .pro-coach-messages .user p { border-color: rgba(200,243,75,.42); border-radius: 15px 15px 4px 15px; color: #071523; background: var(--lime); font-weight: 750; }
+.coach-feedback-button { margin: 6px 0 0 5px; padding: 3px 0; border: 0; color: #6f8ca7; background: transparent; font-size: 9px; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.coach-repair { margin: 0 14px 11px; padding: 11px; display: grid; gap: 7px; border: 1px solid rgba(200,243,75,.3); border-radius: 12px; background: rgba(200,243,75,.055); }
+.coach-repair > b { color: white; font-size: 11px; }
+.coach-repair > small { overflow: hidden; color: #8ca6bd; font-size: 9px; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
+.coach-repair > div { display: flex; overflow-x: auto; gap: 6px; }
+.coach-repair > div button { min-height: 34px; padding: 6px 9px; flex: 0 0 auto; border: 1px solid rgba(67,220,255,.25); border-radius: 8px; color: #d5e6f4; background: rgba(67,220,255,.06); font-size: 9px; font-weight: 850; }
+.coach-repair .coach-repair-cancel { justify-self: start; padding: 2px 0; border: 0; color: #7892aa; background: transparent; font-size: 9px; }
 .pro-coach-messages .thinking p { display: flex; gap: 5px; }
 .pro-coach-messages .thinking i { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); animation: coach-pulse 1s ease-in-out infinite; }
 .pro-coach-messages .thinking i:nth-child(2) { animation-delay: .16s; }

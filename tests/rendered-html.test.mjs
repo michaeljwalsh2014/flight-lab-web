@@ -171,7 +171,15 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /nextDeviceVariant/);
   assert.match(coach, /recentReplies\.includes/);
   assert.match(coach, /flight-lab-coach-conversation/);
+  assert.match(coach, /flight-lab-coach-lessons/);
   assert.match(coach, /previousUser/);
+  assert.match(coach, /isFrustrated/);
+  assert.match(coach, /Help me learn what went wrong/);
+  assert.match(coach, /It didn’t listen/);
+  assert.match(coach, /Not helpful\?/);
+  assert.match(coach, /rememberLesson/);
+  assert.match(coach, /thinkingDelay/);
+  assert.match(coach, /Checking your plane history/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);
   assert.doesNotMatch(coach, /\/api\/pro-coach|OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);

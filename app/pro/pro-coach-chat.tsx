@@ -19,6 +19,17 @@ type FlightHistoryContext = {
   recentDistances: number[];
 };
 
+type FeedbackReason = "wrong" | "unrelated" | "repetitive" | "too-plane-focused";
+type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
+type PendingRepair = { cue: string; reply: string };
+
+const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
+  { reason: "wrong", label: "It was wrong" },
+  { reason: "unrelated", label: "It didn’t listen" },
+  { reason: "repetitive", label: "It repeated itself" },
+  { reason: "too-plane-focused", label: "Too much plane talk" },
+];
+
 const QUICK_PROMPTS = [
   "How’s it going?",
   "What do you like to do?",
@@ -58,7 +69,26 @@ function choice(options: string[], variant: number, offset = 0) {
   return options[(variant + offset) % options.length];
 }
 
-function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[]) {
+function isFrustrated(message: string) {
+  const text = message.toLowerCase();
+  return /\b(you('| a)?re|you are|that (answer|reply)|this (answer|reply)|your answer|coach).{0,28}\b(stupid|dumb|bad|useless|terrible|wrong|annoying)\b/.test(text)
+    || /\b(didn'?t listen|not listening|not helpful|stop repeating|that made no sense)\b/.test(text);
+}
+
+function thinkingDelay(message: string, hasEvidence: boolean) {
+  if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 700;
+  if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 2800;
+  return 1500;
+}
+
+function thinkingLabel(message: string, hasEvidence: boolean) {
+  if (isFrustrated(message)) return "Reviewing what I missed";
+  if (hasEvidence) return "Checking your plane history";
+  if (/turn|dive|stall|wobble|distance|flight|wing/i.test(message)) return "Working through the flight clues";
+  return "Thinking about your question";
+}
+
+function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[]) {
   const question = message.toLowerCase();
   const flight = context.flight;
   const plane = context.plane;
@@ -67,6 +97,14 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const previousUser = [...conversation].reverse().find((item) => item.role === "user")?.text.toLowerCase() ?? "";
   const topicQuestion = /\b(it|that|this|the same|still)\b/.test(question) ? `${previousUser} ${question}` : question;
   let variant = nextDeviceVariant();
+  const recentLessons = lessons.slice(-12);
+  const avoidPlanePivot = recentLessons.some((lesson) => lesson.reason === "too-plane-focused");
+  const clarifyWhenUnsure = recentLessons.some((lesson) => lesson.reason === "wrong" || lesson.reason === "unrelated");
+  variant += recentLessons.filter((lesson) => lesson.reason === "repetitive").length;
+
+  if (isFrustrated(message)) {
+    return "I can tell my last answer missed what you wanted. I’m sorry. Tell me what went wrong below, and I’ll remember it on this device instead of repeating the same mistake.";
+  }
 
   if (/\b(how((?:['’]s)| is) (your )?day|how are you|how((?:['’]s)| is) it going|what['’]?s up)\b/.test(question)) {
     return choice([
@@ -86,6 +124,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
     return choice(["You’re welcome!", "Anytime!", "Of course—happy to help."], variant);
   }
   if (/\b(what do you (like|love)|what are you into|your favorite thing)\b/.test(question)) {
+    if (avoidPlanePivot) return "I like solving puzzles, noticing patterns, and hearing what people are building or thinking about. What do you like to do?";
     return choice([
       "I like helping people turn one sheet of paper into a better-flying plane. Tiny fold changes can make a surprisingly big difference. What do you like building?",
       "Paper airplanes are definitely my thing—especially figuring out why one dives, stalls, or suddenly flies perfectly. What are you into?",
@@ -120,6 +159,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
       if (/wobble|shake|rock|unstable/.test(topicQuestion)) return "Check the plane from the front: do both wings rise by the same amount? Uneven wing angles are a common cause of wobbling.";
       if (/distance|far|range/.test(topicQuestion)) return "For more distance, tell me whether you’re flying a Dart or Glider and whether it dives, stalls, turns, or simply slows down.";
       if (/improve|help|wrong|fix|test next/.test(topicQuestion)) return "Tell me what the plane does most often: dives, stalls, turns, wobbles, or flies straight but not very far. I’ll choose one small test from that.";
+      if (clarifyWhenUnsure) return "I don’t want to guess past your question again. What part should I focus on?";
       return choice([
         "I’m best at paper airplanes, but we can still chat. Tell me a little more about what you mean.",
         "I’m listening. If this is about a plane, describe what it does in the air; otherwise, tell me more.",
@@ -256,9 +296,12 @@ export default function ProCoachChat() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
+  const [lessons, setLessons] = useState<CoachLesson[]>([]);
+  const [pendingRepair, setPendingRepair] = useState<PendingRepair | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "assistant", source: "device", text: "Hey! I’m your Flight Lab Coach. We can talk normally, and whenever you’re ready I can help understand a flight or plan the next plane test." },
   ]);
@@ -281,6 +324,9 @@ export default function ProCoachChat() {
       const stored = JSON.parse(window.localStorage.getItem("flight-lab-coach-conversation") ?? "[]") as ChatMessage[];
       const safe = stored.filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.text === "string").slice(-20);
       if (safe.length) setMessages(safe);
+      const storedLessons = JSON.parse(window.localStorage.getItem("flight-lab-coach-lessons") ?? "[]") as CoachLesson[];
+      const safeLessons = storedLessons.filter((item) => item && FEEDBACK_OPTIONS.some((option) => option.reason === item.reason) && typeof item.cue === "string").slice(-30);
+      if (safeLessons.length) setLessons(safeLessons);
     } catch { /* Start a fresh conversation. */ }
     queueMicrotask(() => { messagesReadyRef.current = true; });
   }, []);
@@ -388,13 +434,42 @@ export default function ProCoachChat() {
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setSending(true);
+    setThinkingStatus(thinkingLabel(clean, hasAnalysis));
     const history = loadFlightHistory();
-    const reply = deviceReply(clean, context, history, previous);
+    const reply = deviceReply(clean, context, history, previous, lessons);
+    if (isFrustrated(clean)) {
+      const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
+      const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
+      setPendingRepair({ cue, reply: lastReply });
+    }
     window.setTimeout(() => {
-      setMessages((current) => [...current, { role: "assistant", source: "device", text: reply }]);
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: "device", text: reply }]);
       setSending(false);
       if (speakReply && voiceActiveRef.current) speak(reply);
-    }, 140);
+    }, thinkingDelay(clean, hasAnalysis));
+  }
+
+  function requestRepair(reply: string, index: number) {
+    const cue = [...messages.slice(0, index)].reverse().find((item) => item.role === "user")?.text ?? "General conversation";
+    setPendingRepair({ cue, reply });
+  }
+
+  function rememberLesson(reason: FeedbackReason) {
+    if (!pendingRepair) return;
+    const lesson: CoachLesson = { reason, cue: pendingRepair.cue.slice(0, 180), createdAt: Date.now() };
+    setLessons((current) => {
+      const next = [...current, lesson].slice(-30);
+      window.localStorage.setItem("flight-lab-coach-lessons", JSON.stringify(next));
+      return next;
+    });
+    const acknowledgement = {
+      wrong: "Got it. I’ll be more careful about claiming an answer is correct when I don’t have enough evidence.",
+      unrelated: "Got it. I’ll focus on the exact question and ask for clarification when I’m unsure.",
+      repetitive: "Got it. I’ll avoid that response pattern and choose a different approach next time.",
+      "too-plane-focused": "Got it. I’ll keep normal conversation normal instead of steering everything back to airplanes.",
+    }[reason];
+    setPendingRepair(null);
+    setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: "device", text: acknowledgement }]);
   }
 
   askCoachRef.current = askCoach;
@@ -425,10 +500,17 @@ export default function ProCoachChat() {
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
             {message.role === "assistant" && <small>Flight Lab Coach</small>}
             <p>{message.text || "Thinking…"}</p>
+            {message.role === "assistant" && index > 0 && <button className="coach-feedback-button" type="button" onClick={() => requestRepair(message.text, index)}>Not helpful?</button>}
           </div>)}
-          {sending && <div className="assistant thinking"><small>Flight Lab Coach</small><p><i /><i /><i /></p></div>}
+          {sending && <div className="assistant thinking"><small>{thinkingStatus}</small><p><i /><i /><i /></p></div>}
           <div ref={endRef} />
         </div>
+        {pendingRepair && <div className="coach-repair" role="group" aria-label="Teach the Flight Lab Coach">
+          <b>Help me learn what went wrong</b>
+          <small>{pendingRepair.reply ? `About: “${pendingRepair.reply.slice(0, 90)}${pendingRepair.reply.length > 90 ? "…" : ""}”` : "Choose the closest reason."}</small>
+          <div>{FEEDBACK_OPTIONS.map((option) => <button type="button" key={option.reason} onClick={() => rememberLesson(option.reason)}>{option.label}</button>)}</div>
+          <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
+        </div>}
         <div className="pro-coach-prompts">
           {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => askCoach(prompt)}>{prompt}</button>)}
         </div>
