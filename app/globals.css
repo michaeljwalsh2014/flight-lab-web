@@ -826,6 +826,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-messages .user { align-self: flex-end; }
 .pro-coach-messages small { display: block; margin: 0 0 5px 4px; color: #6f8ca7; font-size: 9px; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
 .pro-coach-messages p { margin: 0; padding: 12px 14px; border: 1px solid rgba(133,181,219,.18); border-radius: 15px 15px 15px 4px; color: #d7e5f2; background: #0a2138; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.pro-coach-messages p a { color: var(--lime); overflow-wrap: anywhere; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .pro-coach-messages .user p { border-color: rgba(200,243,75,.42); border-radius: 15px 15px 4px 15px; color: #071523; background: var(--lime); font-weight: 750; }
 .coach-feedback-button { margin: 6px 0 0 5px; padding: 3px 0; border: 0; color: #6f8ca7; background: transparent; font-size: 9px; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .coach-repair { margin: 0 14px 11px; padding: 11px; display: grid; gap: 7px; border: 1px solid rgba(200,243,75,.3); border-radius: 12px; background: rgba(200,243,75,.055); }

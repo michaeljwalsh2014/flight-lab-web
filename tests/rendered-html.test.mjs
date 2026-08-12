@@ -166,6 +166,12 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /What should I improve/);
   assert.match(coach, /What do you like/);
   assert.match(coach, /Tell me more about that/);
+  assert.match(coach, /arithmeticReply/);
+  assert.match(coach, /one: 1/);
+  assert.match(coach, /youtubeSearchUrl/);
+  assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
+  assert.match(coach, /Web guide/);
+  assert.match(coach, /noopener noreferrer/);
   assert.match(coach, /How’s it going/);
   assert.match(coach, /no upload required/i);
   assert.match(coach, /nextDeviceVariant/);
@@ -179,6 +185,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Not helpful\?/);
   assert.match(coach, /rememberLesson/);
   assert.match(coach, /thinkingDelay/);
+  assert.match(coach, /thinkingSteps/);
+  assert.match(coach, /Checking trusted plane sources/);
+  assert.match(coach, /Preparing a careful answer/);
   assert.match(coach, /Checking your plane history/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);

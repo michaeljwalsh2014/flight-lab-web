@@ -7,7 +7,7 @@ type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
   text: string;
-  source?: "cloud" | "device";
+  source?: "cloud" | "device" | "web";
 };
 
 type FlightHistoryContext = {
@@ -32,11 +32,94 @@ const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
 
 const QUICK_PROMPTS = [
   "How’s it going?",
+  "Find me a plane to fold",
   "What do you like to do?",
   "What should I improve?",
   "Why did my plane turn?",
   "What should I test next?",
 ];
+
+const TRUSTED_PLANE_LINKS = {
+  arrowhead: {
+    page: "https://www.foldableflight.com/arrowhead-paper-airplane",
+    video: "https://www.youtube.com/watch?v=3-IyNvisOcc",
+  },
+  marauder: {
+    page: "https://www.foldableflight.com/marauder-paper-airplane",
+  },
+  designYourOwn: {
+    guide: "https://www.foldableflight.com/post/how-to-design-your-own-paper-airplane",
+    video: "https://www.youtube.com/watch?v=ctvbtzJU9j8",
+  },
+  library: "https://www.foldableflight.com/the-planes",
+};
+
+const NUMBER_WORDS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+  seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+};
+
+function numberFromToken(token: string) {
+  const normalized = token.toLowerCase();
+  if (normalized in NUMBER_WORDS) return NUMBER_WORDS[normalized];
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function arithmeticReply(message: string) {
+  const normalized = message.toLowerCase().replace(/[?,!]/g, " ").replace(/what(?:'s| is)|calculate|solve|equals?/g, " ").replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(-?\d+(?:\.\d+)?|[a-z]+)\s*(plus|add|added to|\+|minus|subtract|less|−|-|times|multiplied by|x|×|\*|divided by|over|\/|÷)\s*(-?\d+(?:\.\d+)?|[a-z]+)$/);
+  if (!match) return null;
+  const left = numberFromToken(match[1]);
+  const right = numberFromToken(match[3]);
+  if (left === null || right === null) return null;
+  const operator = match[2];
+  let result: number;
+  if (/plus|add|added to|\+/.test(operator)) result = left + right;
+  else if (/minus|subtract|less|−|-/.test(operator)) result = left - right;
+  else if (/times|multiplied by|^x$|×|\*/.test(operator)) result = left * right;
+  else {
+    if (right === 0) return "You can’t divide by zero.";
+    result = left / right;
+  }
+  return `${left} ${operator} ${right} = ${Number.isInteger(result) ? result : Number(result.toFixed(6))}.`;
+}
+
+function youtubeSearchUrl(query: string) {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${query} paper airplane tutorial`)}`;
+}
+
+function planeDiscoveryReply(message: string) {
+  const question = message.toLowerCase();
+  if (/favorite.*(paper )?(plane|airplane)|which (paper )?(plane|airplane) do you (like|love)/.test(question)) {
+    return `Arrowhead is one of my favorites from Foldable Flight. It is easy to fold, has a strong locking fold, and is built for fast, long flights. Official tutorial: ${TRUSTED_PLANE_LINKS.arrowhead.video}\nDesign page: ${TRUSTED_PLANE_LINKS.arrowhead.page}`;
+  }
+  if (/design (my|your|a|an|own)|make my own|invent.*(plane|airplane)|how.*design/.test(question)) {
+    return `Start with Foldable Flight’s guide to designing your own paper airplane. It explains how lift, drag, thrust, wing size, and strong leading edges work together. Guide: ${TRUSTED_PLANE_LINKS.designYourOwn.guide}\nVideo: ${TRUSTED_PLANE_LINKS.designYourOwn.video}`;
+  }
+  if (/arrowhead/.test(question)) {
+    return `Here is Foldable Flight’s official Arrowhead tutorial: ${TRUSTED_PLANE_LINKS.arrowhead.video}\nPlane details: ${TRUSTED_PLANE_LINKS.arrowhead.page}`;
+  }
+  if (/marauder/.test(question)) {
+    return `Marauder is a very fast Foldable Flight dart. Start with its official design page: ${TRUSTED_PLANE_LINKS.marauder.page}\nYouTube results: ${youtubeSearchUrl("Foldable Flight Marauder")}`;
+  }
+  if (/bandit/.test(question)) {
+    return `I couldn’t verify a Foldable Flight design named Bandit in my trusted saved catalog, so I won’t invent details. Here is a live YouTube search you can check: ${youtubeSearchUrl("Foldable Flight Bandit")}`;
+  }
+  if (/find|search|youtube|video|tutorial|fold|plane design|paper airplane to make|recommend.*(plane|airplane)/.test(question)) {
+    const usefulQuery = message.replace(/\b(find|search|show|give|tell|youtube|video|tutorial|please|me|for)\b/gi, " ").replace(/\s+/g, " ").trim() || "Foldable Flight easy";
+    return `I can help you look for a design without a paid AI account. Browse Foldable Flight’s verified plane library: ${TRUSTED_PLANE_LINKS.library}\nLive YouTube search for “${usefulQuery}”: ${youtubeSearchUrl(usefulQuery)}`;
+  }
+  return null;
+}
+
+function messageWithLinks(text: string) {
+  const pieces = text.split(/(https?:\/\/[^\s]+)/g);
+  return pieces.map((piece, index) => piece.startsWith("http")
+    ? <a key={`${piece}-${index}`} href={piece} target="_blank" rel="noopener noreferrer">{piece}</a>
+    : piece);
+}
 
 function loadFlightHistory(): FlightHistoryContext {
   try {
@@ -76,16 +159,27 @@ function isFrustrated(message: string) {
 }
 
 function thinkingDelay(message: string, hasEvidence: boolean) {
-  if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 700;
-  if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 2800;
-  return 1500;
+  if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 900;
+  if (planeDiscoveryReply(message)) return 5200;
+  if (arithmeticReply(message)) return 3600;
+  if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 5000;
+  return 4400;
 }
 
 function thinkingLabel(message: string, hasEvidence: boolean) {
   if (isFrustrated(message)) return "Reviewing what I missed";
+  if (planeDiscoveryReply(message)) return "Understanding what you want to build";
+  if (arithmeticReply(message)) return "Checking the calculation";
   if (hasEvidence) return "Checking your plane history";
   if (/turn|dive|stall|wobble|distance|flight|wing/i.test(message)) return "Working through the flight clues";
   return "Thinking about your question";
+}
+
+function thinkingSteps(message: string, hasEvidence: boolean) {
+  if (planeDiscoveryReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
+  if (arithmeticReply(message)) return ["Reading the calculation", "Checking the operation", "Verifying the result"];
+  if (hasEvidence) return ["Checking your plane history", "Comparing the flight clues", "Choosing one careful next test"];
+  return [thinkingLabel(message, hasEvidence), "Considering the exact question", "Preparing a careful answer"];
 }
 
 function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[]) {
@@ -101,6 +195,12 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const avoidPlanePivot = recentLessons.some((lesson) => lesson.reason === "too-plane-focused");
   const clarifyWhenUnsure = recentLessons.some((lesson) => lesson.reason === "wrong" || lesson.reason === "unrelated");
   variant += recentLessons.filter((lesson) => lesson.reason === "repetitive").length;
+
+  const arithmetic = arithmeticReply(message);
+  if (arithmetic) return arithmetic;
+
+  const discovery = planeDiscoveryReply(message);
+  if (discovery) return discovery;
 
   if (isFrustrated(message)) {
     return "I can tell my last answer missed what you wanted. I’m sorry. Tell me what went wrong below, and I’ll remember it on this device instead of repeating the same mistake.";
@@ -434,8 +534,15 @@ export default function ProCoachChat() {
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setSending(true);
-    setThinkingStatus(thinkingLabel(clean, hasAnalysis));
+    const steps = thinkingSteps(clean, hasAnalysis);
+    const delay = thinkingDelay(clean, hasAnalysis);
+    setThinkingStatus(steps[0]);
+    if (delay >= 3000) {
+      window.setTimeout(() => setThinkingStatus(steps[1]), Math.min(1800, delay * .38));
+      window.setTimeout(() => setThinkingStatus(steps[2]), Math.min(3600, delay * .72));
+    }
     const history = loadFlightHistory();
+    const webReply = planeDiscoveryReply(clean);
     const reply = deviceReply(clean, context, history, previous, lessons);
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
@@ -443,10 +550,10 @@ export default function ProCoachChat() {
       setPendingRepair({ cue, reply: lastReply });
     }
     window.setTimeout(() => {
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: "device", text: reply }]);
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: webReply ? "web" : "device", text: reply }]);
       setSending(false);
       if (speakReply && voiceActiveRef.current) speak(reply);
-    }, thinkingDelay(clean, hasAnalysis));
+    }, delay);
   }
 
   function requestRepair(reply: string, index: number) {
@@ -486,7 +593,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. If you want evidence-based plane advice later, a photo, 3D scan, or tracked flight gives me more to work with.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate basic arithmetic and find trusted paper-airplane designs, videos, and live YouTube searches without a paid AI account.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>
@@ -498,8 +605,8 @@ export default function ProCoachChat() {
         {voiceError && <p className="pro-coach-voice-error" role="status">{voiceError}</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
-            {message.role === "assistant" && <small>Flight Lab Coach</small>}
-            <p>{message.text || "Thinking…"}</p>
+            {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Web guide" : "Flight Lab Coach"}</small>}
+            <p>{message.text ? messageWithLinks(message.text) : "Thinking…"}</p>
             {message.role === "assistant" && index > 0 && <button className="coach-feedback-button" type="button" onClick={() => requestRepair(message.text, index)}>Not helpful?</button>}
           </div>)}
           {sending && <div className="assistant thinking"><small>{thinkingStatus}</small><p><i /><i /><i /></p></div>}
