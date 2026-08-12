@@ -177,7 +177,6 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Flapping wing paper airplane/);
   assert.match(coach, /Amazing paper airplane dart/);
   assert.match(coach, /one plane from each creator/);
-  assert.match(coach, /Web guide/);
   assert.match(coach, /noopener noreferrer/);
   assert.match(coach, /How’s it going/);
   assert.match(coach, /no upload required/i);
@@ -195,6 +194,16 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /thinkingSteps/);
   assert.match(coach, /Checking trusted plane sources/);
   assert.match(coach, /Preparing a careful answer/);
+  assert.match(coach, /shouldLookUpKnowledge/);
+  assert.match(coach, /lookUpKnowledge/);
+  assert.match(coach, /Checking a live knowledge source/);
+  assert.match(coach, /Sourced answer/);
+  const knowledge = await readFile(new URL("../app/api/knowledge/route.ts", import.meta.url), "utf8");
+  assert.match(knowledge, /Usain Bolt/);
+  assert.match(knowledge, /Florence Griffith-Joyner/);
+  assert.match(knowledge, /en\.wikipedia\.org\/w\/api\.php/);
+  assert.match(knowledge, /Verified record/);
+  assert.match(knowledge, /sourceName/);
   assert.match(coach, /Checking your plane history/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);

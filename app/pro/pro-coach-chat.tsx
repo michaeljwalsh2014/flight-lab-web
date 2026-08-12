@@ -22,6 +22,7 @@ type FlightHistoryContext = {
 type FeedbackReason = "wrong" | "unrelated" | "repetitive" | "too-plane-focused";
 type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
 type PendingRepair = { cue: string; reply: string };
+type KnowledgeAnswer = { answer: string; source: string; sourceName: string };
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
@@ -150,6 +151,28 @@ function messageWithLinks(text: string) {
     : piece);
 }
 
+function shouldLookUpKnowledge(message: string) {
+  if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
+  return /^(who|what|where|when|which)\b|^tell me about\b|^how (old|tall|long|fast|many|far)\b/i.test(message.trim());
+}
+
+async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null> {
+  try {
+    const response = await fetch("/api/knowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
+      body: JSON.stringify({ question }),
+    });
+    if (!response.ok) return null;
+    const result = await response.json() as Partial<KnowledgeAnswer>;
+    return typeof result.answer === "string" && typeof result.source === "string" && typeof result.sourceName === "string"
+      ? result as KnowledgeAnswer
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadFlightHistory(): FlightHistoryContext {
   try {
     const planeId = Number(window.localStorage.getItem("flight-lab-v2-active-plane-id")) || null;
@@ -191,6 +214,7 @@ function thinkingDelay(message: string, hasEvidence: boolean) {
   if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 900;
   if (planeDiscoveryReply(message)) return 5200;
   if (arithmeticReply(message)) return 3600;
+  if (shouldLookUpKnowledge(message)) return 5200;
   if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 5000;
   return 4400;
 }
@@ -199,6 +223,7 @@ function thinkingLabel(message: string, hasEvidence: boolean) {
   if (isFrustrated(message)) return "Reviewing what I missed";
   if (planeDiscoveryReply(message)) return "Understanding what you want to build";
   if (arithmeticReply(message)) return "Checking the calculation";
+  if (shouldLookUpKnowledge(message)) return "Checking the question";
   if (hasEvidence) return "Checking your plane history";
   if (/turn|dive|stall|wobble|distance|flight|wing/i.test(message)) return "Working through the flight clues";
   return "Thinking about your question";
@@ -207,6 +232,7 @@ function thinkingLabel(message: string, hasEvidence: boolean) {
 function thinkingSteps(message: string, hasEvidence: boolean) {
   if (planeDiscoveryReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
   if (arithmeticReply(message)) return ["Reading the calculation", "Checking the operation", "Verifying the result"];
+  if (shouldLookUpKnowledge(message)) return ["Understanding the question", "Checking a live knowledge source", "Verifying the answer and link"];
   if (hasEvidence) return ["Checking your plane history", "Comparing the flight clues", "Choosing one careful next test"];
   return [thinkingLabel(message, hasEvidence), "Considering the exact question", "Preparing a careful answer"];
 }
@@ -573,15 +599,18 @@ export default function ProCoachChat() {
     const history = loadFlightHistory();
     const webReply = planeDiscoveryReply(clean);
     const reply = deviceReply(clean, context, history, previous, lessons);
+    const knowledgePromise = shouldLookUpKnowledge(clean) ? lookUpKnowledge(clean) : Promise.resolve(null);
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    window.setTimeout(() => {
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: webReply ? "web" : "device", text: reply }]);
+    window.setTimeout(async () => {
+      const knowledge = await knowledgePromise;
+      const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply;
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: knowledge || webReply ? "web" : "device", text: finalReply }]);
       setSending(false);
-      if (speakReply && voiceActiveRef.current) speak(reply);
+      if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? reply);
     }, delay);
   }
 
@@ -622,7 +651,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate basic arithmetic and recommend trusted planes from Walsh Wonders and Foldable Flight without a paid AI account.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate, recommend trusted planes, and check short factual questions using live knowledge sources without controlling Safari or requiring a paid AI account.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>
@@ -634,7 +663,7 @@ export default function ProCoachChat() {
         {voiceError && <p className="pro-coach-voice-error" role="status">{voiceError}</p>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Web guide" : "Flight Lab Coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Sourced answer" : "Flight Lab Coach"}</small>}
             <p>{message.text ? messageWithLinks(message.text) : "Thinking…"}</p>
             {message.role === "assistant" && index > 0 && <button className="coach-feedback-button" type="button" onClick={() => requestRepair(message.text, index)}>Not helpful?</button>}
           </div>)}
