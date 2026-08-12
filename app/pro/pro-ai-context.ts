@@ -14,7 +14,7 @@ export type PlaneCoachContext = {
   outline: number;
   planeStyle: string;
   lastFlight: string;
-  scanMode: "quick" | "multiview";
+  scanMode: "quick" | "multiview" | "video";
   viewCount: number;
   mesh: {
     vertices: number;

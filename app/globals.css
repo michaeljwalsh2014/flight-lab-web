@@ -583,7 +583,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-plane-bar label { min-width: 210px; }
 .pro-coach-plane-bar select { height: 52px !important; min-height: 52px !important; font-size: 14px !important; }
 .pro-coach-plane-bar > a { padding: 12px; color: var(--lime); font-size: 11px; font-weight: 900; }
-.pro-scan-mode { margin-bottom: 14px; padding: 5px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; border-radius: 12px; background: #03101d; }
+.pro-scan-mode { margin-bottom: 14px; padding: 5px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; border-radius: 12px; background: #03101d; }
 .pro-scan-mode button { min-height: 58px; padding: 10px 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid transparent; border-radius: 9px; color: #91a9c2; background: transparent; font-size: 12px; font-weight: 950; text-transform: uppercase; }
 .pro-scan-mode button small { color: #657f98; font-size: 9px; }
 .pro-scan-mode button.selected { border-color: rgba(67,220,255,.42); color: white; background: rgba(23,105,255,.18); }
@@ -606,6 +606,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-scan-capture.quick .pro-scan-view-grid button > span { width: 64px; height: 50px; border-width: 2px; border-radius: 11px; font-size: 15px; font-weight: 950; }
 .pro-scan-capture.quick .pro-scan-view-grid button b { font-size: 17px; }
 .pro-scan-capture.quick .pro-scan-view-grid button small { max-width: 440px; color: #91abc2; font-size: 13px; line-height: 1.45; }
+.pro-video-scan-wrap { padding: 14px; display: grid; gap: 10px; border: 1px solid var(--pro-line); border-radius: 15px; background: radial-gradient(circle at 50% 15%, rgba(23,105,255,.16), rgba(3,16,29,.75)); }
+.guided-video-scanner { display: grid; gap: 11px; }
+.guided-camera-stage { min-height: 330px; position: relative; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(67,220,255,.3); border-radius: 13px; background: #020913; }
+.guided-camera-stage video { width: 100%; height: 330px; display: block; object-fit: cover; }
+.guided-camera-empty { position: absolute; inset: 0; padding: 30px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #89a3bb; text-align: center; background: radial-gradient(circle, rgba(23,105,255,.23), rgba(2,9,19,.96) 68%); }
+.guided-camera-empty > span { width: 70px; height: 54px; display: grid; place-items: center; border: 2px solid var(--lime); border-radius: 11px; color: var(--lime); font-size: 17px; font-weight: 950; }
+.guided-camera-empty > b { color: white; font-size: 19px; }
+.guided-camera-empty > small { max-width: 330px; line-height: 1.5; }
+.guided-camera-empty.complete { background: rgba(2,9,19,.88); }
+.guided-scan-overlay { position: absolute; inset: 0; padding: 22px; display: grid; place-content: center; justify-items: center; gap: 6px; color: white; text-align: center; background: radial-gradient(circle, transparent 0 25%, rgba(2,9,19,.1) 53%, rgba(2,9,19,.62)); text-shadow: 0 2px 12px #020913; }
+.guided-scan-overlay > i { width: 66px; height: 66px; display: grid; place-items: center; border: 2px solid var(--lime); border-radius: 50%; color: var(--lime); background: rgba(2,9,19,.72); font-size: 34px; font-style: normal; box-shadow: 0 0 30px rgba(200,243,75,.23); }
+.guided-scan-overlay > span { color: var(--cyan); font-size: 10px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
+.guided-scan-overlay > b { font-size: 24px; }
+.guided-scan-overlay > small { color: white; font-size: 13px; font-weight: 800; }
+.guided-frame-corners { position: absolute; inset: 14px; pointer-events: none; }
+.guided-frame-corners i { width: 34px; height: 34px; position: absolute; border-color: var(--cyan); border-style: solid; }
+.guided-frame-corners i:nth-child(1) { left: 0; top: 0; border-width: 2px 0 0 2px; }.guided-frame-corners i:nth-child(2) { right: 0; top: 0; border-width: 2px 2px 0 0; }.guided-frame-corners i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 2px 2px; }.guided-frame-corners i:nth-child(4) { right: 0; bottom: 0; border-width: 0 2px 2px 0; }
+.guided-phase-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.guided-phase-strip span { min-width: 0; display: grid; justify-items: center; gap: 4px; color: #607b94; font-size: 8px; font-weight: 850; text-align: center; }
+.guided-phase-strip i { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid rgba(133,181,219,.25); border-radius: 50%; font-style: normal; }
+.guided-phase-strip span.active { color: var(--cyan); }.guided-phase-strip span.active i { border-color: var(--cyan); background: rgba(67,220,255,.12); }.guided-phase-strip span.done { color: var(--lime); }.guided-phase-strip span.done i { border-color: var(--lime); color: #061321; background: var(--lime); }
+.guided-video-scanner > button, .pro-video-fallback { min-height: 52px; border: 1px solid rgba(67,220,255,.35); border-radius: 10px; color: white; background: rgba(23,105,255,.25); font-size: 12px; font-weight: 950; text-transform: uppercase; }
+.guided-video-scanner > p { margin: 0; color: var(--lime); font-size: 11px; font-weight: 850; text-align: center; }
+.pro-video-fallback { min-height: 43px; color: var(--cyan); background: rgba(67,220,255,.055); }
+.pro-video-scan-wrap > small { color: #7891a8; font-size: 9px; line-height: 1.45; text-align: center; }
 .pro-cloud-vision-choice { margin: 12px 0 0; padding: 13px 14px; display: flex !important; grid-template-columns: none !important; flex-direction: row; align-items: flex-start; gap: 11px !important; border: 1px solid rgba(67,220,255,.22); border-radius: 11px; background: rgba(67,220,255,.055); text-transform: none !important; letter-spacing: 0 !important; }
 .pro-dashboard .pro-cloud-vision-choice input { width: 19px !important; height: 19px !important; min-height: 0 !important; margin-top: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; box-shadow: none; accent-color: var(--cyan); }
 .pro-cloud-vision-choice span { display: grid; gap: 3px; }

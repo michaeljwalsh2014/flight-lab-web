@@ -215,13 +215,15 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(videoLab, /On-device coach observations/);
 });
 
-test("guides a six-angle plane scan and remembers experiment outcomes", async () => {
+test("guides a video-orbit 3D scan and remembers experiment outcomes", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
   const reconstruction = await readFile(new URL("../app/pro/plane-reconstruction.ts", import.meta.url), "utf8");
   const meshViewer = await readFile(new URL("../app/pro/plane-mesh-viewer.tsx", import.meta.url), "utf8");
+  const guidedVideo = await readFile(new URL("../app/pro/guided-video-scanner.tsx", import.meta.url), "utf8");
   const scanRoute = await readFile(new URL("../app/api/pro-scan/route.ts", import.meta.url), "utf8");
-  assert.match(dashboard, /3D reconstruction/);
+  assert.match(dashboard, /Guided 3D scan/);
+  assert.match(dashboard, /extractGuidedVideoFrames/);
   assert.match(dashboard, /id: "underside"/);
   assert.match(dashboard, /id: "tail"/);
   assert.match(dashboard, /ReconstructedPlaneModel/);
@@ -231,6 +233,11 @@ test("guides a six-angle plane scan and remembers experiment outcomes", async ()
   assert.match(reconstruction, /triangles/);
   assert.match(reconstruction, /shellLayers: 2/);
   assert.match(reconstruction, /const vertices = \[\.\.\.upper, \.\.\.lower\]/);
+  assert.match(reconstruction, /sideHeightProfile/);
+  assert.match(reconstruction, /const stations = 17/);
+  assert.match(guidedVideo, /getUserMedia/);
+  assert.match(guidedVideo, /Start 14-second scan/);
+  assert.match(guidedVideo, /Turn the plane over for the final view/);
   assert.match(meshViewer, /Drag to rotate/);
   assert.match(meshViewer, /canvas/);
   assert.match(scanRoute, /input_image/);

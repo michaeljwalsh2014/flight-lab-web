@@ -74,7 +74,7 @@ export default function ReconstructedPlaneModel({ model, planeName }: { model: P
       context.fillStyle = "rgba(67,220,255,.8)"; context.font = "700 10px system-ui";
       context.fillText("RECONSTRUCTED MESH", 14, 22);
       context.fillStyle = "rgba(145,169,194,.8)"; context.font = "600 9px system-ui";
-      context.fillText(`${model.vertices.length} vertices · ${model.triangles.length} faces`, 14, 38);
+      context.fillText(`${model.vertices.length} vertices · ${model.triangles.length} faces · shaped depth`, 14, 38);
     };
     draw();
     window.addEventListener("resize", draw);
@@ -96,7 +96,7 @@ export default function ReconstructedPlaneModel({ model, planeName }: { model: P
 
   return <div className="pro-scan-model" aria-label={model ? `Reconstructed 3D mesh of ${planeName}` : `3D reconstruction area for ${planeName}`}>
     <div className="pro-scan-model-stage reconstructed">
-      {model ? <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }} aria-label={`Drag to rotate the reconstructed 3D model of ${planeName}`} /> : <div className="pro-mesh-placeholder"><i /><b>No 3D mesh yet</b><span>Capture the six guided angles to reconstruct this plane.</span></div>}
+      {model ? <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={() => { dragRef.current = null; }} onPointerCancel={() => { dragRef.current = null; }} aria-label={`Drag to rotate the reconstructed 3D model of ${planeName}`} /> : <div className="pro-mesh-placeholder"><i /><b>No shaped 3D mesh yet</b><span>Use the guided camera orbit to capture the nose, wings, tail, and underside.</span></div>}
       <i className="model-axis model-axis-x">X</i><i className="model-axis model-axis-y">Y</i><i className="model-axis model-axis-z">Z</i>
     </div>
     <div className="pro-model-controls">

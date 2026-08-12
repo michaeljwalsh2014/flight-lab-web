@@ -119,15 +119,23 @@ async function sampleImage(url: string, maxDimension = 420): Promise<ImageSample
   return { width, height, mask: connected.mask, bounds: connected.bounds };
 }
 
-function profileFromTop(sample: ImageSample) {
+function fallbackAt(progress: number) {
+  const position = progress * (fallbackProfile.length - 1);
+  const low = Math.floor(position); const high = Math.min(fallbackProfile.length - 1, Math.ceil(position));
+  const blend = position - low;
+  return fallbackProfile[low] * (1 - blend) + fallbackProfile[high] * blend;
+}
+
+function profileFromTop(sample: ImageSample, stations: number) {
   const { left, right, top, bottom } = sample.bounds;
   const center = (left + right) / 2;
   const span = Math.max(1, right - left);
   const length = Math.max(1, bottom - top);
   const leftWidths: number[] = [];
   const rightWidths: number[] = [];
-  for (let station = 0; station < fallbackProfile.length; station += 1) {
-    const yCenter = Math.round(top + length * station / (fallbackProfile.length - 1));
+  for (let station = 0; station < stations; station += 1) {
+    const progress = station / (stations - 1);
+    const yCenter = Math.round(top + length * progress);
     const radius = Math.max(2, Math.round(length * .025));
     let rowLeft = sample.width; let rowRight = -1;
     for (let y = Math.max(0, yCenter - radius); y <= Math.min(sample.height - 1, yCenter + radius); y += 1) {
@@ -137,7 +145,7 @@ function profileFromTop(sample: ImageSample) {
       }
     }
     if (rowRight <= rowLeft) {
-      leftWidths.push(fallbackProfile[station]); rightWidths.push(fallbackProfile[station]);
+      leftWidths.push(fallbackAt(progress)); rightWidths.push(fallbackAt(progress));
     } else {
       leftWidths.push(clamp((center - rowLeft) / (span / 2), .03, 1.15));
       rightWidths.push(clamp((rowRight - center) / (span / 2), .03, 1.15));
@@ -147,6 +155,24 @@ function profileFromTop(sample: ImageSample) {
   const totalRight = rightWidths.reduce((sum, value) => sum + value, 0);
   const balance = Math.round(clamp(100 - Math.abs(totalLeft - totalRight) / Math.max(totalLeft, totalRight) * 100, 0, 100));
   return { leftWidths, rightWidths, balance, coverage: clamp(span * length / (sample.width * sample.height), 0, 1) };
+}
+
+function sideHeightProfile(sample: ImageSample | undefined, stations: number) {
+  if (!sample) return Array.from({ length: stations }, (_, index) => .12 + Math.sin(Math.PI * index / (stations - 1)) * .08);
+  const { left, right, top, bottom } = sample.bounds;
+  const span = Math.max(1, right - left); const fullHeight = Math.max(1, bottom - top);
+  return Array.from({ length: stations }, (_, station) => {
+    const xCenter = Math.round(left + span * station / (stations - 1));
+    const radius = Math.max(2, Math.round(span * .018));
+    let columnTop = sample.height; let columnBottom = -1;
+    for (let x = Math.max(0, xCenter - radius); x <= Math.min(sample.width - 1, xCenter + radius); x += 1) {
+      for (let y = Math.max(0, top); y <= Math.min(sample.height - 1, bottom); y += 1) {
+        if (!sample.mask[y * sample.width + x]) continue;
+        columnTop = Math.min(columnTop, y); columnBottom = Math.max(columnBottom, y);
+      }
+    }
+    return columnBottom > columnTop ? clamp((columnBottom - columnTop) / fullHeight, .035, 1) : .1;
+  });
 }
 
 function aspect(sample?: ImageSample) {
@@ -163,7 +189,8 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
   await Promise.all(entries.map(async ([view, url]) => samples.set(view, await sampleImage(url))));
   const top = samples.get("top");
   if (!top) throw new Error("The top view could not be reconstructed.");
-  const profile = profileFromTop(top);
+  const stations = 17;
+  const profile = profileFromTop(top, stations);
   const noseAspect = aspect(samples.get("nose"));
   const tailAspect = aspect(samples.get("tail"));
   const leftAspect = aspect(samples.get("left"));
@@ -172,23 +199,27 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
   const dihedral = clamp((noseAspect * .62 + tailAspect * .38) * .7, .035, .34);
   const thickness = clamp((leftAspect + rightAspect + undersideAspect) / 3 * .42, .055, .24);
   const sideTilt = clamp((rightAspect - leftAspect) * .24, -.09, .09);
-  const stations = fallbackProfile.length;
-  const lateral = [-1, -.5, 0, .5, 1];
+  const leftProfile = sideHeightProfile(samples.get("left"), stations);
+  const rightProfile = sideHeightProfile(samples.get("right"), stations);
+  const lateral = [-1, -.75, -.5, -.25, 0, .25, .5, .75, 1];
   const upper: MeshVertex[] = [];
   const lower: MeshVertex[] = [];
   for (let row = 0; row < stations; row += 1) {
     const progress = row / (stations - 1);
     const taper = Math.sin(Math.PI * progress);
-    const noseDepth = 1 - progress * .48;
-    const ridge = thickness * (.72 + taper * .62) * noseDepth;
+    const observedHeight = clamp((leftProfile[row] + rightProfile[row]) / 2, .04, 1);
+    const longitudinalShape = .52 + observedHeight * .9;
+    const noseDepth = 1 - progress * .34;
+    const ridge = thickness * longitudinalShape * noseDepth;
     for (const column of lateral) {
       const sideWidth = column < 0 ? profile.leftWidths[row] : profile.rightWidths[row];
       const x = column * sideWidth * 1.52;
-      const foldRidge = ridge * (1 - Math.abs(column));
-      const wingRise = dihedral * Math.pow(Math.abs(column), 1.35) * (.58 + taper * .42);
-      const creaseStep = Math.abs(column) === .5 ? thickness * .13 * taper : 0;
+      const foldRidge = ridge * Math.pow(1 - Math.abs(column), 1.35);
+      const wingRise = dihedral * Math.pow(Math.abs(column), 1.4) * (.48 + taper * .52);
+      const creaseBand = Math.max(0, 1 - Math.abs(Math.abs(column) - .5) * 7);
+      const creaseStep = creaseBand * thickness * .14 * taper;
       const z = foldRidge + wingRise + creaseStep + sideTilt * column;
-      const shellDepth = thickness * (.25 + .48 * (1 - Math.abs(column))) * (.7 + taper * .3);
+      const shellDepth = thickness * (.24 + observedHeight * .38 + .32 * (1 - Math.abs(column))) * (.65 + taper * .35);
       const y = 1.75 - progress * 3.5;
       upper.push({ x, y, z });
       lower.push({ x, y, z: z - shellDepth });
