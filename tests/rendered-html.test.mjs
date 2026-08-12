@@ -170,6 +170,13 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /one: 1/);
   assert.match(coach, /youtubeSearchUrl/);
   assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
+  assert.match(coach, /pairedPlaneRecommendation/);
+  assert.match(coach, /youtube\.com\/@walshwonders\/videos/);
+  assert.match(coach, /C-13 Cobra/);
+  assert.match(coach, /Platinum X/);
+  assert.match(coach, /Flapping wing paper airplane/);
+  assert.match(coach, /Amazing paper airplane dart/);
+  assert.match(coach, /one plane from each creator/);
   assert.match(coach, /Web guide/);
   assert.match(coach, /noopener noreferrer/);
   assert.match(coach, /How’s it going/);

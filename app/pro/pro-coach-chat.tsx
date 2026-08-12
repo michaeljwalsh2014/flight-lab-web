@@ -52,7 +52,31 @@ const TRUSTED_PLANE_LINKS = {
     video: "https://www.youtube.com/watch?v=ctvbtzJU9j8",
   },
   library: "https://www.foldableflight.com/the-planes",
+  walshWonders: {
+    channel: "https://www.youtube.com/@walshwonders/videos",
+    cobra: "https://www.youtube.com/watch?v=JTKSXclJboM",
+    platinumX: "https://www.youtube.com/watch?v=rQwIQ3wBm8k",
+    flappingWing: "https://www.youtube.com/watch?v=4JIk7im3XHM",
+    dart: "https://www.youtube.com/watch?v=GjGayirpzB0",
+    shockedMe: "https://www.youtube.com/watch?v=fCU6eZP07xw",
+  },
 };
+
+function pairedPlaneRecommendation(message: string) {
+  const question = message.toLowerCase();
+  if (!/recommend|suggest|pick|choose|find me|what.*(plane|airplane).*fold|plane.*(make|try|build)|favorite.*(plane|airplane)/.test(question)) return null;
+
+  if (/flap|bird|unusual|weird|unique|cool-looking|trick/.test(question)) {
+    return `Here are two different planes to try:\n\nWalsh Wonders: “Flapping wing paper airplane!!!” — an unusual design whose wings flap in flight. ${TRUSTED_PLANE_LINKS.walshWonders.flappingWing}\n\nFoldable Flight: Arrowhead — an easy, locked dart built for fast, long flights. ${TRUSTED_PLANE_LINKS.arrowhead.video}\n\nWant another pair for distance, gliding, or easy folding?`;
+  }
+  if (/dart|fast|speed/.test(question)) {
+    return `Here are two fast-plane choices:\n\nWalsh Wonders: “Amazing paper airplane dart.” ${TRUSTED_PLANE_LINKS.walshWonders.dart}\n\nFoldable Flight: Marauder — one of the fastest darts in its official library. ${TRUSTED_PLANE_LINKS.marauder.page}\n\nTry both with the same paper and compare three throws each.`;
+  }
+  if (/glid|airtime|slow|smooth/.test(question)) {
+    return `Here are two gliders to compare:\n\nWalsh Wonders: C-13 Cobra — described on the channel as one of its best gliders. ${TRUSTED_PLANE_LINKS.walshWonders.cobra}\n\nFoldable Flight: browse its verified glider collection and choose one at your preferred difficulty. ${TRUSTED_PLANE_LINKS.library}\n\nMeasure three flights from each before choosing a winner.`;
+  }
+  return `I’d try one plane from each creator:\n\nWalsh Wonders: Platinum X — an easy-to-fold glider that the channel describes as one of its best. ${TRUSTED_PLANE_LINKS.walshWonders.platinumX}\n\nFoldable Flight: Arrowhead — an easy dart with a strong locking fold and an official step-by-step tutorial. ${TRUSTED_PLANE_LINKS.arrowhead.video}\n\nThey make a good comparison: Platinum X for gliding, Arrowhead for speed and distance. More Walsh Wonders planes: ${TRUSTED_PLANE_LINKS.walshWonders.channel}`;
+}
 
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
@@ -92,6 +116,11 @@ function youtubeSearchUrl(query: string) {
 
 function planeDiscoveryReply(message: string) {
   const question = message.toLowerCase();
+  const paired = pairedPlaneRecommendation(message);
+  if (paired) return paired;
+  if (/walsh wonders|your (youtube )?channel|michael'?s plane/.test(question)) {
+    return `Walsh Wonders has several verified plane videos. Try C-13 Cobra for gliding: ${TRUSTED_PLANE_LINKS.walshWonders.cobra}\nOr the flapping-wing paper airplane for something unusual: ${TRUSTED_PLANE_LINKS.walshWonders.flappingWing}\nChannel: ${TRUSTED_PLANE_LINKS.walshWonders.channel}`;
+  }
   if (/favorite.*(paper )?(plane|airplane)|which (paper )?(plane|airplane) do you (like|love)/.test(question)) {
     return `Arrowhead is one of my favorites from Foldable Flight. It is easy to fold, has a strong locking fold, and is built for fast, long flights. Official tutorial: ${TRUSTED_PLANE_LINKS.arrowhead.video}\nDesign page: ${TRUSTED_PLANE_LINKS.arrowhead.page}`;
   }
@@ -109,7 +138,7 @@ function planeDiscoveryReply(message: string) {
   }
   if (/find|search|youtube|video|tutorial|fold|plane design|paper airplane to make|recommend.*(plane|airplane)/.test(question)) {
     const usefulQuery = message.replace(/\b(find|search|show|give|tell|youtube|video|tutorial|please|me|for)\b/gi, " ").replace(/\s+/g, " ").trim() || "Foldable Flight easy";
-    return `I can help you look for a design without a paid AI account. Browse Foldable Flight’s verified plane library: ${TRUSTED_PLANE_LINKS.library}\nLive YouTube search for “${usefulQuery}”: ${youtubeSearchUrl(usefulQuery)}`;
+    return `I can help you look for a design without a paid AI account. Browse Walsh Wonders: ${TRUSTED_PLANE_LINKS.walshWonders.channel}\nBrowse Foldable Flight’s verified plane library: ${TRUSTED_PLANE_LINKS.library}\nLive YouTube search for “${usefulQuery}”: ${youtubeSearchUrl(usefulQuery)}`;
   }
   return null;
 }
@@ -593,7 +622,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate basic arithmetic and find trusted paper-airplane designs, videos, and live YouTube searches without a paid AI account.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate basic arithmetic and recommend trusted planes from Walsh Wonders and Foldable Flight without a paid AI account.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>
