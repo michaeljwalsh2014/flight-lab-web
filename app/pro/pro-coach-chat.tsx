@@ -23,6 +23,7 @@ type FeedbackReason = "wrong" | "unrelated" | "repetitive" | "too-plane-focused"
 type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
 type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string };
+type CoachSearchMode = "auto" | "search" | "answer";
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
@@ -152,8 +153,25 @@ function messageWithLinks(text: string) {
 }
 
 function shouldLookUpKnowledge(message: string) {
+  const question = message.trim().toLowerCase();
+  const explicitlyRequestsLookup = /\b(look (?:it |this |that )?up|search (?:for|the (?:browser|web|internet)|online)|browse(?: the (?:browser|web|internet))?|google|find (?:a )?source|cite (?:a |your )?source|give me (?:a )?source|verify online|check online|check the (?:browser|web|internet))\b/.test(question);
+  if (explicitlyRequestsLookup) return true;
   if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
-  return /^(who|what|where|when|which)\b|^tell me about\b|^how (old|tall|long|fast|many|far)\b/i.test(message.trim());
+  const clearlyNeedsFreshInformation = /\b(latest|right now|currently|current (?:record|holder|president|leader|champion|score|price|weather)|today(?:'s)?|tonight(?:'s)?|this (?:week|month|year)|live (?:score|result|weather)|weather (?:today|tomorrow|in)|score (?:today|tonight|of))\b/.test(question);
+  return clearlyNeedsFreshInformation;
+}
+
+function coachSearchMode(message: string): CoachSearchMode {
+  const question = message.trim().toLowerCase().replace(/[’]/g, "'");
+  const explicitlyAnswers = /^(?:please\s+)?(?:just answer(?: it)?|answer (?:it )?(?:yourself|without (?:searching|looking it up))|don't search|do not search)\b/.test(question);
+  if (explicitlyAnswers) return "answer";
+  return shouldLookUpKnowledge(message) ? "search" : "auto";
+}
+
+function questionWithoutMode(message: string, mode: CoachSearchMode) {
+  if (mode === "search") return message.replace(/^(?:please\s+)?(?:search (?:the )?(?:browser|web|internet)(?: for)?|look (?:it |this |that )?up|browse(?: the (?:browser|web|internet))?)\s*[:,-]?\s*/i, "").trim() || message;
+  if (mode === "answer") return message.replace(/^(?:please\s+)?(?:just answer(?: it)?|answer (?:it )?(?:yourself|without (?:searching|looking it up))|don't search|do not search)\s*[:,-]?\s*/i, "").trim() || message;
+  return message;
 }
 
 async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null> {
@@ -173,6 +191,20 @@ async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null
   }
 }
 
+async function searchWithCoach(message: string, history: ChatMessage[], context: ProAiContext) {
+  try {
+    const response = await fetch("/api/pro-coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
+      body: JSON.stringify({ message, history, context, searchMode: "search", coachId: getScanClientId() }),
+    });
+    if (!response.ok) return null;
+    const reply = (await response.text()).trim();
+    return reply ? { text: reply, searched: response.headers.get("X-Flight-Lab-Source") === "web" } : null;
+  } catch {
+    return null;
+  }
+}
 function loadFlightHistory(): FlightHistoryContext {
   try {
     const planeId = Number(window.localStorage.getItem("flight-lab-v2-active-plane-id")) || null;
@@ -581,7 +613,7 @@ export default function ProCoachChat() {
     resumeListening();
   }
 
-  function askCoach(text: string, speakReply = false) {
+  async function askCoach(text: string, speakReply = false) {
     const clean = text.trim().slice(0, 600);
     if (!clean || sending) return;
     const userMessage: ChatMessage = { role: "user", text: clean };
@@ -597,20 +629,30 @@ export default function ProCoachChat() {
       window.setTimeout(() => setThinkingStatus(steps[2]), Math.min(3600, delay * .72));
     }
     const history = loadFlightHistory();
-    const webReply = planeDiscoveryReply(clean);
-    const reply = deviceReply(clean, context, history, previous, lessons);
-    const knowledgePromise = shouldLookUpKnowledge(clean) ? lookUpKnowledge(clean) : Promise.resolve(null);
+    const searchMode = coachSearchMode(clean);
+    const question = questionWithoutMode(clean, searchMode);
+    const webReply = planeDiscoveryReply(question);
+    const reply = deviceReply(question, context, history, previous, lessons);
+    const needsLookup = searchMode === "search";
+    setThinkingStatus(needsLookup ? "Searching the browser" : hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    window.setTimeout(async () => {
-      const knowledge = await knowledgePromise;
-      const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply;
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: knowledge || webReply ? "web" : "device", text: finalReply }]);
+    if (needsLookup) {
+      const searched = await searchWithCoach(question, previous, context);
+      const knowledge = searched ? null : await lookUpKnowledge(question);
+      const finalReply = searched?.text ?? (knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply);
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: searched?.searched || knowledge ? "web" : "device", text: finalReply }]);
       setSending(false);
-      if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? reply);
+      if (speakReply && voiceActiveRef.current) speak(searched?.text ?? knowledge?.answer ?? reply);
+      return;
+    }
+    window.setTimeout(() => {
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: webReply ? "web" : "device", text: reply }]);
+      setSending(false);
+      if (speakReply && voiceActiveRef.current) speak(reply);
     }, delay);
   }
 
@@ -651,7 +693,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate, recommend trusted planes, and check short factual questions using live knowledge sources without controlling Safari or requiring a paid AI account.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me normally—no upload required. Say “search the browser for…” when you want live sources, or “just answer…” when you do not want a lookup.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>

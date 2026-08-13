@@ -9,12 +9,15 @@ type RequestBody = {
   history?: unknown;
   context?: unknown;
   coachId?: unknown;
+  searchMode?: unknown;
 };
 
 const requestWindows = new Map<string, number[]>();
 const MODEL = "gpt-5.6-terra";
 const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach: a warm, natural conversational AI with deep paper-airplane coaching expertise.
 Respond to the user's actual message first. You can greet them, make light conversation, answer ordinary questions, and acknowledge feelings naturally. Never treat every message as a request for airplane analysis.
+Answer from your own knowledge and the supplied conversation normally. Do not turn an ordinary question into a web lookup, encyclopedia entry, or sourced report. When live web search is enabled for a request, use it and ground the answer in the sources you found.
+Treat short follow-ups, pronouns, and corrections as part of the conversation. When the user says something like “isn’t it…?”, “I thought…”, or “you said…”, connect it to the previous exchange, evaluate the correction, and acknowledge it plainly when they are right. If your earlier answer was wrong, apologize briefly and replace it with the correct answer. Do not claim you cannot understand a follow-up when its meaning is clear from recent messages.
 Do not demand a photo, scan, flight, or measurement. If the user is chatting casually, reply conversationally; you may offer airplane help in one brief, optional sentence only when it feels natural. Do not repeat that offer in every reply.
 When the user asks about a paper airplane, use supplied evidence when it exists. Never invent a visual detail, measurement, or causal claim. Clearly distinguish observations from inferences and say when a photo, scan, or measured throw would reduce uncertainty.
 For an evidence-based coaching request, prioritize cloud-vision observations, reconstructed-mesh measurements, and tracked-flight measurements. Name the specific evidence used, then recommend one small, reversible change followed by three comparable throws.
@@ -51,6 +54,32 @@ function safeContext(value: unknown) {
   return JSON.parse(serialized) as Record<string, unknown>;
 }
 
+type WebSearchResponse = {
+  output?: Array<{
+    type?: string;
+    content?: Array<{ type?: string; text?: string; annotations?: Array<{ type?: string; url?: string; title?: string }> }>;
+    action?: { sources?: Array<{ url?: string; title?: string }> };
+  }>;
+};
+
+function webAnswer(data: WebSearchResponse) {
+  const text = (data.output ?? []).flatMap((item) => item.content ?? [])
+    .filter((item) => item.type === "output_text" && typeof item.text === "string")
+    .map((item) => item.text!.trim()).filter(Boolean).join("\n");
+  const sources = new Map<string, string>();
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      for (const annotation of content.annotations ?? []) {
+        if (annotation.type === "url_citation" && annotation.url) sources.set(annotation.url, annotation.title?.trim() || "Source");
+      }
+    }
+    for (const source of item.action?.sources ?? []) {
+      if (source.url) sources.set(source.url, source.title?.trim() || "Source");
+    }
+  }
+  const links = Array.from(sources).slice(0, 5).map(([url, title]) => `- ${title}: ${url}`).join("\n");
+  return text ? `${text}${links ? `\n\nSources:\n${links}` : ""}` : "";
+}
 async function safetyIdentifier(value: string) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -99,6 +128,7 @@ export async function POST(request: Request) {
 
   const context = safeContext(body.context);
   const conversation = safeHistory(body.history);
+  const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
   const input = [
     {
       role: "system",
@@ -126,7 +156,12 @@ export async function POST(request: Request) {
         reasoning: { effort: "low" },
         text: { verbosity: "low" },
         safety_identifier: identifier,
-        stream: true,
+        ...(searchMode === "search" ? {
+          tools: [{ type: "web_search", search_context_size: "low" }],
+          tool_choice: "required",
+          include: ["web_search_call.action.sources"],
+          stream: false,
+        } : { stream: true }),
       }),
     });
   } catch {
@@ -136,6 +171,19 @@ export async function POST(request: Request) {
   if (!upstream.ok) {
     const requestId = upstream.headers.get("x-request-id");
     return json({ error: "coach_unavailable", requestId }, 502);
+  }
+
+  if (searchMode === "search") {
+    const answer = webAnswer(await upstream.json() as WebSearchResponse);
+    if (!answer) return json({ error: "coach_unavailable" }, 502);
+    return new Response(answer, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        "X-Flight-Lab-Model": MODEL,
+        "X-Flight-Lab-Source": "web",
+      },
+    });
   }
   if (!upstream.body) return json({ error: "coach_unavailable" }, 502);
 
