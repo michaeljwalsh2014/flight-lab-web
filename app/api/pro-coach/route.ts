@@ -52,6 +52,13 @@ function safeContext(value: unknown) {
   return JSON.parse(serialized) as Record<string, unknown>;
 }
 
+function coachReasoningEffort(message: string, context: Record<string, unknown>) {
+  const asksForJudgment = /\b(why|compare|diagnose|figure out|analy[sz]e|improve|recommend|should|best next|what went wrong|how can I fix|what should I change)\b/i.test(message);
+  const concernsFlightEvidence = /\b(plane|airplane|flight|throw|wing|fold|nose|tail|dive|stall|turn|wobble|spiral|distance|scan|track)\b/i.test(message)
+    || Object.keys(context).length > 0;
+  return asksForJudgment && concernsFlightEvidence ? "medium" : "low";
+}
+
 async function safetyIdentifier(value: string) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -100,6 +107,7 @@ export async function POST(request: Request) {
 
   const context = safeContext(body.context);
   const conversation = safeHistory(body.history);
+  const reasoningEffort = coachReasoningEffort(message, context);
   const input = [
     {
       role: "system",
@@ -124,7 +132,7 @@ export async function POST(request: Request) {
         model: MODEL,
         input,
         max_output_tokens: 700,
-        reasoning: { effort: "low" },
+        reasoning: { effort: reasoningEffort },
         text: { verbosity: "low" },
         safety_identifier: identifier,
         stream: true,

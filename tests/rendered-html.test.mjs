@@ -215,6 +215,10 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);
   assert.match(coach, /\/api\/pro-coach/);
+  const coachRoute = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
+  assert.match(coachRoute, /coachReasoningEffort/);
+  assert.match(coachRoute, /asksForJudgment && concernsFlightEvidence \? "medium" : "low"/);
+  assert.match(coachRoute, /reasoning: \{ effort: reasoningEffort \}/);
   assert.doesNotMatch(coach, /OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);
   assert.match(coach, /We can talk normally/i);
   assert.match(context, /flight-lab-local-v2/);
