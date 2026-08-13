@@ -190,10 +190,13 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /It didn’t listen/);
   assert.match(coach, /Not helpful\?/);
   assert.match(coach, /rememberLesson/);
-  assert.match(coach, /thinkingDelay/);
-  assert.match(coach, /thinkingSteps/);
-  assert.match(coach, /Checking trusted plane sources/);
-  assert.match(coach, /Answering directly/);
+  assert.doesNotMatch(coach, /thinkingDelay|thinkingSteps/);
+  assert.match(coach, /New chat/);
+  assert.match(coach, /startNewChat/);
+  assert.match(coach, /chatGenerationRef/);
+  assert.match(coach, /Conversational AI is ready/);
+  assert.match(coach, /advanced AI is unavailable/);
+  assert.match(coach, /Wikipedia · What Are You Going to Do/);
   assert.match(coach, /shouldLookUpKnowledge/);
   assert.match(coach, /lookUpKnowledge/);
   assert.match(coach, /Checking a current source/);
@@ -208,7 +211,7 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(knowledge, /en\.wikipedia\.org\/w\/api\.php/);
   assert.match(knowledge, /Verified record/);
   assert.match(knowledge, /sourceName/);
-  assert.match(coach, /Checking your plane history/);
+  assert.match(coach, /Checking the flight clues/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);
   assert.match(coach, /\/api\/pro-coach/);
