@@ -23,13 +23,6 @@ type FeedbackReason = "wrong" | "unrelated" | "repetitive" | "too-plane-focused"
 type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
 type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string };
-type CoachAvailability = "checking" | "ai" | "built-in";
-
-const INITIAL_COACH_MESSAGE: ChatMessage = {
-  role: "assistant",
-  source: "device",
-  text: "Hey! I’m your Flight Lab Coach. We can talk normally, and whenever you’re ready I can help understand a flight or plan the next plane test.",
-};
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
@@ -118,23 +111,6 @@ function arithmeticReply(message: string) {
   return `${left} ${operator} ${right} = ${Number.isInteger(result) ? result : Number(result.toFixed(6))}.`;
 }
 
-function trustedGeneralFactReply(message: string, conversation: ChatMessage[]) {
-  const question = message.toLowerCase().replace(/[’]/g, "'");
-  const recentUserText = conversation.filter((item) => item.role === "user").slice(-2).map((item) => item.text.toLowerCase()).join(" ");
-  const runnerContext = /fastest (?:runner|man|person)|100\s*-?\s*meter|100\s*m\b/.test(`${recentUserText} ${question}`);
-
-  if (/fastest (?:woman|female runner)|women'?s 100\s*-?\s*m/.test(question)) {
-    return "Florence Griffith-Joyner holds the women’s 100-meter world record at 10.49 seconds.";
-  }
-  if (/who(?:'s| is| was)? (?:the )?fastest (?:runner|man|male runner|person)(?: in the world)?|men'?s 100\s*-?\s*m(?:eter)? world record/.test(question)) {
-    return "Usain Bolt is the answer people usually mean: he holds the men’s 100-meter world record at 9.58 seconds.";
-  }
-  if (runnerContext && /\b(?:isn't it|i thought (?:it was )?|actually[, ]*)usain bolt\b/.test(question)) {
-    return "Yes—you’re right. Usain Bolt holds the men’s 100-meter world record at 9.58 seconds. Sorry, my earlier answer was wrong.";
-  }
-  return null;
-}
-
 function youtubeSearchUrl(query: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${query} paper airplane tutorial`)}`;
 }
@@ -177,10 +153,7 @@ function messageWithLinks(text: string) {
 
 function shouldLookUpKnowledge(message: string) {
   if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
-  const question = message.trim().toLowerCase();
-  const explicitlyRequestsLookup = /\b(look up|search (?:for|the web|online)|browse|google|find (?:a )?source|cite (?:a |your )?source|give me (?:a )?source|verify online|check online|check the web)\b/.test(question);
-  const clearlyNeedsFreshInformation = /\b(latest|right now|currently|current (?:record|holder|president|leader|champion|score|price|weather)|today(?:'s)?|tonight(?:'s)?|this (?:week|month|year)|live (?:score|result|weather)|weather (?:today|tomorrow|in)|score (?:today|tonight|of))\b/.test(question);
-  return explicitlyRequestsLookup || clearlyNeedsFreshInformation;
+  return /^(who|what|where|when|which)\b|^tell me about\b|^how (old|tall|long|fast|many|far)\b/i.test(message.trim());
 }
 
 async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null> {
@@ -195,21 +168,6 @@ async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null
     return typeof result.answer === "string" && typeof result.source === "string" && typeof result.sourceName === "string"
       ? result as KnowledgeAnswer
       : null;
-  } catch {
-    return null;
-  }
-}
-
-async function askConversationalCoach(message: string, history: ChatMessage[], context: ProAiContext) {
-  try {
-    const response = await fetch("/api/pro-coach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-      body: JSON.stringify({ message, history, context, coachId: getScanClientId() }),
-    });
-    if (!response.ok) return null;
-    const reply = (await response.text()).trim();
-    return reply || null;
   } catch {
     return null;
   }
@@ -252,6 +210,33 @@ function isFrustrated(message: string) {
     || /\b(didn'?t listen|not listening|not helpful|stop repeating|that made no sense)\b/.test(text);
 }
 
+function thinkingDelay(message: string, hasEvidence: boolean) {
+  if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 900;
+  if (planeDiscoveryReply(message)) return 5200;
+  if (arithmeticReply(message)) return 3600;
+  if (shouldLookUpKnowledge(message)) return 5200;
+  if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 5000;
+  return 4400;
+}
+
+function thinkingLabel(message: string, hasEvidence: boolean) {
+  if (isFrustrated(message)) return "Reviewing what I missed";
+  if (planeDiscoveryReply(message)) return "Understanding what you want to build";
+  if (arithmeticReply(message)) return "Checking the calculation";
+  if (shouldLookUpKnowledge(message)) return "Checking the question";
+  if (hasEvidence) return "Checking your plane history";
+  if (/turn|dive|stall|wobble|distance|flight|wing/i.test(message)) return "Working through the flight clues";
+  return "Thinking about your question";
+}
+
+function thinkingSteps(message: string, hasEvidence: boolean) {
+  if (planeDiscoveryReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
+  if (arithmeticReply(message)) return ["Reading the calculation", "Checking the operation", "Verifying the result"];
+  if (shouldLookUpKnowledge(message)) return ["Understanding the question", "Checking a live knowledge source", "Verifying the answer and link"];
+  if (hasEvidence) return ["Checking your plane history", "Comparing the flight clues", "Choosing one careful next test"];
+  return [thinkingLabel(message, hasEvidence), "Considering the exact question", "Preparing a careful answer"];
+}
+
 function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[]) {
   const question = message.toLowerCase();
   const flight = context.flight;
@@ -268,9 +253,6 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
   const arithmetic = arithmeticReply(message);
   if (arithmetic) return arithmetic;
-
-  const trustedFact = trustedGeneralFactReply(message, conversation);
-  if (trustedFact) return trustedFact;
 
   const discovery = planeDiscoveryReply(message);
   if (discovery) return discovery;
@@ -303,9 +285,6 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
       "Paper airplanes are definitely my thing—especially figuring out why one dives, stalls, or suddenly flies perfectly. What are you into?",
       "I like experiments: one small change, three fair test flights, and a clear result. Outside of planes, I’m always happy to hear what you enjoy.",
     ], variant);
-  }
-  if (/\bwhat (?:are you|you['’]?re) (?:going to|gonna) do\b|\bwhat will you do\b/.test(question)) {
-    return "I’m going to answer what you actually ask, help when you want it, and only look something up when the question really needs fresh information. What do you feel like doing?";
   }
   if (/\b(who are you|what are you|what can you do|how can you help)\b/.test(question)) {
     return "I’m the Flight Lab Coach. I can chat, help diagnose dives, stalls, turns, wobbling, and distance problems, and use your saved scans and test flights when you have them.";
@@ -475,17 +454,17 @@ export default function ProCoachChat() {
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState("");
-  const [availability, setAvailability] = useState<CoachAvailability>("checking");
   const [context, setContext] = useState<ProAiContext>({});
   const [lessons, setLessons] = useState<CoachLesson[]>([]);
   const [pendingRepair, setPendingRepair] = useState<PendingRepair | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_COACH_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", source: "device", text: "Hey! I’m your Flight Lab Coach. We can talk normally, and whenever you’re ready I can help understand a flight or plan the next plane test." },
+  ]);
   const endRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserRecognition | null>(null);
   const voiceActiveRef = useRef(false);
   const speakingRef = useRef(false);
   const messagesReadyRef = useRef(false);
-  const chatGenerationRef = useRef(0);
   const askCoachRef = useRef<(text: string, speakReply?: boolean) => void>(() => undefined);
 
   useEffect(() => {
@@ -496,23 +475,10 @@ export default function ProCoachChat() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/pro-coach", { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
-      .then(async (response) => response.ok ? await response.json() as { available?: boolean } : null)
-      .then((result) => { if (active) setAvailability(result?.available ? "ai" : "built-in"); })
-      .catch(() => { if (active) setAvailability("built-in"); });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
     try {
       const stored = JSON.parse(window.localStorage.getItem("flight-lab-coach-conversation") ?? "[]") as ChatMessage[];
-      const safe = stored.filter((item) => item
-        && (item.role === "user" || item.role === "assistant")
-        && typeof item.text === "string"
-        && !(item.role === "assistant" && /What Are You Going to Do with Your Life\?|Wikipedia · What Are You Going to Do/i.test(item.text))).slice(-20);
+      const safe = stored.filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.text === "string").slice(-20);
       if (safe.length) setMessages(safe);
-      if (safe.length !== stored.length) window.localStorage.setItem("flight-lab-coach-conversation", JSON.stringify(safe));
       const storedLessons = JSON.parse(window.localStorage.getItem("flight-lab-coach-lessons") ?? "[]") as CoachLesson[];
       const safeLessons = storedLessons.filter((item) => item && FEEDBACK_OPTIONS.some((option) => option.reason === item.reason) && typeof item.cue === "string").slice(-30);
       if (safeLessons.length) setLessons(safeLessons);
@@ -549,16 +515,6 @@ export default function ProCoachChat() {
     recognitionRef.current = null;
     window.speechSynthesis?.cancel();
     setVoiceState("idle");
-  }
-
-  function startNewChat() {
-    chatGenerationRef.current += 1;
-    stopVoice();
-    setInput("");
-    setSending(false);
-    setPendingRepair(null);
-    setMessages([INITIAL_COACH_MESSAGE]);
-    window.localStorage.removeItem("flight-lab-coach-conversation");
   }
 
   function resumeListening() {
@@ -625,35 +581,37 @@ export default function ProCoachChat() {
     resumeListening();
   }
 
-  async function askCoach(text: string, speakReply = false) {
+  function askCoach(text: string, speakReply = false) {
     const clean = text.trim().slice(0, 600);
     if (!clean || sending) return;
-    const chatGeneration = chatGenerationRef.current;
     const userMessage: ChatMessage = { role: "user", text: clean };
     const previous = messages.slice(-10);
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setSending(true);
+    const steps = thinkingSteps(clean, hasAnalysis);
+    const delay = thinkingDelay(clean, hasAnalysis);
+    setThinkingStatus(steps[0]);
+    if (delay >= 3000) {
+      window.setTimeout(() => setThinkingStatus(steps[1]), Math.min(1800, delay * .38));
+      window.setTimeout(() => setThinkingStatus(steps[2]), Math.min(3600, delay * .72));
+    }
     const history = loadFlightHistory();
     const webReply = planeDiscoveryReply(clean);
-    const trustedFact = trustedGeneralFactReply(clean, previous);
     const reply = deviceReply(clean, context, history, previous, lessons);
-    const needsLookup = shouldLookUpKnowledge(clean);
-    setThinkingStatus(needsLookup ? "Checking a current source" : hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const knowledgePromise = needsLookup ? lookUpKnowledge(clean) : Promise.resolve(null);
-    const coachPromise = needsLookup || webReply || trustedFact ? Promise.resolve(null) : askConversationalCoach(clean, previous, context);
+    const knowledgePromise = shouldLookUpKnowledge(clean) ? lookUpKnowledge(clean) : Promise.resolve(null);
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    const [knowledge, cloudReply] = await Promise.all([knowledgePromise, coachPromise]);
-    if (chatGeneration !== chatGenerationRef.current) return;
-    const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : cloudReply ?? reply;
-    const source: ChatMessage["source"] = knowledge || webReply ? "web" : cloudReply ? "cloud" : "device";
-    setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
-    setSending(false);
-    if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? cloudReply ?? reply);
+    window.setTimeout(async () => {
+      const knowledge = await knowledgePromise;
+      const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply;
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: knowledge || webReply ? "web" : "device", text: finalReply }]);
+      setSending(false);
+      if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? reply);
+    }, delay);
   }
 
   function requestRepair(reply: string, index: number) {
@@ -691,10 +649,9 @@ export default function ProCoachChat() {
       {open && <div className="pro-coach-panel" role="dialog" aria-label="Flight Lab Coach">
         <header>
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
-          <div className="coach-header-actions"><button type="button" onClick={startNewChat}>New chat</button><button className="coach-close" type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button></div>
+          <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        <p className={`pro-coach-availability ${availability}`}><i />{availability === "checking" ? "Checking smart-reply availability…" : availability === "ai" ? "Conversational AI is ready" : "Built-in coach is ready · advanced AI is unavailable"}</p>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me normally—no upload required. I answer directly and only check outside sources when you ask me to look something up or the answer clearly needs current information.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate, recommend trusted planes, and check short factual questions using live knowledge sources without controlling Safari or requiring a paid AI account.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>
