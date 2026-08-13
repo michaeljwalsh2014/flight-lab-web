@@ -153,7 +153,10 @@ function messageWithLinks(text: string) {
 
 function shouldLookUpKnowledge(message: string) {
   if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
-  return /^(who|what|where|when|which)\b|^tell me about\b|^how (old|tall|long|fast|many|far)\b/i.test(message.trim());
+  const question = message.trim().toLowerCase();
+  const explicitlyRequestsLookup = /\b(look up|search (?:for|the web|online)|browse|google|find (?:a )?source|cite (?:a |your )?source|give me (?:a )?source|verify online|check online|check the web)\b/.test(question);
+  const clearlyNeedsFreshInformation = /\b(latest|right now|currently|current (?:record|holder|president|leader|champion|score|price|weather)|today(?:'s)?|tonight(?:'s)?|this (?:week|month|year)|live (?:score|result|weather)|weather (?:today|tomorrow|in)|score (?:today|tonight|of))\b/.test(question);
+  return explicitlyRequestsLookup || clearlyNeedsFreshInformation;
 }
 
 async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null> {
@@ -168,6 +171,21 @@ async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null
     return typeof result.answer === "string" && typeof result.source === "string" && typeof result.sourceName === "string"
       ? result as KnowledgeAnswer
       : null;
+  } catch {
+    return null;
+  }
+}
+
+async function askConversationalCoach(message: string, history: ChatMessage[], context: ProAiContext) {
+  try {
+    const response = await fetch("/api/pro-coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
+      body: JSON.stringify({ message, history, context, coachId: getScanClientId() }),
+    });
+    if (!response.ok) return null;
+    const reply = (await response.text()).trim();
+    return reply || null;
   } catch {
     return null;
   }
@@ -214,9 +232,9 @@ function thinkingDelay(message: string, hasEvidence: boolean) {
   if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 900;
   if (planeDiscoveryReply(message)) return 5200;
   if (arithmeticReply(message)) return 3600;
-  if (shouldLookUpKnowledge(message)) return 5200;
+  if (shouldLookUpKnowledge(message)) return 4200;
   if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 5000;
-  return 4400;
+  return 1800;
 }
 
 function thinkingLabel(message: string, hasEvidence: boolean) {
@@ -232,9 +250,9 @@ function thinkingLabel(message: string, hasEvidence: boolean) {
 function thinkingSteps(message: string, hasEvidence: boolean) {
   if (planeDiscoveryReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
   if (arithmeticReply(message)) return ["Reading the calculation", "Checking the operation", "Verifying the result"];
-  if (shouldLookUpKnowledge(message)) return ["Understanding the question", "Checking a live knowledge source", "Verifying the answer and link"];
+  if (shouldLookUpKnowledge(message)) return ["Understanding the question", "Checking a current source", "Verifying the answer and link"];
   if (hasEvidence) return ["Checking your plane history", "Comparing the flight clues", "Choosing one careful next test"];
-  return [thinkingLabel(message, hasEvidence), "Considering the exact question", "Preparing a careful answer"];
+  return [thinkingLabel(message, hasEvidence), "Thinking about what you meant", "Answering directly"];
 }
 
 function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[]) {
@@ -285,6 +303,9 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
       "Paper airplanes are definitely my thing—especially figuring out why one dives, stalls, or suddenly flies perfectly. What are you into?",
       "I like experiments: one small change, three fair test flights, and a clear result. Outside of planes, I’m always happy to hear what you enjoy.",
     ], variant);
+  }
+  if (/\bwhat (?:are you|you['’]?re) (?:going to|gonna) do\b|\bwhat will you do\b/.test(question)) {
+    return "I’m going to answer what you actually ask, help when you want it, and only look something up when the question really needs fresh information. What do you feel like doing?";
   }
   if (/\b(who are you|what are you|what can you do|how can you help)\b/.test(question)) {
     return "I’m the Flight Lab Coach. I can chat, help diagnose dives, stalls, turns, wobbling, and distance problems, and use your saved scans and test flights when you have them.";
@@ -599,18 +620,21 @@ export default function ProCoachChat() {
     const history = loadFlightHistory();
     const webReply = planeDiscoveryReply(clean);
     const reply = deviceReply(clean, context, history, previous, lessons);
-    const knowledgePromise = shouldLookUpKnowledge(clean) ? lookUpKnowledge(clean) : Promise.resolve(null);
+    const needsLookup = shouldLookUpKnowledge(clean);
+    const knowledgePromise = needsLookup ? lookUpKnowledge(clean) : Promise.resolve(null);
+    const coachPromise = needsLookup || webReply ? Promise.resolve(null) : askConversationalCoach(clean, previous, context);
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
     window.setTimeout(async () => {
-      const knowledge = await knowledgePromise;
-      const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply;
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: knowledge || webReply ? "web" : "device", text: finalReply }]);
+      const [knowledge, cloudReply] = await Promise.all([knowledgePromise, coachPromise]);
+      const finalReply = knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : cloudReply ?? reply;
+      const source: ChatMessage["source"] = knowledge || webReply ? "web" : cloudReply ? "cloud" : "device";
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
       setSending(false);
-      if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? reply);
+      if (speakReply && voiceActiveRef.current) speak(knowledge?.answer ?? cloudReply ?? reply);
     }, delay);
   }
 
@@ -651,7 +675,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{voiceState === "speaking" ? "Coach is speaking" : voiceState === "listening" ? "Listening" : status}</b></div>
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me now—no upload required. I can calculate, recommend trusted planes, and check short factual questions using live knowledge sources without controlling Safari or requiring a paid AI account.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat with me normally—no upload required. I answer directly and only check outside sources when you ask me to look something up or the answer clearly needs current information.</p>}
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>

@@ -193,10 +193,14 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /thinkingDelay/);
   assert.match(coach, /thinkingSteps/);
   assert.match(coach, /Checking trusted plane sources/);
-  assert.match(coach, /Preparing a careful answer/);
+  assert.match(coach, /Answering directly/);
   assert.match(coach, /shouldLookUpKnowledge/);
   assert.match(coach, /lookUpKnowledge/);
-  assert.match(coach, /Checking a live knowledge source/);
+  assert.match(coach, /Checking a current source/);
+  assert.match(coach, /explicitlyRequestsLookup/);
+  assert.match(coach, /clearlyNeedsFreshInformation/);
+  assert.match(coach, /askConversationalCoach/);
+  assert.match(coach, /only look something up when the question really needs fresh information/);
   assert.match(coach, /Sourced answer/);
   const knowledge = await readFile(new URL("../app/api/knowledge/route.ts", import.meta.url), "utf8");
   assert.match(knowledge, /Usain Bolt/);
@@ -207,7 +211,8 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Checking your plane history/);
   assert.doesNotMatch(coach, /Open ChatGPT with this scan/);
   assert.doesNotMatch(coach, /https:\/\/chatgpt\.com\//);
-  assert.doesNotMatch(coach, /\/api\/pro-coach|OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);
+  assert.match(coach, /\/api\/pro-coach/);
+  assert.doesNotMatch(coach, /OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);
   assert.match(coach, /We can talk normally/i);
   assert.match(context, /flight-lab-local-v2/);
   assert.match(videoLab, /publishProAiContext/);
