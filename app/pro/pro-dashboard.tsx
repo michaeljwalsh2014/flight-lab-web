@@ -7,7 +7,6 @@ import ProCoachChat from "./pro-coach-chat";
 import { publishProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ReconstructedPlaneModel from "./plane-mesh-viewer";
 import { photoToDataUrl, reconstructPlaneMesh, type PlaneMeshData } from "./plane-reconstruction";
-import GuidedVideoScanner, { extractGuidedVideoFrames } from "./guided-video-scanner";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
 
@@ -328,10 +327,11 @@ function ProPlaneHangar() {
 
 function ProPlaneCoach() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const pendingViewRef = useRef<ScanView>("top");
-  const [scanMode, setScanMode] = useState<ScanMode>("quick");
+  const [scanMode, setScanMode] = useState<ScanMode>("video");
   const [scanPhotos, setScanPhotos] = useState<Partial<Record<ScanView, string>>>({});
+  const [planeLength, setPlaneLength] = useState("11");
+  const [wingSpan, setWingSpan] = useState("9.5");
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
   const [throws, setThrows] = useState<StoredThrow[]>([]);
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
@@ -345,12 +345,12 @@ function ProPlaneCoach() {
   const [report, setReport] = useState<PlaneReport | null>(null);
   const [testOutcome, setTestOutcome] = useState<CoachTestMemory["result"] | null>(null);
   const [cloudVisionEnabled, setCloudVisionEnabled] = useState(true);
-  const [uploadedPassCount, setUploadedPassCount] = useState(0);
   const [error, setError] = useState("");
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
   const capturedViews = scanViews.filter((view) => scanPhotos[view.id]);
-  const requiredViews = scanMode === "quick" ? scanViews.slice(0, 1) : scanViews;
+  const reliableViews = scanViews.filter((view) => view.id === "top" || view.id === "nose" || view.id === "left");
+  const requiredViews = scanMode === "quick" ? scanViews.slice(0, 1) : scanMode === "video" ? reliableViews : scanViews;
 
   useEffect(() => {
     const loadSavedData = () => {
@@ -428,25 +428,6 @@ function ProPlaneCoach() {
     event.target.value = "";
   }
 
-  async function chooseScanVideo(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).slice(0, 3); event.target.value = "";
-    if (!files.length) return;
-    if (files.some((file) => !file.type.startsWith("video/"))) { setError("Choose one to three videos that circle one paper airplane."); return; }
-    setError(""); setStage("Finding clear viewpoints in the uploaded video passes"); setProgress(12); setReport(null);
-    try {
-      const passes = await Promise.all(files.map(extractGuidedVideoFrames));
-      const frames = passes.length === 1 ? passes[0] : {
-        top: passes[0].top,
-        nose: (passes[1] ?? passes[0]).nose,
-        right: (passes[1] ?? passes[0]).right,
-        tail: (passes[1] ?? passes[0]).tail,
-        left: (passes[1] ?? passes[0]).left,
-        underside: (passes[2] ?? passes[passes.length - 1]).underside,
-      };
-      setScanPhotos(frames); setUploadedPassCount(files.length); setProgress(0); setStage("");
-    } catch (error) { setProgress(0); setStage(""); setError(error instanceof Error ? error.message : "That video could not be prepared."); }
-  }
-
   function recordOutcome(result: CoachTestMemory["result"]) {
     if (!report) return;
     const item: CoachTestMemory = { planeId: report.planeId, recommendationId: report.recommendationId, action: report.nextTest, result, createdAt: new Date().toISOString() };
@@ -471,10 +452,13 @@ function ProPlaneCoach() {
       setProgress(34); setStage("Measuring wing symmetry and fold geometry");
       const signals = await inspectPlanePhoto(topPhoto);
       if (!signals.recognizable) throw new Error(signals.reason);
-      setProgress(52); setStage(scanMode !== "quick" ? "Reconstructing a shaped multi-view mesh" : "Reconstructing the top silhouette");
-      const mesh = await reconstructPlaneMesh(scanPhotos);
+      const lengthInches = Number(planeLength);
+      const wingspanInches = Number(wingSpan);
+      if (scanMode !== "quick" && (!Number.isFinite(lengthInches) || !Number.isFinite(wingspanInches) || lengthInches < 3 || wingspanInches < 3)) throw new Error("Enter the plane length and wingspan in inches before building the 3D approximation.");
+      setProgress(52); setStage(scanMode !== "quick" ? "Building a measured 3D approximation" : "Reconstructing the top silhouette");
+      const mesh = await reconstructPlaneMesh(scanPhotos, { lengthInches, wingspanInches });
       let vision: VisionScanReport | null = null;
-      if (scanMode !== "quick" && cloudVisionEnabled) {
+      if (scanMode === "multiview" && cloudVisionEnabled) {
         setProgress(68); setStage("Inspecting the six photos with cloud vision");
         try {
           const prepared = await Promise.all(scanViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, 760)] as const));
@@ -506,15 +490,15 @@ function ProPlaneCoach() {
         `The reconstructed mesh contains ${mesh.vertices.length} measured vertices and ${mesh.triangles.length} triangle faces across folded upper and lower panels.`,
         `The mesh estimated ${mesh.leftRightBalance}% left/right balance and ${mesh.estimatedDihedral}/100 wing rise.`,
         ...(vision?.observations ?? []),
-        scanMode !== "quick" && cloudVisionEnabled && !vision ? "Cloud visual inspection was unavailable; this report uses the on-device mesh and top-view measurements." : scanMode !== "quick" ? `All six guided angles${scanMode === "video" ? " captured during the camera orbit" : ""} shaped the reconstruction, including its changing side profile, underside, and tail.` : "This is a quick top-view reconstruction; hidden folds were not measured.",
+        scanMode === "multiview" && cloudVisionEnabled && !vision ? "Cloud visual inspection was unavailable; this report uses the on-device approximation and photo measurements." : scanMode === "multiview" ? "Six photos shaped the approximation, including side, underside, and tail profiles." : scanMode === "video" ? `Three guided photos plus the entered ${mesh.lengthInches}-inch length and ${mesh.wingspanInches}-inch wingspan shaped this approximation.` : "This is a quick top-view outline; hidden folds were not measured.",
         activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
         `The last reported flight behavior was ${behavior}.`,
       ].slice(0, 9);
       const headline = vision?.issues[0] ? vision.issues[0] : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
-      const detail = `Flight Lab reconstructed ${planeName} as a rotatable folded shell with separate upper and lower surfaces from ${mesh.sourceViews} camera ${mesh.sourceViews === 1 ? "view" : "views"}, then matched it with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Cloud vision inspected the source photos once; the coach receives its structured findings, not the photos." : "The report currently uses on-device geometry only."}`;
+      const detail = `Flight Lab built a rotatable 3D approximation of ${planeName} from ${mesh.sourceViews} camera ${mesh.sourceViews === 1 ? "view" : "views"}${scanMode !== "quick" ? ` and its ${mesh.lengthInches}-inch by ${mesh.wingspanInches}-inch measurements` : ""}, then matched it with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Cloud vision inspected the source photos once; the coach receives its structured findings, not the photos." : "The shape was prepared on this device."}`;
       setProgress(89); setStage("Matching this plane with its saved flights");
       await new Promise((resolve) => window.setTimeout(resolve, 180));
-      setProgress(99); setStage("Finishing the 3D report");
+      setProgress(99); setStage("Finishing the approximation report");
       await new Promise((resolve) => window.setTimeout(resolve, Math.max(350, 4300 - (Date.now() - analysisStartedAt))));
       const nextReport: PlaneReport = { planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals, mesh, vision };
       setReport(nextReport); setProgress(100); setStage("Evidence report ready");
@@ -529,23 +513,19 @@ function ProPlaneCoach() {
 
   const analyzing = progress > 0 && progress < 100 && !report;
   return <section className="pro-tool-section" id="plane-coach">
-    <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Reconstructed plane intelligence</p><h2>Build your plane in 3D</h2></div><p>Follow a live camera guide around the nose, wings, tail, and underside. Flight Lab automatically captures the viewpoints and uses their changing silhouettes to shape a rotatable 3D mesh.</p></div>
+    <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Measured plane intelligence</p><h2>Build a 3D approximation</h2></div><p>Take three clear photos and enter two measurements. Flight Lab combines the top outline, front wing angle, side profile, length, and wingspan into a rotatable model that is useful without pretending to be a perfect scan.</p></div>
     <div className="pro-plane-grid">
       <div className="pro-upload-panel">
         <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
-        <input ref={videoInputRef} className="sr-only" type="file" accept="video/*" multiple onChange={chooseScanVideo} aria-label="Choose up to three videos circling the paper airplane" />
         <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
-        <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "video" ? "selected" : ""} onClick={() => { setScanMode("video"); setReport(null); }}>Guided 3D scan <small>recommended</small></button><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}>Six photos <small>manual</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}>Quick check <small>1 photo</small></button></div>
-        {scanMode === "video" ? <div className="pro-video-scan-wrap">
-          <div className="pro-scan-prep"><span>Before scanning</span><b>Colored paper works best</b><p>Use colored paper—or add a few small removable contrasting dots—so Flight Lab can follow the same folds between views. Keep the airplane still on a small center support with soft, even light.</p><div><small><i>1</i> Circle from above</small><small><i>2</i> Circle at wing height</small><small><i>3</i> Circle from below</small></div></div>
-          <GuidedVideoScanner onComplete={(frames) => { setScanPhotos(frames); setUploadedPassCount(3); setReport(null); setError(""); }} onError={setError} />
-          <button className="pro-video-fallback" type="button" onClick={() => videoInputRef.current?.click()}>Upload 1–3 existing orbit videos</button>
-          <small>{uploadedPassCount ? `${uploadedPassCount} uploaded ${uploadedPassCount === 1 ? "video" : "video passes"} ready. ` : ""}For best coverage, select the upper, wing-level, and lower videos together in that order. GoPro users should choose Linear lens mode when available.</small>
-        </div> : <div className={`pro-scan-capture ${scanMode}`}>
+        <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "video" ? "selected" : ""} onClick={() => { setScanMode("video"); setReport(null); }}>Reliable 3D <small>3 photos</small></button><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}>Detailed 3D <small>6 photos</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}>Quick check <small>1 photo</small></button></div>
+        {scanMode === "video" ? <div className="pro-scan-prep"><span>Reliable capture</span><b>Keep the plane still between all three photos</b><p>Use a plain surface that contrasts with the paper. Fill the frame without cutting off the nose, wingtips, or tail.</p><div><small><i>1</i> Directly above</small><small><i>2</i> Straight at nose</small><small><i>3</i> Left side profile</small></div></div> : null}
+        <div className={`pro-scan-capture ${scanMode}`}>
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
-        </div>}
-        {scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>Send six compressed frames securely to the cloud AI for one inspection. Turn this off for an entirely on-device mesh.</small></span></label> : null}
+        </div>
+        {scanMode !== "quick" ? <div className="pro-dimension-grid"><label>Plane length<div className="pro-unit-input"><input type="number" min="3" max="30" step="0.1" inputMode="decimal" value={planeLength} onChange={(event) => { setPlaneLength(event.target.value); setReport(null); }} /><span>in</span></div></label><label>Wingspan<div className="pro-unit-input"><input type="number" min="3" max="30" step="0.1" inputMode="decimal" value={wingSpan} onChange={(event) => { setWingSpan(event.target.value); setReport(null); }} /><span>in</span></div></label></div> : null}
+        {scanMode === "multiview" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>Send six compressed photos securely to the cloud AI for one inspection. Turn this off for an entirely on-device approximation.</small></span></label> : null}
         <div className="pro-form-grid">
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
@@ -553,7 +533,7 @@ function ProPlaneCoach() {
           <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
           <label className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
         </div>
-        <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Reconstructing your plane…" : scanMode !== "quick" ? "Build shaped 3D model + analyze" : "Analyze top shape"}</button>
+        <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Building your plane…" : scanMode !== "quick" ? "Build 3D approximation + analyze" : "Analyze top shape"}</button>
         {error && <p className="pro-inline-error" role="alert">{error}</p>}
       </div>
       <div className="pro-result-panel">
@@ -565,8 +545,8 @@ function ProPlaneCoach() {
           <div className="pro-signal-row"><span><b>{report.mesh.leftRightBalance}%</b> mesh balance</span><span><b>{report.mesh.vertices.length}</b> vertices</span><span><b>{report.score}</b> build score</span></div>
           <div className="pro-next-test"><small>One change · then three throws</small><b>{report.nextTest}</b></div>
           <div className="pro-test-feedback"><span>After testing, what happened?</span><button type="button" className={testOutcome === "better" ? "selected" : ""} onClick={() => recordOutcome("better")}>Better</button><button type="button" className={testOutcome === "same" ? "selected" : ""} onClick={() => recordOutcome("same")}>Same</button><button type="button" className={testOutcome === "worse" ? "selected" : ""} onClick={() => recordOutcome("worse")}>Worse</button></div>
-          <p className="pro-honesty-note">The mesh is reconstructed from camera silhouettes and multiple viewpoints. It is a useful shaped model, but not millimeter-accurate laboratory photogrammetry. Flight predictions remain hypotheses to verify with measured throws.</p>
-        </div> : <div className="pro-empty-result"><ReconstructedPlaneModel model={null} planeName={activePlane?.name ?? "your plane"} /><span>Personal 3D model</span><h3>{scanMode === "video" ? "Open the guide and circle your plane." : scanMode === "multiview" ? "Capture six angles to reconstruct the mesh." : "Start with a clear top view."}</h3><p>The finished report separates reconstructed geometry, cloud visual evidence, flight history, and the coach&apos;s next experiment.</p></div>}
+          <p className="pro-honesty-note">This is a measured 3D approximation built from silhouettes and entered dimensions—not a millimeter-accurate photogrammetry scan. Use it to compare shape and symmetry, then verify flight advice with measured throws.</p>
+        </div> : <div className="pro-empty-result"><ReconstructedPlaneModel model={null} planeName={activePlane?.name ?? "your plane"} /><span>Personal 3D approximation</span><h3>{scanMode === "video" ? "Add top, front, and side photos." : scanMode === "multiview" ? "Capture six angles for more detail." : "Start with a clear top view."}</h3><p>The finished report separates approximate geometry, optional visual evidence, flight history, and the coach&apos;s next experiment.</p></div>}
       </div>
     </div>
   </section>;

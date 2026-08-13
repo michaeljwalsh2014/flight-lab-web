@@ -220,15 +220,16 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(videoLab, /On-device coach observations/);
 });
 
-test("guides a video-orbit 3D scan and remembers experiment outcomes", async () => {
+test("builds a measured 3D approximation and remembers experiment outcomes", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
   const reconstruction = await readFile(new URL("../app/pro/plane-reconstruction.ts", import.meta.url), "utf8");
   const meshViewer = await readFile(new URL("../app/pro/plane-mesh-viewer.tsx", import.meta.url), "utf8");
-  const guidedVideo = await readFile(new URL("../app/pro/guided-video-scanner.tsx", import.meta.url), "utf8");
   const scanRoute = await readFile(new URL("../app/api/pro-scan/route.ts", import.meta.url), "utf8");
-  assert.match(dashboard, /Guided 3D scan/);
-  assert.match(dashboard, /extractGuidedVideoFrames/);
+  assert.match(dashboard, /Reliable 3D/);
+  assert.match(dashboard, /3 photos/);
+  assert.match(dashboard, /Plane length/);
+  assert.match(dashboard, /Wingspan/);
   assert.match(dashboard, /id: "underside"/);
   assert.match(dashboard, /id: "tail"/);
   assert.match(dashboard, /ReconstructedPlaneModel/);
@@ -240,15 +241,13 @@ test("guides a video-orbit 3D scan and remembers experiment outcomes", async () 
   assert.match(reconstruction, /const vertices = \[\.\.\.upper, \.\.\.lower\]/);
   assert.match(reconstruction, /sideHeightProfile/);
   assert.match(reconstruction, /const stations = 17/);
-  assert.match(guidedVideo, /getUserMedia/);
-  assert.match(guidedVideo, /Start 23-second scan/);
-  assert.match(guidedVideo, /Three-pass camera orbit/);
-  assert.match(guidedVideo, /Lower the camera—do not move the plane/);
-  assert.match(dashboard, /Colored paper works best/);
-  assert.match(dashboard, /Upload 1–3 existing orbit videos/);
-  assert.match(dashboard, /GoPro users should choose Linear lens mode/);
+  assert.match(reconstruction, /halfSpan/);
+  assert.match(reconstruction, /lengthInches/);
+  assert.match(reconstruction, /wingspanInches/);
+  assert.match(dashboard, /Keep the plane still between all three photos/);
+  assert.doesNotMatch(dashboard, /Start 23-second scan|Upload 1–3 existing orbit videos/);
   assert.match(dashboard, /4300 - \(Date\.now\(\) - analysisStartedAt\)/);
-  assert.match(meshViewer, /Drag to rotate/);
+  assert.match(meshViewer, /3D APPROXIMATION/);
   assert.match(meshViewer, /canvas/);
   assert.match(scanRoute, /input_image/);
   assert.match(scanRoute, /detail: "high"/);

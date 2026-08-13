@@ -13,7 +13,11 @@ export type PlaneMeshData = {
   estimatedThickness: number;
   leftRightBalance: number;
   shellLayers: number;
+  lengthInches: number;
+  wingspanInches: number;
 };
+
+type PlaneDimensions = { lengthInches?: number; wingspanInches?: number };
 
 type ImageSample = {
   width: number;
@@ -182,7 +186,7 @@ function aspect(sample?: ImageSample) {
   return clamp(height / width, .03, .65);
 }
 
-export async function reconstructPlaneMesh(photos: Partial<Record<ReconstructionView, string>>): Promise<PlaneMeshData> {
+export async function reconstructPlaneMesh(photos: Partial<Record<ReconstructionView, string>>, dimensions: PlaneDimensions = {}): Promise<PlaneMeshData> {
   if (!photos.top) throw new Error("Capture the top view before building the 3D model.");
   const entries = Object.entries(photos).filter((entry): entry is [ReconstructionView, string] => Boolean(entry[1]));
   const samples = new Map<ReconstructionView, ImageSample>();
@@ -191,6 +195,9 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
   if (!top) throw new Error("The top view could not be reconstructed.");
   const stations = 17;
   const profile = profileFromTop(top, stations);
+  const lengthInches = clamp(Number(dimensions.lengthInches) || 11, 3, 30);
+  const wingspanInches = clamp(Number(dimensions.wingspanInches) || lengthInches * .86, 3, 30);
+  const halfSpan = clamp(wingspanInches / lengthInches * 1.75, .65, 2.4);
   const noseAspect = aspect(samples.get("nose"));
   const tailAspect = aspect(samples.get("tail"));
   const leftAspect = aspect(samples.get("left"));
@@ -213,7 +220,7 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
     const ridge = thickness * longitudinalShape * noseDepth;
     for (const column of lateral) {
       const sideWidth = column < 0 ? profile.leftWidths[row] : profile.rightWidths[row];
-      const x = column * sideWidth * 1.52;
+      const x = column * sideWidth * halfSpan;
       const foldRidge = ridge * Math.pow(1 - Math.abs(column), 1.35);
       const wingRise = dihedral * Math.pow(Math.abs(column), 1.4) * (.48 + taper * .52);
       const creaseBand = Math.max(0, 1 - Math.abs(Math.abs(column) - .5) * 7);
@@ -258,6 +265,7 @@ export async function reconstructPlaneMesh(photos: Partial<Record<Reconstruction
     vertices, triangles, stations, columns: lateral.length, sourceViews: entries.length,
     silhouetteCoverage: Math.round(profile.coverage * 100), estimatedDihedral: Math.round(dihedral * 100),
     estimatedThickness: Math.round(thickness * 100), leftRightBalance: profile.balance, shellLayers: 2,
+    lengthInches: Number(lengthInches.toFixed(1)), wingspanInches: Number(wingspanInches.toFixed(1)),
   };
 }
 
