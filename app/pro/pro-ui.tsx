@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 export function SpinningPlane({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`pro-plane-orbit ${compact ? "compact" : ""}`} aria-hidden="true">
@@ -25,14 +27,27 @@ export function AnalysisLoader({
   progress: number;
   label: string;
 }) {
-  const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
+  const targetProgress = Math.max(0, Math.min(100, Math.round(progress)));
+  const [safeProgress, setSafeProgress] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSafeProgress((current) => {
+        if (current === targetProgress) { window.clearInterval(timer); return current; }
+        return current + Math.sign(targetProgress - current);
+      });
+    }, 38);
+    return () => window.clearInterval(timer);
+  }, [targetProgress]);
   return (
     <div className="pro-analysis-loader" role="status" aria-live="polite">
       <div className="pro-evidence-loader" aria-hidden="true">
-        <span className={safeProgress >= 15 ? "done" : "active"}>01<b>Verify plane</b></span>
-        <span className={safeProgress >= 45 ? "done" : safeProgress >= 15 ? "active" : ""}>02<b>Measure folds</b></span>
-        <span className={safeProgress >= 75 ? "done" : safeProgress >= 45 ? "active" : ""}>03<b>Match flights</b></span>
-        <span className={safeProgress >= 96 ? "done" : safeProgress >= 75 ? "active" : ""}>04<b>Choose new test</b></span>
+        <span className={safeProgress >= 12 ? "done" : "active"}>01<b>Verify video</b></span>
+        <span className={safeProgress >= 27 ? "done" : safeProgress >= 12 ? "active" : ""}>02<b>Find plane</b></span>
+        <span className={safeProgress >= 42 ? "done" : safeProgress >= 27 ? "active" : ""}>03<b>Measure folds</b></span>
+        <span className={safeProgress >= 58 ? "done" : safeProgress >= 42 ? "active" : ""}>04<b>Build depth</b></span>
+        <span className={safeProgress >= 74 ? "done" : safeProgress >= 58 ? "active" : ""}>05<b>Inspect views</b></span>
+        <span className={safeProgress >= 89 ? "done" : safeProgress >= 74 ? "active" : ""}>06<b>Match flights</b></span>
+        <span className={safeProgress >= 99 ? "done" : safeProgress >= 89 ? "active" : ""}>07<b>Finish report</b></span>
         <i style={{ height: `${safeProgress}%` }} />
       </div>
       <div className="pro-loader-copy">

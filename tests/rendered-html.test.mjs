@@ -236,8 +236,13 @@ test("guides a video-orbit 3D scan and remembers experiment outcomes", async () 
   assert.match(reconstruction, /sideHeightProfile/);
   assert.match(reconstruction, /const stations = 17/);
   assert.match(guidedVideo, /getUserMedia/);
-  assert.match(guidedVideo, /Start 14-second scan/);
-  assert.match(guidedVideo, /Turn the plane over for the final view/);
+  assert.match(guidedVideo, /Start 23-second scan/);
+  assert.match(guidedVideo, /Three-pass camera orbit/);
+  assert.match(guidedVideo, /Lower the camera—do not move the plane/);
+  assert.match(dashboard, /Colored paper works best/);
+  assert.match(dashboard, /Upload 1–3 existing orbit videos/);
+  assert.match(dashboard, /GoPro users should choose Linear lens mode/);
+  assert.match(dashboard, /4300 - \(Date\.now\(\) - analysisStartedAt\)/);
   assert.match(meshViewer, /Drag to rotate/);
   assert.match(meshViewer, /canvas/);
   assert.match(scanRoute, /input_image/);

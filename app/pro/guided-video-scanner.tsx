@@ -6,12 +6,17 @@ import type { ReconstructionView } from "./plane-reconstruction";
 type ScanFrameSet = Partial<Record<ReconstructionView, string>>;
 
 const phases: Array<{ view: ReconstructionView; title: string; instruction: string; arrow: string }> = [
-  { view: "top", title: "Above", instruction: "Hold directly above the plane", arrow: "↓" },
-  { view: "nose", title: "Nose", instruction: "Lower the camera toward the nose", arrow: "↘" },
-  { view: "right", title: "Right wing", instruction: "Circle smoothly around the right wing", arrow: "→" },
-  { view: "tail", title: "Tail", instruction: "Continue around until the tail faces you", arrow: "↓" },
-  { view: "left", title: "Left wing", instruction: "Circle around the other wing", arrow: "←" },
-  { view: "underside", title: "Underside", instruction: "Turn the plane over for the final view", arrow: "↻" },
+  { view: "top", title: "Upper pass", instruction: "Start directly above the plane", arrow: "↓" },
+  { view: "right", title: "Upper right", instruction: "Circle right while staying above the wing", arrow: "↘" },
+  { view: "tail", title: "Upper tail", instruction: "Continue slowly around the tail", arrow: "→" },
+  { view: "left", title: "Upper left", instruction: "Complete the upper circle", arrow: "↗" },
+  { view: "nose", title: "Level nose", instruction: "Lower to wing height and face the nose", arrow: "↓" },
+  { view: "right", title: "Level right", instruction: "Circle at the same height as the wings", arrow: "→" },
+  { view: "tail", title: "Level tail", instruction: "Keep the entire tail and both wings visible", arrow: "→" },
+  { view: "left", title: "Level left", instruction: "Finish the wing-level circle", arrow: "←" },
+  { view: "underside", title: "Lower pass", instruction: "Lower the camera—do not move the plane", arrow: "↙" },
+  { view: "underside", title: "Under wings", instruction: "Circle below the wing edges", arrow: "←" },
+  { view: "underside", title: "Under tail", instruction: "Finish with the underside and tail visible", arrow: "✓" },
 ];
 
 function captureFrame(video: HTMLVideoElement) {
@@ -34,7 +39,7 @@ export async function extractGuidedVideoFrames(file: File): Promise<ScanFrameSet
     if (!Number.isFinite(video.duration) || video.duration < 5) throw new Error("Record at least 5 seconds so every side can be seen.");
     const frames: ScanFrameSet = {};
     for (let index = 0; index < phases.length; index += 1) {
-      video.currentTime = Math.min(video.duration - .05, video.duration * (.08 + index * .168));
+      video.currentTime = Math.min(video.duration - .05, video.duration * (.04 + index * .092));
       await new Promise<void>((resolve) => { video.onseeked = () => resolve(); });
       frames[phases[index].view] = captureFrame(video);
     }
@@ -82,7 +87,7 @@ export default function GuidedVideoScanner({ onComplete, onError }: { onComplete
           }
           setPhase(index + 1); take(index + 1);
         } catch (error) { onError(error instanceof Error ? error.message : "The camera scan stopped unexpectedly."); }
-      }, index === 0 ? 1800 : 2400);
+      }, index === 0 ? 1800 : 2100);
     };
     take(0);
   }
@@ -90,14 +95,14 @@ export default function GuidedVideoScanner({ onComplete, onError }: { onComplete
   return <div className={`guided-video-scanner ${status}`}>
     <div className="guided-camera-stage">
       <video ref={videoRef} muted playsInline aria-label="Live camera view for the guided airplane scan" />
-      {status === "idle" ? <div className="guided-camera-empty"><span>3D</span><b>Guided camera orbit</b><small>Keep the entire airplane in the frame while the guide moves you around it.</small></div> : null}
+      {status === "idle" ? <div className="guided-camera-empty"><span>3D</span><b>Three-pass camera orbit</b><small>Keep the plane still. The guide takes you above, level with, and below it.</small></div> : null}
       {status === "ready" || status === "scanning" ? <div className="guided-scan-overlay"><i>{current.arrow}</i><span>Step {phase + 1} of {phases.length}</span><b>{current.title}</b><small>{current.instruction}</small></div> : null}
-      {status === "done" ? <div className="guided-camera-empty complete"><span>✓</span><b>All six viewpoints captured</b><small>Your shaped 3D reconstruction is ready to build.</small></div> : null}
+      {status === "done" ? <div className="guided-camera-empty complete"><span>✓</span><b>All three passes captured</b><small>Upper, wing-level, and underside coverage are ready.</small></div> : null}
       <div className="guided-frame-corners"><i /><i /><i /><i /></div>
     </div>
-    <div className="guided-phase-strip" aria-label="Scan viewpoints">{phases.map((item, index) => <span key={item.view} className={index < phase || status === "done" ? "done" : index === phase && status !== "idle" ? "active" : ""}><i>{index + 1}</i>{item.title}</span>)}</div>
+    <div className="guided-phase-strip" aria-label="Scan viewpoints">{phases.map((item, index) => <span key={`${item.view}-${index}`} className={index < phase || status === "done" ? "done" : index === phase && status !== "idle" ? "active" : ""}><i>{index + 1}</i>{item.title}</span>)}</div>
     {status === "idle" ? <button type="button" onClick={openCamera}>Open guided camera</button> : null}
-    {status === "ready" ? <button type="button" onClick={beginScan}>Start 14-second scan</button> : null}
+    {status === "ready" ? <button type="button" onClick={beginScan}>Start 23-second scan</button> : null}
     {status === "scanning" ? <p>Move slowly—Flight Lab captures each view automatically.</p> : null}
     {status === "done" ? <button type="button" onClick={openCamera}>Scan again</button> : null}
   </div>;

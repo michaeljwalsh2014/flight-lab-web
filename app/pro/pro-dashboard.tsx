@@ -345,6 +345,7 @@ function ProPlaneCoach() {
   const [report, setReport] = useState<PlaneReport | null>(null);
   const [testOutcome, setTestOutcome] = useState<CoachTestMemory["result"] | null>(null);
   const [cloudVisionEnabled, setCloudVisionEnabled] = useState(true);
+  const [uploadedPassCount, setUploadedPassCount] = useState(0);
   const [error, setError] = useState("");
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
@@ -428,13 +429,21 @@ function ProPlaneCoach() {
   }
 
   async function chooseScanVideo(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]; event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("video/")) { setError("Choose a video that circles one paper airplane."); return; }
-    setError(""); setStage("Finding six clear viewpoints in the video"); setProgress(12); setReport(null);
+    const files = Array.from(event.target.files ?? []).slice(0, 3); event.target.value = "";
+    if (!files.length) return;
+    if (files.some((file) => !file.type.startsWith("video/"))) { setError("Choose one to three videos that circle one paper airplane."); return; }
+    setError(""); setStage("Finding clear viewpoints in the uploaded video passes"); setProgress(12); setReport(null);
     try {
-      const frames = await extractGuidedVideoFrames(file);
-      setScanPhotos(frames); setProgress(0); setStage("");
+      const passes = await Promise.all(files.map(extractGuidedVideoFrames));
+      const frames = passes.length === 1 ? passes[0] : {
+        top: passes[0].top,
+        nose: (passes[1] ?? passes[0]).nose,
+        right: (passes[1] ?? passes[0]).right,
+        tail: (passes[1] ?? passes[0]).tail,
+        left: (passes[1] ?? passes[0]).left,
+        underside: (passes[2] ?? passes[passes.length - 1]).underside,
+      };
+      setScanPhotos(frames); setUploadedPassCount(files.length); setProgress(0); setStage("");
     } catch (error) { setProgress(0); setStage(""); setError(error instanceof Error ? error.message : "That video could not be prepared."); }
   }
 
@@ -448,6 +457,7 @@ function ProPlaneCoach() {
   }
 
   async function analyzePlane() {
+    const analysisStartedAt = Date.now();
     const topPhoto = scanPhotos.top;
     if (!topPhoto) { requestView("top"); return; }
     const missing = requiredViews.filter((view) => !scanPhotos[view.id]);
@@ -502,8 +512,10 @@ function ProPlaneCoach() {
       ].slice(0, 9);
       const headline = vision?.issues[0] ? vision.issues[0] : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
       const detail = `Flight Lab reconstructed ${planeName} as a rotatable folded shell with separate upper and lower surfaces from ${mesh.sourceViews} camera ${mesh.sourceViews === 1 ? "view" : "views"}, then matched it with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Cloud vision inspected the source photos once; the coach receives its structured findings, not the photos." : "The report currently uses on-device geometry only."}`;
-      setProgress(88); setStage("Checking previous advice for repetition");
-      await new Promise((resolve) => window.setTimeout(resolve, 160));
+      setProgress(89); setStage("Matching this plane with its saved flights");
+      await new Promise((resolve) => window.setTimeout(resolve, 180));
+      setProgress(99); setStage("Finishing the 3D report");
+      await new Promise((resolve) => window.setTimeout(resolve, Math.max(350, 4300 - (Date.now() - analysisStartedAt))));
       const nextReport: PlaneReport = { planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals, mesh, vision };
       setReport(nextReport); setProgress(100); setStage("Evidence report ready");
       try {
@@ -521,10 +533,15 @@ function ProPlaneCoach() {
     <div className="pro-plane-grid">
       <div className="pro-upload-panel">
         <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
-        <input ref={videoInputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseScanVideo} aria-label="Record or choose a video circling the paper airplane" />
+        <input ref={videoInputRef} className="sr-only" type="file" accept="video/*" multiple onChange={chooseScanVideo} aria-label="Choose up to three videos circling the paper airplane" />
         <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
         <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "video" ? "selected" : ""} onClick={() => { setScanMode("video"); setReport(null); }}>Guided 3D scan <small>recommended</small></button><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}>Six photos <small>manual</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}>Quick check <small>1 photo</small></button></div>
-        {scanMode === "video" ? <div className="pro-video-scan-wrap"><GuidedVideoScanner onComplete={(frames) => { setScanPhotos(frames); setReport(null); setError(""); }} onError={setError} /><button className="pro-video-fallback" type="button" onClick={() => videoInputRef.current?.click()}>Or record / choose a guided orbit video</button><small>Video order: above → nose → right wing → tail → left wing → underside.</small></div> : <div className={`pro-scan-capture ${scanMode}`}>
+        {scanMode === "video" ? <div className="pro-video-scan-wrap">
+          <div className="pro-scan-prep"><span>Before scanning</span><b>Colored paper works best</b><p>Use colored paper—or add a few small removable contrasting dots—so Flight Lab can follow the same folds between views. Keep the airplane still on a small center support with soft, even light.</p><div><small><i>1</i> Circle from above</small><small><i>2</i> Circle at wing height</small><small><i>3</i> Circle from below</small></div></div>
+          <GuidedVideoScanner onComplete={(frames) => { setScanPhotos(frames); setUploadedPassCount(3); setReport(null); setError(""); }} onError={setError} />
+          <button className="pro-video-fallback" type="button" onClick={() => videoInputRef.current?.click()}>Upload 1–3 existing orbit videos</button>
+          <small>{uploadedPassCount ? `${uploadedPassCount} uploaded ${uploadedPassCount === 1 ? "video" : "video passes"} ready. ` : ""}For best coverage, select the upper, wing-level, and lower videos together in that order. GoPro users should choose Linear lens mode when available.</small>
+        </div> : <div className={`pro-scan-capture ${scanMode}`}>
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
         </div>}
