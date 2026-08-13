@@ -25,6 +25,12 @@ type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string };
 type CoachSearchMode = "auto" | "search" | "answer";
 
+const COACH_MODE_OPTIONS: Array<{ mode: CoachSearchMode; label: string; detail: string }> = [
+  { mode: "auto", label: "Auto", detail: "Coach decides" },
+  { mode: "search", label: "Search", detail: "Always look it up" },
+  { mode: "answer", label: "Answer", detail: "Never search" },
+];
+
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
   { reason: "unrelated", label: "It didn’t listen" },
@@ -484,6 +490,7 @@ export default function ProCoachChat() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
+  const [selectedMode, setSelectedMode] = useState<CoachSearchMode>("auto");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
@@ -505,6 +512,16 @@ export default function ProCoachChat() {
     window.addEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
     return () => window.removeEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
   }, []);
+
+  useEffect(() => {
+    const savedMode = window.localStorage.getItem("flight-lab-coach-search-mode");
+    if (savedMode === "auto" || savedMode === "search" || savedMode === "answer") setSelectedMode(savedMode);
+  }, []);
+
+  function chooseMode(mode: CoachSearchMode) {
+    setSelectedMode(mode);
+    window.localStorage.setItem("flight-lab-coach-search-mode", mode);
+  }
 
   useEffect(() => {
     try {
@@ -629,7 +646,7 @@ export default function ProCoachChat() {
       window.setTimeout(() => setThinkingStatus(steps[2]), Math.min(3600, delay * .72));
     }
     const history = loadFlightHistory();
-    const searchMode = coachSearchMode(clean);
+    const searchMode = selectedMode === "auto" ? coachSearchMode(clean) : selectedMode;
     const question = questionWithoutMode(clean, searchMode);
     const webReply = planeDiscoveryReply(question);
     const reply = deviceReply(question, context, history, previous, lessons);
@@ -694,6 +711,10 @@ export default function ProCoachChat() {
           <button type="button" onClick={() => { stopVoice(); setOpen(false); }} aria-label="Close Flight Lab Coach">×</button>
         </header>
         {!hasAnalysis && <p className="pro-coach-context">You can chat with me normally—no upload required. Say “search the browser for…” when you want live sources, or “just answer…” when you do not want a lookup.</p>}
+        <div className="coach-mode-picker" role="group" aria-label="Choose how the Coach answers">
+          <span>Response mode</span>
+          <div>{COACH_MODE_OPTIONS.map((option) => <button type="button" key={option.mode} className={selectedMode === option.mode ? "selected" : ""} aria-pressed={selectedMode === option.mode} onClick={() => chooseMode(option.mode)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
+        </div>
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
           <div><b>{voiceState === "listening" ? "I’m listening" : voiceState === "speaking" ? "Coach is talking" : "Talk with your coach"}</b><small>Free browser voice—no paid AI account needed.</small></div>

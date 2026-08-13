@@ -196,6 +196,14 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Preparing a careful answer/);
   assert.match(coach, /shouldLookUpKnowledge/);
   assert.match(coach, /coachSearchMode/);
+  assert.match(coach, /COACH_MODE_OPTIONS/);
+  assert.match(coach, /flight-lab-coach-search-mode/);
+  assert.match(coach, /selectedMode === "auto" \? coachSearchMode/);
+  assert.match(coach, /Response mode/);
+  assert.match(coach, /Coach decides/);
+  assert.match(coach, /Always look it up/);
+  assert.match(coach, /Never search/);
+  assert.match(coach, /aria-pressed/);
   assert.match(coach, /search the browser for/);
   assert.match(coach, /Searching the browser/);
   assert.match(coach, /searchMode/);
