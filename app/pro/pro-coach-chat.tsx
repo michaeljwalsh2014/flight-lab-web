@@ -118,6 +118,23 @@ function arithmeticReply(message: string) {
   return `${left} ${operator} ${right} = ${Number.isInteger(result) ? result : Number(result.toFixed(6))}.`;
 }
 
+function trustedGeneralFactReply(message: string, conversation: ChatMessage[]) {
+  const question = message.toLowerCase().replace(/[’]/g, "'");
+  const recentUserText = conversation.filter((item) => item.role === "user").slice(-2).map((item) => item.text.toLowerCase()).join(" ");
+  const runnerContext = /fastest (?:runner|man|person)|100\s*-?\s*meter|100\s*m\b/.test(`${recentUserText} ${question}`);
+
+  if (/fastest (?:woman|female runner)|women'?s 100\s*-?\s*m/.test(question)) {
+    return "Florence Griffith-Joyner holds the women’s 100-meter world record at 10.49 seconds.";
+  }
+  if (/who(?:'s| is| was)? (?:the )?fastest (?:runner|man|male runner|person)(?: in the world)?|men'?s 100\s*-?\s*m(?:eter)? world record/.test(question)) {
+    return "Usain Bolt is the answer people usually mean: he holds the men’s 100-meter world record at 9.58 seconds.";
+  }
+  if (runnerContext && /\b(?:isn't it|i thought (?:it was )?|actually[, ]*)usain bolt\b/.test(question)) {
+    return "Yes—you’re right. Usain Bolt holds the men’s 100-meter world record at 9.58 seconds. Sorry, my earlier answer was wrong.";
+  }
+  return null;
+}
+
 function youtubeSearchUrl(query: string) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${query} paper airplane tutorial`)}`;
 }
@@ -251,6 +268,9 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
   const arithmetic = arithmeticReply(message);
   if (arithmetic) return arithmetic;
+
+  const trustedFact = trustedGeneralFactReply(message, conversation);
+  if (trustedFact) return trustedFact;
 
   const discovery = planeDiscoveryReply(message);
   if (discovery) return discovery;
@@ -616,11 +636,12 @@ export default function ProCoachChat() {
     setSending(true);
     const history = loadFlightHistory();
     const webReply = planeDiscoveryReply(clean);
+    const trustedFact = trustedGeneralFactReply(clean, previous);
     const reply = deviceReply(clean, context, history, previous, lessons);
     const needsLookup = shouldLookUpKnowledge(clean);
     setThinkingStatus(needsLookup ? "Checking a current source" : hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
     const knowledgePromise = needsLookup ? lookUpKnowledge(clean) : Promise.resolve(null);
-    const coachPromise = needsLookup || webReply ? Promise.resolve(null) : askConversationalCoach(clean, previous, context);
+    const coachPromise = needsLookup || webReply || trustedFact ? Promise.resolve(null) : askConversationalCoach(clean, previous, context);
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";

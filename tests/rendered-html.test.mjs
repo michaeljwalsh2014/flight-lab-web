@@ -168,6 +168,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Tell me more about that/);
   assert.match(coach, /arithmeticReply/);
   assert.match(coach, /one: 1/);
+  assert.match(coach, /trustedGeneralFactReply/);
+  assert.match(coach, /Usain Bolt is the answer people usually mean/);
+  assert.match(coach, /Yes—you’re right\. Usain Bolt holds the men’s 100-meter world record/);
   assert.match(coach, /youtubeSearchUrl/);
   assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
   assert.match(coach, /pairedPlaneRecommendation/);
@@ -217,8 +220,10 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /\/api\/pro-coach/);
   const coachRoute = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
   assert.match(coachRoute, /coachReasoningEffort/);
-  assert.match(coachRoute, /asksForJudgment && concernsFlightEvidence \? "medium" : "low"/);
+  assert.match(coachRoute, /correctsEarlierAnswer/);
+  assert.match(coachRoute, /isn\['’\]\?t it/);
   assert.match(coachRoute, /reasoning: \{ effort: reasoningEffort \}/);
+  assert.match(coachRoute, /connect it to the previous exchange/);
   assert.doesNotMatch(coach, /OPENAI_API_KEY|RTCPeerConnection|GPT connected|Offline coach/);
   assert.match(coach, /We can talk normally/i);
   assert.match(context, /flight-lab-local-v2/);
