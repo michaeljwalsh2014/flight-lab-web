@@ -24,11 +24,17 @@ type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
 type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string };
 type CoachSearchMode = "auto" | "search" | "answer";
+type CoachModelVersion = "v38" | "v37";
 
 const COACH_MODE_OPTIONS: Array<{ mode: CoachSearchMode; label: string; detail: string }> = [
   { mode: "auto", label: "Auto", detail: "Coach decides" },
   { mode: "search", label: "Search", detail: "Always look it up" },
   { mode: "answer", label: "Answer", detail: "Never search" },
+];
+
+const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
+  { model: "v38", label: "v38 Improved", detail: "Context + memory" },
+  { model: "v37", label: "v37 Classic", detail: "Previous coach" },
 ];
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
@@ -69,6 +75,29 @@ const TRUSTED_PLANE_LINKS = {
     shockedMe: "https://www.youtube.com/watch?v=fCU6eZP07xw",
   },
 };
+
+const PLANE_CATALOG = [
+  { name: "Platinum X", focus: "a smooth, easy-to-fold glider", tags: ["glider", "easy", "distance"], url: TRUSTED_PLANE_LINKS.walshWonders.platinumX },
+  { name: "Arrowhead", focus: "a locked dart for speed and distance", tags: ["dart", "easy", "fast", "distance"], url: TRUSTED_PLANE_LINKS.arrowhead.video },
+  { name: "C-13 Cobra", focus: "a glider built for long, smooth flights", tags: ["glider", "airtime", "smooth"], url: TRUSTED_PLANE_LINKS.walshWonders.cobra },
+  { name: "Marauder", focus: "a fast dart with a sharper challenge", tags: ["dart", "fast", "speed"], url: TRUSTED_PLANE_LINKS.marauder.page },
+  { name: "Flapping Wing", focus: "an unusual plane whose wings flap in flight", tags: ["unusual", "trick", "cool"], url: TRUSTED_PLANE_LINKS.walshWonders.flappingWing },
+  { name: "Walsh Wonders Dart", focus: "a straightforward speed-focused dart", tags: ["dart", "fast", "easy"], url: TRUSTED_PLANE_LINKS.walshWonders.dart },
+];
+
+function contextualPlaneRecommendation(message: string, conversation: ChatMessage[]) {
+  const question = message.toLowerCase();
+  const asksForPlane = /recommend|suggest|pick|choose|find|another|different|else|what.*(?:plane|airplane).*fold|plane.*(?:make|try|build)|favorite.*(?:plane|airplane)/.test(question);
+  if (!asksForPlane || !/(plane|airplane|fold|another|different|one)/.test(question)) return null;
+
+  const recentCoachText = conversation.filter((item) => item.role === "assistant").slice(-10).map((item) => item.text.toLowerCase()).join(" ");
+  const unused = PLANE_CATALOG.filter((plane) => !recentCoachText.includes(plane.name.toLowerCase()));
+  const requestedTags = ["glider", "airtime", "smooth", "dart", "fast", "speed", "distance", "easy", "unusual", "trick", "cool"].filter((tag) => question.includes(tag));
+  const matching = unused.filter((plane) => !requestedTags.length || requestedTags.some((tag) => plane.tags.includes(tag)));
+  const plane = matching[0] ?? unused[0] ?? PLANE_CATALOG.find((candidate) => !question.includes(candidate.name.toLowerCase())) ?? PLANE_CATALOG[0];
+  const followUp = /another|different|else|not that|new one/.test(question);
+  return `${followUp ? "Try this one instead" : "Try this one"}: ${plane.name} — ${plane.focus}. ${plane.url}\n\nAfter you fold it, log three throws and I can help compare it with your last plane.`;
+}
 
 function pairedPlaneRecommendation(message: string) {
   const question = message.toLowerCase();
@@ -164,7 +193,8 @@ function shouldLookUpKnowledge(message: string) {
   if (explicitlyRequestsLookup) return true;
   if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
   const clearlyNeedsFreshInformation = /\b(latest|right now|currently|current (?:record|holder|president|leader|champion|score|price|weather)|today(?:'s)?|tonight(?:'s)?|this (?:week|month|year)|live (?:score|result|weather)|weather (?:today|tomorrow|in)|score (?:today|tonight|of))\b/.test(question);
-  return clearlyNeedsFreshInformation;
+  const shouldVerifyFacts = /\b(world record|record holder|highest|lowest|longest|shortest|fastest|largest|smallest|oldest|youngest|how many|statistics?|study|research|evidence|according to|source|compare|comparison|versus|vs|when did|who (?:is|was|holds|won)|what (?:is|are|caused)|where (?:is|was)|history of)\b/.test(question);
+  return clearlyNeedsFreshInformation || shouldVerifyFacts;
 }
 
 function coachSearchMode(message: string): CoachSearchMode {
@@ -283,7 +313,7 @@ function thinkingSteps(message: string, hasEvidence: boolean) {
   return [thinkingLabel(message, hasEvidence), "Considering the exact question", "Preparing a careful answer"];
 }
 
-function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[]) {
+function deviceReply(message: string, context: ProAiContext, history: FlightHistoryContext, conversation: ChatMessage[], lessons: CoachLesson[], modelVersion: CoachModelVersion) {
   const question = message.toLowerCase();
   const flight = context.flight;
   const plane = context.plane;
@@ -300,7 +330,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const arithmetic = arithmeticReply(message);
   if (arithmetic) return arithmetic;
 
-  const discovery = planeDiscoveryReply(message);
+  const discovery = modelVersion === "v38" ? contextualPlaneRecommendation(message, conversation) ?? planeDiscoveryReply(message) : planeDiscoveryReply(message);
   if (discovery) return discovery;
 
   if (isFrustrated(message)) {
@@ -499,6 +529,8 @@ export default function ProCoachChat() {
   const [sending, setSending] = useState(false);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [selectedMode, setSelectedMode] = useState<CoachSearchMode>("auto");
+  const [selectedModel, setSelectedModel] = useState<CoachModelVersion>("v38");
+  const [cloudAvailable, setCloudAvailable] = useState<boolean | null>(null);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState("");
   const [context, setContext] = useState<ProAiContext>({});
@@ -524,11 +556,22 @@ export default function ProCoachChat() {
   useEffect(() => {
     const savedMode = window.localStorage.getItem("flight-lab-coach-search-mode");
     if (savedMode === "auto" || savedMode === "search" || savedMode === "answer") setSelectedMode(savedMode);
+    const savedModel = window.localStorage.getItem("flight-lab-coach-model");
+    if (savedModel === "v37" || savedModel === "v38") setSelectedModel(savedModel);
+    fetch("/api/pro-coach", { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result: { available?: unknown } | null) => setCloudAvailable(result?.available === true))
+      .catch(() => setCloudAvailable(false));
   }, []);
 
   function chooseMode(mode: CoachSearchMode) {
     setSelectedMode(mode);
     window.localStorage.setItem("flight-lab-coach-search-mode", mode);
+  }
+
+  function chooseModel(model: CoachModelVersion) {
+    setSelectedModel(model);
+    window.localStorage.setItem("flight-lab-coach-model", model);
   }
 
   useEffect(() => {
@@ -651,7 +694,7 @@ export default function ProCoachChat() {
     const history = loadFlightHistory();
     const searchMode = selectedMode === "auto" ? coachSearchMode(clean) : selectedMode;
     const question = questionWithoutMode(clean, searchMode);
-    const fallbackReply = deviceReply(question, context, history, previous, lessons);
+    const fallbackReply = deviceReply(question, context, history, previous, lessons, selectedModel);
     const cloudContext: CloudCoachContext = {
       ...context,
       flightHistory: history,
@@ -666,13 +709,18 @@ export default function ProCoachChat() {
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    const cloudReply = await askCloudCoach(question, previous, cloudContext, searchMode);
-    const knowledge = needsLookup && !cloudReply ? await lookUpKnowledge(question) : null;
-    const finalReply = cloudReply?.text ?? (knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : fallbackReply);
+    const cloudReply = selectedModel === "v38" && cloudAvailable !== false
+      ? await askCloudCoach(question, previous, cloudContext, searchMode)
+      : null;
+    const knowledge = needsLookup && !cloudReply && cloudAvailable !== false ? await lookUpKnowledge(question) : null;
+    const disconnectedSearchReply = needsLookup && cloudAvailable === false
+      ? `Smart web search is not connected yet, so I won’t pretend a single Wikipedia result is a researched answer. Switch to Answer for an unsourced response, or connect cloud AI to use multi-source search for: “${question}”.`
+      : null;
+    const finalReply = cloudReply?.text ?? (knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : disconnectedSearchReply ?? fallbackReply);
     const source: ChatMessage["source"] = cloudReply?.source ?? (knowledge ? "web" : "device");
     setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
     setSending(false);
-    if (speakReply && voiceActiveRef.current) speak(cloudReply?.text ?? knowledge?.answer ?? fallbackReply);
+    if (speakReply && voiceActiveRef.current) speak(cloudReply?.text ?? knowledge?.answer ?? disconnectedSearchReply ?? fallbackReply);
   }
 
   function requestRepair(reply: string, index: number) {
@@ -716,6 +764,11 @@ export default function ProCoachChat() {
         <div className="coach-mode-picker" role="group" aria-label="Choose how the Coach answers">
           <span>Response mode</span>
           <div>{COACH_MODE_OPTIONS.map((option) => <button type="button" key={option.mode} className={selectedMode === option.mode ? "selected" : ""} aria-pressed={selectedMode === option.mode} onClick={() => chooseMode(option.mode)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
+        </div>
+        <div className="coach-mode-picker coach-model-picker" role="group" aria-label="Choose the Coach model version">
+          <span>Coach model</span>
+          <div>{COACH_MODEL_OPTIONS.map((option) => <button type="button" key={option.model} className={selectedModel === option.model ? "selected" : ""} aria-pressed={selectedModel === option.model} onClick={() => chooseModel(option.model)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
+          <small>{selectedModel === "v38" ? cloudAvailable === false ? "Cloud AI is not connected. v38 is using its improved on-device memory." : cloudAvailable ? "Cloud AI connected." : "Checking cloud AI…" : "Using the previous v37 response behavior."}</small>
         </div>
         <div className={`pro-coach-voice ${voiceState}`}>
           <div className="voice-orb" aria-hidden="true"><i /><i /><i /><i /></div>
