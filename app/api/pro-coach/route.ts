@@ -11,6 +11,7 @@ type RequestBody = {
   context?: unknown;
   coachId?: unknown;
   searchMode?: unknown;
+  modelVersion?: unknown;
 };
 
 const requestWindows = new Map<string, number[]>();
@@ -130,7 +131,8 @@ export async function POST(request: Request) {
   if (!withinRateLimit(identifier)) return json({ error: "rate_limited", message: "Take a short break, then ask again." }, 429);
 
   const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
-  const builtIn = searchMode !== "search" ? findBuiltInAnswer(message) : null;
+  const modelVersion = body.modelVersion === "v37" || body.modelVersion === "v38" ? body.modelVersion : "v39";
+  const builtIn = modelVersion === "v39" && searchMode !== "search" ? findBuiltInAnswer(message) : null;
   if (builtIn) {
     return new Response(`${builtIn.answer}\n\nBuilt-in source: ${builtIn.sourceName}\n${builtIn.source}\nVerified: ${builtIn.verifiedOn}`, {
       headers: {

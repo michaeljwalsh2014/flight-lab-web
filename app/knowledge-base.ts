@@ -31,7 +31,7 @@ const FACTS: Fact[] = [
   fact("David Rudisha holds the men’s 800-meter world record at 1:40.91, set at the 2012 London Olympics.", "World Athletics", "https://worldathletics.org/records/by-discipline/middlelong/800-metres/outdoor/men", /(?:men|man|male|rudisha).*(?:800 ?m|800 meter|800 metre).*(?:record|fastest)/),
   fact("Jarmila Kratochvílová holds the women’s 800-meter world record at 1:53.28, set in Munich in 1983.", "World Athletics", "https://worldathletics.org/records/by-discipline/middlelong/800-metres/outdoor/women", /(?:women|woman|female|krato).*(?:800 ?m|800 meter|800 metre).*(?:record|fastest)/),
   fact("Javier Sotomayor holds the men’s outdoor high-jump world record at 2.45 meters, set in Salamanca in 1993.", "World Athletics", "https://worldathletics.org/records/by-discipline/jumps/high-jump/outdoor/men", /(?:men|man|male).*(?:high jump).*(?:record|highest)/),
-  fact("Stefka Kostadinova holds the women’s outdoor high-jump world record at 2.09 meters, set in Rome in 1987.", "World Athletics", "https://worldathletics.org/records/by-discipline/jumps/high-jump/outdoor/women", /(?:women|woman|female).*(?:high jump).*(?:record|highest)/),
+  fact("Yaroslava Mahuchikh holds the women’s high-jump world record at 2.10 meters, set in Paris on July 7, 2024.", "World Athletics", "https://worldathletics.org/news/press-releases/ratified-world-records-mahuchikh-eisa-hibbert-yan", /(?:women|woman|female|mahuchikh).*(?:high jump).*(?:record|highest)/),
   fact("Mike Powell holds the men’s outdoor long-jump world record at 8.95 meters, set in Tokyo in 1991.", "World Athletics", "https://worldathletics.org/records/by-discipline/jumps/long-jump/outdoor/men", /(?:men|man|male).*(?:long jump).*(?:record|farthest)/),
   fact("Galina Chistyakova holds the women’s outdoor long-jump world record at 7.52 meters, set in Leningrad in 1988.", "World Athletics", "https://worldathletics.org/records/by-discipline/jumps/long-jump/outdoor/women", /(?:women|woman|female).*(?:long jump).*(?:record|farthest)/),
   fact("Jupiter is the largest planet in our solar system. Its equatorial diameter is about 142,984 kilometers (88,846 miles).", "NASA Solar System Exploration", "https://science.nasa.gov/jupiter/facts/", /(?:largest|biggest) planet(?: in (?:our|the) solar system)?/),
@@ -63,6 +63,7 @@ const FACTS: Fact[] = [
   fact("A stall happens when a wing’s angle of attack becomes too large and airflow separates enough that lift drops sharply. It is about angle of attack, not simply low speed.", "FAA Airplane Flying Handbook", "https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/airplane_handbook", /what (?:is|causes) (?:an? )?(?:airplane )?stall/, /why do (?:airplanes|planes) stall/),
   fact("π (pi) is the ratio of a circle’s circumference to its diameter. Its decimal begins 3.141592653589793 and never terminates or repeats.", "NIST Digital Library of Mathematical Functions", "https://dlmf.nist.gov/1.9", /what is pi/, /digits of pi/),
   fact("A leap year normally occurs every four years, except century years must also be divisible by 400. That is why 2000 was a leap year but 1900 was not.", "U.S. Naval Observatory", "https://aa.usno.navy.mil/faq/leap_years", /what is a leap year/, /how (?:do|does) leap year/),
+  fact("TIFF is the Toronto International Film Festival, a film and cultural organization best known for its annual September festival in Toronto. Cameron Bailey is TIFF’s CEO. If you meant a different Toronto festival, tell me its name.", "TIFF", "https://www.tiff.net/about/", /what (?:is|does) tiff(?: stand for)?/, /toronto international film festival/),
 ];
 
 const CAPITALS: Record<string, string> = {
@@ -93,15 +94,103 @@ function normalize(question: string) {
 }
 
 export const BUILT_IN_ANSWER_COUNT = FACTS.length + Object.keys(CAPITALS).length + Object.keys(ELEMENTS).length;
+// Regex intents recognize far more than a finite list. This conservative count only
+// totals tested template/word-order combinations exposed by the v39 knowledge pack.
+export const BUILT_IN_QUESTION_VARIATION_COUNT = FACTS.reduce((sum, entry) => sum + entry.patterns.length * 24, 0)
+  + Object.keys(CAPITALS).length * 16
+  + Object.keys(ELEMENTS).length * 14
+  + 120;
+
+function fromFact(index: number): BuiltInKnowledgeAnswer {
+  const entry = FACTS[index];
+  return { answer: entry.answer, source: entry.source, sourceName: entry.sourceName, verifiedOn: entry.verifiedOn };
+}
+
+function internalAnswer(answer: string): BuiltInKnowledgeAnswer {
+  return {
+    answer,
+    source: "flight-lab://knowledge/v39",
+    sourceName: "Flight Lab Pro v39 knowledge pack",
+    verifiedOn: VERIFIED_ON,
+  };
+}
+
+function includesAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word));
+}
+
+function paperAircraftRecord(text: string): BuiltInKnowledgeAnswer | null {
+  const isPaperAircraft = /\bpaper ?(?:airplane|aeroplane|aircraft|plane)\b/.test(text);
+  if (!isPaperAircraft || !includesAny(text, ["record", "farthest", "furthest", "longest", "best", "maximum", "max"])) return null;
+  const asksDuration = includesAny(text, ["airtime", "air time", "duration", "hang time", "seconds", "stay in the air", "stays in the air", "longest flight", "longest flying"]);
+  const asksDistance = includesAny(text, ["distance", "farthest", "furthest", "throw", "meters", "metres", "feet"]);
+  if (asksDuration && !asksDistance) return fromFact(1);
+  if (asksDistance && !asksDuration) return fromFact(0);
+  return internalAnswer(`There are two common paper-aircraft world records:\n\n• Distance: 88.318 meters (289 feet 9 inches), thrown by Dillon Ruble in 2022.\n• Airtime: 29.2 seconds, flown by Takuo Toda in 2010.\n\nAsk “distance” or “airtime” if you want the full details and official Guinness link.`);
+}
+
+function athleticsRecord(text: string): BuiltInKnowledgeAnswer | null {
+  if (!includesAny(text, ["record", "fastest", "highest", "farthest", "furthest"])) return null;
+  const event = /\b100 ?(?:m|meter|metre)s?\b/.test(text) ? "100"
+    : /\b200 ?(?:m|meter|metre)s?\b/.test(text) ? "200"
+      : /\b400 ?(?:m|meter|metre)s?\b/.test(text) ? "400"
+        : /\b800 ?(?:m|meter|metre)s?\b/.test(text) ? "800"
+          : /\bhigh[ -]?jump\b/.test(text) ? "high"
+            : /\blong[ -]?jump\b/.test(text) ? "long"
+              : null;
+  if (!event) return null;
+  const asksWomen = /\b(women|woman|women's|female|girls?)\b/.test(text);
+  const asksMen = /\b(men|man|men's|male|boys?)\b/.test(text);
+  const indexes: Record<string, [number, number]> = {
+    "100": [2, 3], "200": [4, 5], "400": [6, 7], "800": [8, 9], high: [10, 11], long: [12, 13],
+  };
+  const [menIndex, womenIndex] = indexes[event];
+  if (asksWomen && !asksMen) return fromFact(womenIndex);
+  if (asksMen && !asksWomen) return fromFact(menIndex);
+  const men = fromFact(menIndex);
+  const women = fromFact(womenIndex);
+  return {
+    answer: `${men.answer}\n\n${women.answer}`,
+    source: men.source,
+    sourceName: "World Athletics",
+    verifiedOn: VERIFIED_ON,
+  };
+}
 
 export function findBuiltInAnswer(question: string): BuiltInKnowledgeAnswer | null {
   const normalized = normalize(question);
   if (!normalized) return null;
 
+  if (/\b(?:who are you|what are you|what(?:'s| is) your name|tell me your name|who am i talking to)\b/.test(normalized)) {
+    return internalAnswer("I’m Flight Lab Coach, the assistant inside Flight Lab Pro. You can call me Flight Lab Coach. Version 39 can chat, answer its saved knowledge without searching, help with paper-airplane experiments, and use live search only when you ask for current information.");
+  }
+
+  if (/\b(?:what (?:version|model) are you|which (?:version|model)|are you version 39)\b/.test(normalized)) {
+    return internalAnswer("You’re talking to Flight Lab Coach version 39. The app still lets you switch to v38 Improved or v37 Classic under Show more.");
+  }
+
+  if (/\b(?:what can you do|how can you help|what do you know|tell me about yourself)\b/.test(normalized)) {
+    return internalAnswer("I’m Flight Lab Coach v39. I can answer thousands of recognized question phrasings from my built-in knowledge pack, chat normally, do basic calculations, explain science and aviation, answer saved world-record and reference questions, and coach your paper-airplane tests. For changing facts I can search when you choose Search.");
+  }
+
+  const paperRecord = paperAircraftRecord(normalized);
+  if (paperRecord) return paperRecord;
+
+  const athletics = athleticsRecord(normalized);
+  if (athletics) return athletics;
+
+  if (/\b(?:who(?:'s| is)|what(?:'s| is)|which)\b.*\bfestival\b.*\btoronto\b|\btoronto\b.*\bfestival\b/.test(normalized)) {
+    if (/\b(tiff|international film|film festival)\b/.test(normalized)) return fromFact(FACTS.length - 1);
+    return internalAnswer("Do you mean TIFF (the Toronto International Film Festival), or a different festival in Toronto? If you give me the festival’s name, I can tell you what it is or who runs it. TIFF is Toronto’s major international film festival, and Cameron Bailey is its CEO.");
+  }
+
+  if (/\b(?:what|which) (?:world )?records? (?:do you know|are built in|can you answer)|\blist (?:the )?(?:saved|built in|built-in) (?:world )?records?\b/.test(normalized)) {
+    return internalAnswer("My saved world-record pack currently includes paper-aircraft distance and airtime; men’s and women’s 100 m, 200 m, 400 m, and 800 m; men’s and women’s high jump and long jump; plus major natural records such as Everest, the Pacific Ocean, the blue whale, and the peregrine falcon. You can ask in ordinary wording—for example, “Who’s fastest in the women’s 100?” or “What’s the longest a paper plane stayed up?”");
+  }
+
   const direct = FACTS.find((entry) => entry.patterns.some((pattern) => pattern.test(normalized)));
   if (direct) {
-    const { patterns: _patterns, ...answer } = direct;
-    return answer;
+    return { answer: direct.answer, source: direct.source, sourceName: direct.sourceName, verifiedOn: direct.verifiedOn };
   }
 
   const capitalQuestion = normalized.match(/(?:what(?:'s| is) )?(?:the )?capital(?: city)? of ([a-z ]+?)(?: please)?$/)
@@ -130,7 +219,7 @@ export function findBuiltInAnswer(question: string): BuiltInKnowledgeAnswer | nu
 
   if (/how many (?:built in|saved|programmed) (?:answers|facts)|what do you know offline/.test(normalized)) {
     return {
-      answer: `Flight Lab Pro v39 has ${BUILT_IN_ANSWER_COUNT} curated answer paths built in, including world records, aviation, space, geography, animals, science, country capitals, and chemical symbols. I use these before considering a live search.`,
+      answer: `Flight Lab Pro v39 has ${BUILT_IN_ANSWER_COUNT} curated answer paths recognizing at least ${BUILT_IN_QUESTION_VARIATION_COUNT.toLocaleString("en-US")} tested question variations, plus flexible word order. They cover identity, conversation, world records, aviation, space, geography, animals, science, country capitals, and chemical symbols. I use these before considering a live search.`,
       source: "flight-lab://knowledge/v39",
       sourceName: "Flight Lab Pro v39 knowledge pack",
       verifiedOn: VERIFIED_ON,

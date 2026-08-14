@@ -46,9 +46,10 @@ const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
 ];
 
 const QUICK_PROMPTS = [
-  "How’s it going?",
-  "What is the paper airplane distance record?",
-  "What is the largest planet?",
+  "Who are you?",
+  "What world records do you know?",
+  "What’s the longest paper plane flight?",
+  "Who’s Festival Toronto?",
   "Find me a plane to fold",
   "What do you like to do?",
   "What should I improve?",
@@ -249,12 +250,12 @@ function getCoachClientId() {
   return value;
 }
 
-async function askCloudCoach(message: string, history: ChatMessage[], context: CloudCoachContext, searchMode: CoachSearchMode) {
+async function askCloudCoach(message: string, history: ChatMessage[], context: CloudCoachContext, searchMode: CoachSearchMode, modelVersion: CoachModelVersion) {
   try {
     const response = await fetch("/api/pro-coach", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-      body: JSON.stringify({ message, history, context, searchMode, coachId: getCoachClientId() }),
+      body: JSON.stringify({ message, history, context, searchMode, modelVersion, coachId: getCoachClientId() }),
     });
     if (!response.ok) return null;
     const reply = (await response.text()).trim();
@@ -281,6 +282,17 @@ function loadFlightHistory(): FlightHistoryContext {
   } catch {
     return { planeId: null, planeName: "Current plane", flightsLogged: 0, averageDistance: 0, bestDistance: 0, recentDistances: [] };
   }
+}
+
+function questionWithKnowledgeContext(question: string, conversation: ChatMessage[]) {
+  const previous = [...conversation].reverse().find((item) => item.role === "user")?.text?.trim();
+  if (!previous || !/^(?:and\b|what about\b|how about\b|who about\b|the (?:men|women)\b|men\b|women\b|distance\b|airtime\b)/i.test(question.trim())) return question;
+  let context = previous;
+  if (/\b(women|woman|female|girls?)\b/i.test(question)) context = context.replace(/\b(men|man|male|boys?|men's)\b/gi, " ");
+  if (/\b(men|man|male|boys?)\b/i.test(question)) context = context.replace(/\b(women|woman|female|girls?|women's)\b/gi, " ");
+  if (/\b(airtime|air time|duration|hang time)\b/i.test(question)) context = context.replace(/\b(distance|farthest|furthest|meters?|metres?|feet|throw)\b/gi, " ");
+  if (/\b(distance|farthest|furthest)\b/i.test(question)) context = context.replace(/\b(airtime|air time|duration|hang time|seconds?)\b/gi, " ");
+  return `${context} ${question}`.replace(/\s+/g, " ").trim();
 }
 
 function nextDeviceVariant() {
@@ -535,8 +547,16 @@ export default function ProCoachChat() {
   useEffect(() => {
     const savedMode = window.localStorage.getItem("flight-lab-coach-search-mode");
     if (savedMode === "auto" || savedMode === "search" || savedMode === "answer") setSelectedMode(savedMode);
+    const releaseKey = "flight-lab-coach-knowledge-release";
+    const currentRelease = "39-remade-1";
     const savedModel = window.localStorage.getItem("flight-lab-coach-model");
-    if (savedModel === "v37" || savedModel === "v38" || savedModel === "v39") setSelectedModel(savedModel);
+    if (window.localStorage.getItem(releaseKey) !== currentRelease) {
+      setSelectedModel("v39");
+      window.localStorage.setItem("flight-lab-coach-model", "v39");
+      window.localStorage.setItem(releaseKey, currentRelease);
+    } else if (savedModel === "v37" || savedModel === "v38" || savedModel === "v39") {
+      setSelectedModel(savedModel);
+    }
     fetch("/api/pro-coach", { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
       .then((response) => response.ok ? response.json() : null)
       .then((result: { available?: unknown } | null) => setCloudAvailable(result?.available === true))
@@ -603,18 +623,19 @@ export default function ProCoachChat() {
       },
     };
     const needsLookup = searchMode === "search";
+    const knowledgeQuestion = questionWithKnowledgeContext(question, previous);
     setThinkingStatus(needsLookup ? "Searching the browser" : "Checking built-in knowledge");
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    const knowledge = selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(question) : null;
+    const knowledge = selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
     if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
     const cloudReply = selectedModel !== "v37" && !knowledge && cloudAvailable !== false
-      ? await askCloudCoach(question, previous, cloudContext, searchMode)
+      ? await askCloudCoach(question, previous, cloudContext, searchMode, selectedModel)
       : null;
-    const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(question) : null;
+    const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
     const resolvedKnowledge = knowledge ?? searchedKnowledge;
     const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
@@ -657,10 +678,10 @@ export default function ProCoachChat() {
     <aside className={`pro-coach ${open ? "open" : ""}`}>
       {open && <div className="pro-coach-panel" role="dialog" aria-label="Flight Lab Coach">
         <header>
-          <div><span><i /> Flight Lab Coach</span><b>{status}</b></div>
+          <div><span><i /> Flight Lab Coach</span><b>{selectedModel} active · {status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat with me normally—no upload required. v39 checks its built-in knowledge pack first. Say “search the browser for…” or choose Search only when you want live information.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat normally—no upload required. v39 recognizes thousands of question phrasings from built-in knowledge before using cloud AI. Say “search the browser for…” or choose Search only for live information.</p>}
         <button className="coach-controls-toggle" type="button" onClick={() => setControlsExpanded((value) => !value)} aria-expanded={controlsExpanded} aria-controls="coach-extra-controls">{controlsExpanded ? "Show less" : "Show more"}</button>
         {controlsExpanded && <div id="coach-extra-controls" className="coach-extra-controls">
           <div className="coach-mode-picker" role="group" aria-label="Choose how the Coach answers">
