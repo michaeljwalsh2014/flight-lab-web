@@ -190,7 +190,7 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /It didn’t listen/);
   assert.match(coach, /Not helpful\?/);
   assert.match(coach, /rememberLesson/);
-  assert.match(coach, /thinkingDelay/);
+  assert.doesNotMatch(coach, /thinkingDelay/);
   assert.match(coach, /thinkingSteps/);
   assert.match(coach, /Checking trusted plane sources/);
   assert.match(coach, /Preparing a careful answer/);
@@ -211,7 +211,11 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Searching the browser/);
   assert.match(coach, /explicitlyRequestsLookup/);
   assert.match(coach, /clearlyNeedsFreshInformation/);
-  assert.match(coach, /searchWithCoach/);
+  assert.match(coach, /askCloudCoach/);
+  assert.match(coach, /flightHistory: history/);
+  assert.match(coach, /recentFeedback: lessons\.slice/);
+  assert.match(coach, /cloudReply = await askCloudCoach/);
+  assert.match(coach, /cloudReply\?\.source/);
   assert.match(coach, /questionWithoutMode/);
   assert.match(coach, /Sourced answer/);
   const knowledge = await readFile(new URL("../app/api/knowledge/route.ts", import.meta.url), "utf8");
@@ -226,6 +230,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /\/api\/pro-coach/);
   const coachRoute = await readFile(new URL("../app/api/pro-coach/route.ts", import.meta.url), "utf8");
   assert.match(coachRoute, /connect it to the previous exchange/);
+  assert.match(coachRoute, /value\.slice\(-16\)/);
+  assert.match(coachRoute, /role: "developer"/);
+  assert.match(coachRoute, /recent user feedback/);
   assert.match(coachRoute, /type: "web_search"/);
   assert.match(coachRoute, /tool_choice: "required"/);
   assert.match(coachRoute, /web_search_call\.action\.sources/);

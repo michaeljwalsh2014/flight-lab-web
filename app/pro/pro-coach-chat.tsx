@@ -197,16 +197,33 @@ async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null
   }
 }
 
-async function searchWithCoach(message: string, history: ChatMessage[], context: ProAiContext) {
+type CloudCoachContext = ProAiContext & {
+  flightHistory: FlightHistoryContext;
+  preferences: {
+    recentFeedback: Array<Pick<CoachLesson, "reason" | "cue">>;
+  };
+};
+
+function getCoachClientId() {
+  const key = "flight-lab-pro-coach-id";
+  let value = window.localStorage.getItem(key);
+  if (!value) {
+    value = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(key, value);
+  }
+  return value;
+}
+
+async function askCloudCoach(message: string, history: ChatMessage[], context: CloudCoachContext, searchMode: CoachSearchMode) {
   try {
     const response = await fetch("/api/pro-coach", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-      body: JSON.stringify({ message, history, context, searchMode: "search", coachId: getScanClientId() }),
+      body: JSON.stringify({ message, history, context, searchMode, coachId: getCoachClientId() }),
     });
     if (!response.ok) return null;
     const reply = (await response.text()).trim();
-    return reply ? { text: reply, searched: response.headers.get("X-Flight-Lab-Source") === "web" } : null;
+    return reply ? { text: reply, source: response.headers.get("X-Flight-Lab-Source") === "web" ? "web" as const : "cloud" as const } : null;
   } catch {
     return null;
   }
@@ -246,15 +263,6 @@ function isFrustrated(message: string) {
   const text = message.toLowerCase();
   return /\b(you('| a)?re|you are|that (answer|reply)|this (answer|reply)|your answer|coach).{0,28}\b(stupid|dumb|bad|useless|terrible|wrong|annoying)\b/.test(text)
     || /\b(didn'?t listen|not listening|not helpful|stop repeating|that made no sense)\b/.test(text);
-}
-
-function thinkingDelay(message: string, hasEvidence: boolean) {
-  if (isFrustrated(message) || /^(hi|hey|hello|thanks|bye)[!. ]*$/i.test(message)) return 900;
-  if (planeDiscoveryReply(message)) return 5200;
-  if (arithmeticReply(message)) return 3600;
-  if (shouldLookUpKnowledge(message)) return 5200;
-  if (hasEvidence || /turn|dive|stall|wobble|distance|improve|test|flight|wing/i.test(message)) return 5000;
-  return 4400;
 }
 
 function thinkingLabel(message: string, hasEvidence: boolean) {
@@ -634,22 +642,23 @@ export default function ProCoachChat() {
     const clean = text.trim().slice(0, 600);
     if (!clean || sending) return;
     const userMessage: ChatMessage = { role: "user", text: clean };
-    const previous = messages.slice(-10);
+    const previous = messages.slice(-16);
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setSending(true);
     const steps = thinkingSteps(clean, hasAnalysis);
-    const delay = thinkingDelay(clean, hasAnalysis);
     setThinkingStatus(steps[0]);
-    if (delay >= 3000) {
-      window.setTimeout(() => setThinkingStatus(steps[1]), Math.min(1800, delay * .38));
-      window.setTimeout(() => setThinkingStatus(steps[2]), Math.min(3600, delay * .72));
-    }
     const history = loadFlightHistory();
     const searchMode = selectedMode === "auto" ? coachSearchMode(clean) : selectedMode;
     const question = questionWithoutMode(clean, searchMode);
-    const webReply = planeDiscoveryReply(question);
-    const reply = deviceReply(question, context, history, previous, lessons);
+    const fallbackReply = deviceReply(question, context, history, previous, lessons);
+    const cloudContext: CloudCoachContext = {
+      ...context,
+      flightHistory: history,
+      preferences: {
+        recentFeedback: lessons.slice(-12).map(({ reason, cue }) => ({ reason, cue })),
+      },
+    };
     const needsLookup = searchMode === "search";
     setThinkingStatus(needsLookup ? "Searching the browser" : hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
     if (isFrustrated(clean)) {
@@ -657,20 +666,13 @@ export default function ProCoachChat() {
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    if (needsLookup) {
-      const searched = await searchWithCoach(question, previous, context);
-      const knowledge = searched ? null : await lookUpKnowledge(question);
-      const finalReply = searched?.text ?? (knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : reply);
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: searched?.searched || knowledge ? "web" : "device", text: finalReply }]);
-      setSending(false);
-      if (speakReply && voiceActiveRef.current) speak(searched?.text ?? knowledge?.answer ?? reply);
-      return;
-    }
-    window.setTimeout(() => {
-      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source: webReply ? "web" : "device", text: reply }]);
-      setSending(false);
-      if (speakReply && voiceActiveRef.current) speak(reply);
-    }, delay);
+    const cloudReply = await askCloudCoach(question, previous, cloudContext, searchMode);
+    const knowledge = needsLookup && !cloudReply ? await lookUpKnowledge(question) : null;
+    const finalReply = cloudReply?.text ?? (knowledge ? `${knowledge.answer}\n\nSource: ${knowledge.sourceName}\n${knowledge.source}` : fallbackReply);
+    const source: ChatMessage["source"] = cloudReply?.source ?? (knowledge ? "web" : "device");
+    setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
+    setSending(false);
+    if (speakReply && voiceActiveRef.current) speak(cloudReply?.text ?? knowledge?.answer ?? fallbackReply);
   }
 
   function requestRepair(reply: string, index: number) {
