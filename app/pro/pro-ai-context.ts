@@ -55,6 +55,10 @@ export type ProAiContext = {
   plane?: PlaneCoachContext;
   flight?: FlightTrackerContext;
   coachMemory?: CoachTestMemory[];
+  videoInspection?: {
+    canReview: boolean; summary: string; observations: string[];
+    uncertainties: string[]; nextTest: string; sampledFrames: number;
+  } | null;
 };
 
 export const PRO_AI_CONTEXT_EVENT = "flight-lab-pro-ai-context";

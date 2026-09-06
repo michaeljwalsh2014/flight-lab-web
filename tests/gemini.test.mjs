@@ -18,7 +18,7 @@ function loadRoutes({ fetch, env = { GEMINI_API_KEY: "test-secret" }, owner = tr
     new Function("require", "exports", "process", "fetch", compiled)(load, exports, { env }, fetch);
     return exports;
   }
-  return { scan: load("@/app/api/pro-scan/route"), coach: load("@/app/api/pro-coach/route"), gemini: load("@/app/gemini-server"), models: load("@/app/pro/model-version") };
+  return { video: load("@/app/api/pro-video/route"), scan: load("@/app/api/pro-scan/route"), coach: load("@/app/api/pro-coach/route"), gemini: load("@/app/gemini-server"), models: load("@/app/pro/model-version") };
 }
 const views = ["top", "nose", "left", "right", "underside", "tail"];
 const images = Object.fromEntries(views.map((view) => [view, "data:image/png;base64,aGVsbG8="]));
@@ -58,11 +58,62 @@ test("unauthorized and incomplete scans cannot call the paid provider", async ()
 
 test("invalid or truncated Gemini reports fail cleanly without exposing the key", async () => {
   for (const upstream of [completion(JSON.stringify({ ...analysis, symmetryScore: 1000 })), completion("partial", "MAX_TOKENS"), new Response("test-secret", { status: 429 })]) {
-    const { scan } = loadRoutes({ fetch: async () => upstream });
+    const { scan } = loadRoutes({ fetch: async () => upstream.clone() });
     const response = await scan.POST(request({ coachId: "scan-test-004", images }));
-    assert.equal(response.status, 502);
-    assert.equal(await response.text(), JSON.stringify({ error: "vision_unavailable" }));
+    assert.equal(response.status, upstream.status === 429 ? 429 : 502);
+    const failure = await response.json();
+    assert.ok(failure.message);
+    assert.doesNotMatch(JSON.stringify(failure), /test-secret|Gemini/);
   }
+});
+
+test("busy and timed-out requests use a backup; quota errors do not retry", async () => {
+  for (const timeout of [false, true]) {
+    const calls = [];
+    const { gemini } = loadRoutes({ fetch: async (url) => {
+      calls.push(url);
+      if (calls.length === 1) {
+        if (timeout) throw new DOMException("Timeout", "TimeoutError");
+        return new Response("busy", { status: 503 });
+      }
+      return completion("A complete answer.");
+    } });
+    assert.deepEqual(await gemini.generateGeminiResult({ instructions: "Answer", contents: [] }), { text: "A complete answer.", model: "gemini-3.1-flash-lite" });
+    assert.equal(calls.length, 2);
+    assert.match(calls[0], /gemini-3.5-flash:/);
+    assert.match(calls[1], /gemini-3.1-flash-lite:/);
+  }
+  let count = 0;
+  const { coach } = loadRoutes({ fetch: async () => { count++; return new Response("secret", { status: 429 }); } });
+  const response = await coach.POST(request({ coachId: "quota-test-001", message: "Find a record", searchMode: "search" }));
+  assert.equal(response.status, 429);
+  assert.match((await response.json()).message, /Choose Answer/);
+  assert.equal(count, 1);
+});
+
+test("video review sends chronological real frames and rejects invalid or unauthorized requests", async () => {
+  const frames = [0, 1, 2, 3].map((time) => ({ time, image: images.top }));
+  const review = { canReview: false, summary: "No motion evidence.", observations: ["Identical images."], uncertainties: ["Flight is not visible."], nextTest: "Film a complete throw." };
+  let count = 0;
+  const { video } = loadRoutes({ fetch: async (_url, init) => {
+    count++;
+    const body = JSON.parse(init.body);
+    const parts = body.contents[0].parts;
+    assert.equal(parts.filter((p) => p.inlineData).length, 4);
+    assert.deepEqual(parts.filter((p) => p.inlineData).map((p) => p.inlineData.data), frames.map(() => "aGVsbG8="));
+    assert.match(parts[1].text, /0.000 seconds/);
+    assert.match(parts[7].text, /3.000 seconds/);
+    assert.match(body.systemInstruction.parts[0].text, /Never invent physical distance/);
+    return completion(JSON.stringify(review));
+  } });
+  const body = { duration: 4, coachId: "video-test-001", frames };
+  assert.deepEqual((await (await video.POST(request(body))).json()).analysis, review);
+  for (const invalid of [{ duration: 46 }, { frames: [] }, { frames: [{ ...frames[0], time: -.5 }, ...frames.slice(1)] }, { modelVersion: "v39" }]) {
+    assert.equal((await video.POST(request({ ...body, ...invalid }))).status, 400);
+  }
+  const denied = loadRoutes({ owner: false, fetch: async () => { throw new Error("must not call"); } });
+  assert.equal((await denied.video.POST(request(body))).status, 403);
+  assert.equal(count, 1);
 });
 
 test("text Coach uses Gemini, passes conversation history and evidence, and omits thinking", async () => {

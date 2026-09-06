@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export type CoachModelVersion = "v38" | "v39" | "v40";
 export const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
-  { model: "v40", label: "v40 Gemini", detail: "Photo AI + Coach" },
+  { model: "v40", label: "v40 Advanced", detail: "Photos, video + Coach" },
   { model: "v39", label: "v39 Knowledge", detail: "Built-in facts first" },
   { model: "v38", label: "v38 Improved", detail: "Context + memory" },
 ];

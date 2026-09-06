@@ -8,7 +8,7 @@ type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
   text: string;
-  source?: "cloud" | "device" | "web" | "built-in";
+  source?: "cloud" | "device" | "web" | "built-in" | "error";
 };
 
 type FlightHistoryContext = {
@@ -245,19 +245,23 @@ function getCoachClientId() {
   return value;
 }
 
-async function askCloudCoach(message: string, history: ChatMessage[], context: CloudCoachContext, searchMode: CoachSearchMode, modelVersion: CoachModelVersion) {
+async function askCloudCoach(message: string, history: ChatMessage[], context: CloudCoachContext, searchMode: CoachSearchMode, modelVersion: CoachModelVersion): Promise<{ text: string; source: NonNullable<ChatMessage["source"]>; retryable?: boolean } | null> {
   try {
     const response = await fetch("/api/pro-coach", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-      body: JSON.stringify({ message, history, context, searchMode, modelVersion, coachId: getCoachClientId() }),
+      body: JSON.stringify({ message, history: history.filter((item) => item.source !== "error"), context, searchMode, modelVersion, coachId: getCoachClientId() }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (modelVersion !== "v40") return null;
+      const failure = await response.json().catch(() => null) as { message?: string; retryable?: boolean } | null;
+      return { text: failure?.message ?? (response.status === 403 ? "Your Pro session has expired. Refresh the page and sign in again." : "The AI connection is temporarily unavailable. Please try again."), source: "error", retryable: failure?.retryable ?? response.status >= 500 };
+    }
     const reply = (await response.text()).trim();
     const replySource = response.headers.get("X-Flight-Lab-Source");
-    return reply ? { text: reply, source: replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : null;
+    return reply ? { text: reply, source: replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : modelVersion === "v40" ? { text: "The AI returned an empty response. Please try again.", source: "error", retryable: true } : null;
   } catch {
-    return null;
+    return modelVersion === "v40" ? { text: "The connection was interrupted. Check your internet connection and try again.", source: "error", retryable: true } : null;
   }
 }
 function loadFlightHistory(): FlightHistoryContext {
@@ -519,6 +523,7 @@ export default function ProCoachChat() {
   const [controlsExpanded, setControlsExpanded] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [selectedMode, setSelectedMode] = useState<CoachSearchMode>("auto");
   const [selectedModel, chooseModel] = useModelVersion();
@@ -596,6 +601,7 @@ export default function ProCoachChat() {
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setSending(true);
+    setRetryQuestion(null);
     const steps = thinkingSteps(clean, hasAnalysis);
     setThinkingStatus(steps[0]);
     const history = loadFlightHistory();
@@ -619,7 +625,7 @@ export default function ProCoachChat() {
     }
     const knowledge = selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
     if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const cloudReply = !knowledge && cloudAvailable !== false
+    const cloudReply = !knowledge && (selectedModel === "v40" || cloudAvailable !== false)
       ? await askCloudCoach(question, previous, cloudContext, searchMode, selectedModel)
       : null;
     const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
@@ -628,9 +634,10 @@ export default function ProCoachChat() {
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
       : "";
     const finalReply = cloudReply?.text ?? (selectedModel === "v40"
-      ? "Gemini could not answer this request. Please try again, or switch to v39 Knowledge for built-in help."
+      ? "Advanced AI could not answer this request. Please try again, or switch to v39 Knowledge for built-in help."
       : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
     const source: ChatMessage["source"] = cloudReply?.source ?? (selectedModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
+    if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
     setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
     setSending(false);
   }
@@ -678,10 +685,10 @@ export default function ProCoachChat() {
             <div>{COACH_MODE_OPTIONS.map((option) => <button type="button" key={option.mode} className={selectedMode === option.mode ? "selected" : ""} aria-pressed={selectedMode === option.mode} onClick={() => chooseMode(option.mode)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
           </div>
           <div className="coach-mode-picker coach-model-picker" role="group" aria-label="Choose the Coach model version">
-            <span>Photo + Coach model</span>
+            <span>AI version</span>
             <div>{COACH_MODEL_OPTIONS.map((option) => <button type="button" key={option.model} className={selectedModel === option.model ? "selected" : ""} aria-pressed={selectedModel === option.model} onClick={() => chooseModel(option.model)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
             <small>{selectedModel === "v40"
-              ? cloudAvailable ? "Gemini is connected for photo analysis and conversation." : cloudAvailable === false ? "Gemini is unavailable. Try again shortly." : "Checking Gemini…"
+              ? cloudAvailable ? "Advanced AI is configured for photos, video and conversation." : cloudAvailable === false ? "Advanced AI is unavailable. Try again shortly." : "Checking Advanced AI…"
               : selectedModel === "v39"
               ? cloudAvailable === false ? "v39 built-in knowledge is ready. Cloud AI is optional." : cloudAvailable ? "v39 knowledge + cloud AI connected." : "v39 built-in knowledge is ready."
               : selectedModel === "v38"
@@ -692,6 +699,7 @@ export default function ProCoachChat() {
             {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => askCoach(prompt)}>{prompt}</button>)}
           </div>
         </div>}
+        {retryQuestion && <button className="coach-controls-toggle" type="button" disabled={sending} onClick={() => askCoach(retryQuestion)}>Try again</button>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
             {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Live sourced answer" : message.source === "built-in" ? "Flight Lab Coach · Built-in knowledge" : "Flight Lab Coach"}</small>}

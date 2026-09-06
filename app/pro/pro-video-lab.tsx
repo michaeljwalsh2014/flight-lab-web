@@ -1,8 +1,9 @@
 "use client";
 
 import { ChangeEvent, PointerEvent as ReactPointerEvent, WheelEvent, useEffect, useMemo, useRef, useState } from "react";
-import { publishProAiContext } from "./pro-ai-context";
+import { publishProAiContext, type ProAiContext } from "./pro-ai-context";
 import { AnalysisLoader } from "./pro-ui";
+import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
 type TrackPoint = { x: number; y: number; time: number; confidence: number };
 type Candidate = { x: number; y: number; area: number; energy: number; frame: number; time: number };
@@ -19,6 +20,35 @@ type VideoReport = {
   sampledFrames: number;
 };
 type ViewMode = "3d" | "side" | "top";
+type VideoInspection = NonNullable<ProAiContext["videoInspection"]>;
+
+async function sampleVideoForReview(url: string) {
+  const video = document.createElement("video");
+  video.muted = true; video.playsInline = true; video.preload = "auto";
+  video.src = url;
+  try {
+    await waitForVideoEvent(video, "loadedmetadata");
+    if (video.readyState < 2) await waitForVideoEvent(video, "loadeddata");
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration < .5 || duration > 45) throw new Error("Use a clip between half a second and 45 seconds.");
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 800 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser could not prepare video frames.");
+    const frames: Array<{ time: number; image: string }> = [];
+    for (let index = 0; index < 12; index++) {
+      const time = (duration - .025) * index / 11;
+      await seekVideo(video, time);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push({ time, image: canvas.toDataURL("image/jpeg", .72) });
+    }
+    return { duration, frames };
+  } finally {
+    video.removeAttribute("src"); video.load();
+  }
+}
 
 const clampNumber = (value: number, minimum: number, maximum: number) =>
   Math.max(minimum, Math.min(maximum, value));
@@ -601,6 +631,7 @@ function VideoPathReplay({ url, report }: { url: string; report: VideoReport }) 
 }
 
 export default function ProVideoLab({ displayName }: { displayName: string }) {
+  const [selectedModel, chooseModel] = useModelVersion();
   const inputRef = useRef<HTMLInputElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("");
@@ -608,6 +639,16 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [inspection, setInspection] = useState<VideoInspection | null>(null);
+  const reviewGeneration = useRef(0);
+
+  useEffect(() => {
+    reviewGeneration.current++;
+    setInspection(null);
+    publishProAiContext({ videoInspection: null });
+    return () => { reviewGeneration.current++; };
+  }, [videoUrl, selectedModel]);
 
   useEffect(() => () => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -649,25 +690,60 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   }
 
   async function runAnalysis() {
-    if (!videoUrl) return;
+    if (!videoUrl || analyzing) return;
+    const generation = reviewGeneration.current;
+    setAnalyzing(true);
+    setInspection(null);
+    publishProAiContext({ videoInspection: null });
     setError("");
     setReport(null);
     setProgress(1);
     setStage("Preparing the flight");
     try {
-      const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
-        setProgress(nextProgress);
-        setStage(nextStage);
-      });
-      setReport(nextReport);
+      let localError = "";
+      try {
+        const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
+          if (generation !== reviewGeneration.current) return;
+          setProgress(selectedModel === "v40" ? Math.round(nextProgress * .6) : nextProgress);
+          setStage(nextStage);
+        });
+        if (generation !== reviewGeneration.current) return;
+        setReport(nextReport);
+      } catch (failure) {
+        if (selectedModel !== "v40") throw failure;
+        localError = failure instanceof Error ? failure.message : "Local tracking was unavailable.";
+      }
+      if (selectedModel === "v40") {
+        if (generation !== reviewGeneration.current) return;
+        setProgress(65); setStage("Preparing frames for advanced review");
+        const sampled = await sampleVideoForReview(videoUrl);
+        if (generation !== reviewGeneration.current) return;
+        setProgress(80); setStage("Reviewing the visible flight with AI");
+        const storageKey = "flight-lab-pro-coach-id";
+        let coachId = window.localStorage.getItem(storageKey);
+        if (!coachId) { coachId = crypto.randomUUID(); window.localStorage.setItem(storageKey, coachId); }
+        const response = await fetch("/api/pro-video", {
+          method: "POST", headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
+          body: JSON.stringify({ ...sampled, coachId, modelVersion: selectedModel }),
+        });
+        const payload = await response.json() as { analysis?: Omit<VideoInspection, "sampledFrames">; sampledFrames?: number; message?: string };
+        if (generation !== reviewGeneration.current) return;
+        if (!response.ok || !payload.analysis) throw new Error(payload.message || "The video review could not connect. Please try again.");
+        const reviewed = { ...payload.analysis, sampledFrames: payload.sampledFrames ?? sampled.frames.length };
+        setInspection(reviewed);
+        publishProAiContext({ videoInspection: reviewed });
+      }
+      if (localError) setError(`Motion tracking: ${localError} The AI review is shown separately below.`);
+      setProgress(100); setStage("Review complete");
     } catch (analysisError) {
       setError(analysisError instanceof Error ? analysisError.message : "The video could not be analyzed.");
       setProgress(0);
       setStage("");
+    } finally {
+      setAnalyzing(false);
     }
   }
 
-  const analyzing = progress > 0 && progress < 100 && !report;
   const trackQuality = useMemo(() => report ? report.confidence >= 80 ? "High-confidence track" : report.confidence >= 62 ? "Usable track" : "Review uncertain points" : "", [report]);
 
   return (
@@ -679,17 +755,20 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       <div className="pro-video-grid">
         <div className="pro-video-input">
+          <label className="pro-model-field">AI version<select value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select></label>
           <input ref={inputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseVideo} aria-label="Record or choose a flight video" />
           {videoUrl ? <>
             <video src={videoUrl} controls playsInline preload="metadata" aria-label={`Selected flight video: ${videoName}`} />
-            <div className="pro-video-actions"><button type="button" onClick={() => inputRef.current?.click()}>Choose another</button><button type="button" className="primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Tracking…" : "Analyze flight video"}</button></div>
+            <div className="pro-video-actions"><button type="button" disabled={analyzing} onClick={() => inputRef.current?.click()}>Choose another</button><button type="button" className="primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Analyzing…" : "Analyze flight video"}</button></div>
           </> : <button className="pro-video-picker" type="button" onClick={() => inputRef.current?.click()}><span>VIDEO</span><b>Record or choose one complete throw</b><small>Steady camera · contrasting background · launch and landing in frame · under 45 seconds</small></button>}
           {error && <p className="pro-inline-error" role="alert">{error}</p>}
         </div>
-        <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · Your video stays on this device.</p></aside>
+        <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · {selectedModel === "v40" ? "Advanced review sends 12 sampled video frames to cloud AI. Motion tracking runs on this device." : "Your video stays on this device."}</p></aside>
       </div>
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
+
+      {inspection && <section className="pro-video-ai-review" aria-live="polite"><span>v40 Advanced · Video review</span><h3>{inspection.canReview ? "What the flight shows" : "More visual evidence needed"}</h3><p>{inspection.summary}</p><ul>{inspection.observations.map((item) => <li key={item}>{item}</li>)}</ul>{inspection.uncertainties.length > 0 && <p><b>Uncertain:</b> {inspection.uncertainties.join(" ")}</p>}<p><b>Next test:</b> {inspection.nextTest}</p><small>Reviewed {inspection.sampledFrames} sampled frames. This review does not measure physical speed, distance, or true 3D position.</small></section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
         <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>

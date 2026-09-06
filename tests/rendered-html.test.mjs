@@ -224,7 +224,7 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /cloudReply\?\.source/);
   assert.match(coach, /COACH_MODEL_OPTIONS/);
   const modelVersions = await readFile(new URL("../app/pro/model-version.ts", import.meta.url), "utf8");
-  assert.match(modelVersions, /v40 Gemini/);
+  assert.match(modelVersions, /v40 Advanced/);
   assert.match(modelVersions, /v39 Knowledge/);
   assert.match(modelVersions, /v38 Improved/);
   assert.doesNotMatch(modelVersions, /v37 Classic/);
