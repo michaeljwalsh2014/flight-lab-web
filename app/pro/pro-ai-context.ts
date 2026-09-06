@@ -19,7 +19,7 @@ export type PlaneCoachContext = {
   localViewsAnalyzed: number;
   deepInspection: "used" | "unavailable" | "off" | "not-applicable";
   vision?: {
-    source: "gpt-5.6-terra-vision";
+    source: string;
     confidence: number;
     observations: string[];
     issues: string[];

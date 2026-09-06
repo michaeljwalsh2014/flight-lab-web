@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
+import { COACH_MODEL_OPTIONS, useModelVersion, type CoachModelVersion } from "./model-version";
 
 type ChatMessage = {
   id?: string;
@@ -24,7 +25,6 @@ type CoachLesson = { reason: FeedbackReason; cue: string; createdAt: number };
 type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string; verifiedOn?: string; sourceType?: "built-in" };
 type CoachSearchMode = "auto" | "search" | "answer";
-type CoachModelVersion = "v39" | "v38" | "v37";
 
 const COACH_MODE_OPTIONS: Array<{ mode: CoachSearchMode; label: string; detail: string }> = [
   { mode: "auto", label: "Auto", detail: "Coach decides" },
@@ -32,11 +32,6 @@ const COACH_MODE_OPTIONS: Array<{ mode: CoachSearchMode; label: string; detail: 
   { mode: "answer", label: "Answer", detail: "Never search" },
 ];
 
-const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
-  { model: "v39", label: "v39 Knowledge", detail: "Built-in facts first" },
-  { model: "v38", label: "v38 Improved", detail: "Context + memory" },
-  { model: "v37", label: "v37 Classic", detail: "Original behavior" },
-];
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
@@ -348,7 +343,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const arithmetic = arithmeticReply(message);
   if (arithmetic) return arithmetic;
 
-  const discovery = modelVersion !== "v37" ? contextualPlaneRecommendation(message, conversation) ?? planeDiscoveryReply(message) : planeDiscoveryReply(message);
+  const discovery = contextualPlaneRecommendation(message, conversation) ?? planeDiscoveryReply(message);
   if (discovery) return discovery;
 
   if (isFrustrated(message)) {
@@ -526,7 +521,7 @@ export default function ProCoachChat() {
   const [sending, setSending] = useState(false);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [selectedMode, setSelectedMode] = useState<CoachSearchMode>("auto");
-  const [selectedModel, setSelectedModel] = useState<CoachModelVersion>("v39");
+  const [selectedModel, chooseModel] = useModelVersion();
   const [cloudAvailable, setCloudAvailable] = useState<boolean | null>(null);
   const [context, setContext] = useState<ProAiContext>({});
   const [lessons, setLessons] = useState<CoachLesson[]>([]);
@@ -547,31 +542,23 @@ export default function ProCoachChat() {
   useEffect(() => {
     const savedMode = window.localStorage.getItem("flight-lab-coach-search-mode");
     if (savedMode === "auto" || savedMode === "search" || savedMode === "answer") setSelectedMode(savedMode);
-    const releaseKey = "flight-lab-coach-knowledge-release";
-    const currentRelease = "39-remade-1";
-    const savedModel = window.localStorage.getItem("flight-lab-coach-model");
-    if (window.localStorage.getItem(releaseKey) !== currentRelease) {
-      setSelectedModel("v39");
-      window.localStorage.setItem("flight-lab-coach-model", "v39");
-      window.localStorage.setItem(releaseKey, currentRelease);
-    } else if (savedModel === "v37" || savedModel === "v38" || savedModel === "v39") {
-      setSelectedModel(savedModel);
-    }
-    fetch("/api/pro-coach", { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
-      .then((response) => response.ok ? response.json() : null)
-      .then((result: { available?: unknown } | null) => setCloudAvailable(result?.available === true))
-      .catch(() => setCloudAvailable(false));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCloudAvailable(null);
+    fetch(`/api/pro-coach?modelVersion=${selectedModel}`, { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result: { available?: unknown } | null) => { if (active) setCloudAvailable(result?.available === true); })
+      .catch(() => { if (active) setCloudAvailable(false); });
+    return () => { active = false; };
+  }, [selectedModel]);
 
   function chooseMode(mode: CoachSearchMode) {
     setSelectedMode(mode);
     window.localStorage.setItem("flight-lab-coach-search-mode", mode);
   }
 
-  function chooseModel(model: CoachModelVersion) {
-    setSelectedModel(model);
-    window.localStorage.setItem("flight-lab-coach-model", model);
-  }
 
   useEffect(() => {
     try {
@@ -632,7 +619,7 @@ export default function ProCoachChat() {
     }
     const knowledge = selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
     if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const cloudReply = selectedModel !== "v37" && !knowledge && cloudAvailable !== false
+    const cloudReply = !knowledge && cloudAvailable !== false
       ? await askCloudCoach(question, previous, cloudContext, searchMode, selectedModel)
       : null;
     const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
@@ -640,8 +627,10 @@ export default function ProCoachChat() {
     const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
       : "";
-    const finalReply = cloudReply?.text ?? (resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
-    const source: ChatMessage["source"] = cloudReply?.source ?? (resolvedKnowledge ? "built-in" : "device");
+    const finalReply = cloudReply?.text ?? (selectedModel === "v40"
+      ? "Gemini could not answer this request. Please try again, or switch to v39 Knowledge for built-in help."
+      : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
+    const source: ChatMessage["source"] = cloudReply?.source ?? (selectedModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
     setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
     setSending(false);
   }
@@ -689,13 +678,15 @@ export default function ProCoachChat() {
             <div>{COACH_MODE_OPTIONS.map((option) => <button type="button" key={option.mode} className={selectedMode === option.mode ? "selected" : ""} aria-pressed={selectedMode === option.mode} onClick={() => chooseMode(option.mode)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
           </div>
           <div className="coach-mode-picker coach-model-picker" role="group" aria-label="Choose the Coach model version">
-            <span>Coach model</span>
+            <span>Photo + Coach model</span>
             <div>{COACH_MODEL_OPTIONS.map((option) => <button type="button" key={option.model} className={selectedModel === option.model ? "selected" : ""} aria-pressed={selectedModel === option.model} onClick={() => chooseModel(option.model)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
-            <small>{selectedModel === "v39"
+            <small>{selectedModel === "v40"
+              ? cloudAvailable ? "Gemini is connected for photo analysis and conversation." : cloudAvailable === false ? "Gemini is unavailable. Try again shortly." : "Checking Gemini…"
+              : selectedModel === "v39"
               ? cloudAvailable === false ? "v39 built-in knowledge is ready. Cloud AI is optional." : cloudAvailable ? "v39 knowledge + cloud AI connected." : "v39 built-in knowledge is ready."
               : selectedModel === "v38"
                 ? cloudAvailable === false ? "v38 is using its improved on-device context and memory." : cloudAvailable ? "v38 context + cloud AI connected." : "Checking v38 cloud AI…"
-                : "Using the original v37 response behavior."}</small>
+                : "Using v38 Improved."}</small>
           </div>
           <div className="pro-coach-prompts">
             {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => askCoach(prompt)}>{prompt}</button>)}

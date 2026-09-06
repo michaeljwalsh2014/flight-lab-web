@@ -7,6 +7,7 @@ import ProCoachChat from "./pro-coach-chat";
 import { publishProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
+import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
 type PlaneKind = "dart" | "glider" | "stunt" | "custom";
 type ThrowStrength = "gentle" | "normal" | "strong";
@@ -15,6 +16,7 @@ type FlightBehavior = "straight" | "dives" | "stalls" | "turns" | "wobbles" | "s
 type ScanMode = "quick" | "multiview";
 type ScanView = "top" | "nose" | "left" | "right" | "underside" | "tail";
 type VisionScanReport = {
+  model?: string;
   recognizable: boolean;
   confidence: number;
   observations: string[];
@@ -343,6 +345,8 @@ function ProPlaneHangar() {
 }
 
 function ProPlaneCoach() {
+  const [selectedModel, chooseModel] = useModelVersion();
+  const useGemini = selectedModel === "v40";
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingViewRef = useRef<ScanView>("top");
   const [scanMode, setScanMode] = useState<ScanMode>("quick");
@@ -365,6 +369,8 @@ function ProPlaneCoach() {
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
   const capturedViews = scanViews.filter((view) => scanPhotos[view.id]);
   const requiredViews = scanMode === "quick" ? scanViews.slice(0, 1) : scanViews;
+
+  useEffect(() => { setReport(null); setTestOutcome(null); setError(""); }, [selectedModel]);
 
   useEffect(() => {
     const loadSavedData = () => {
@@ -406,7 +412,7 @@ function ProPlaneCoach() {
         localViewsAnalyzed: report.localViewsAnalyzed,
         deepInspection: report.deepInspection,
         vision: report.vision ? {
-          source: "gpt-5.6-terra-vision", confidence: report.vision.confidence,
+          source: report.vision.model ?? "gpt-5.6-terra-vision", confidence: report.vision.confidence,
           observations: report.vision.observations, issues: report.vision.issues,
           uncertainties: report.vision.uncertainties, noseAlignment: report.vision.noseAlignment,
           wingDihedral: report.vision.wingDihedral, foldDefinition: report.vision.foldDefinition,
@@ -456,12 +462,14 @@ function ProPlaneCoach() {
     setError(""); setReport(null); setTestOutcome(null); setProgress(6); setStage("Verifying the airplane");
     try {
       let detections: Awaited<ReturnType<typeof detectObjects>> = [];
-      try { detections = await detectObjects(topPhoto); } catch { /* Local shape analysis remains available. */ }
+      if (!useGemini) {
+        try { detections = await detectObjects(topPhoto); } catch { /* Local shape analysis remains available. */ }
+      }
       const unrelated = detections.find((item) => unrelatedClasses.has(item.class) && item.score >= .58);
-      if (unrelated) throw new Error(`The top view appears to contain a ${unrelated.class}. Use a plain surface with only the airplane in frame.`);
+      if (unrelated && !useGemini) throw new Error(`The top view appears to contain a ${unrelated.class}. Use a plain surface with only the airplane in frame.`);
       setProgress(34); setStage("Measuring wing symmetry and fold geometry");
       const signals = await inspectPlanePhoto(topPhoto);
-      if (!signals.recognizable) throw new Error(signals.reason);
+      if (!signals.recognizable && !useGemini) throw new Error(signals.reason);
       setProgress(52); setStage(scanMode === "multiview" ? "Comparing visible details across six photos" : "Finishing the top-view measurements");
       const localViewSignals = scanMode === "multiview"
         ? (await Promise.all(scanViews.map(async (view) => {
@@ -473,19 +481,23 @@ function ProPlaneCoach() {
         : [signals];
       const localViewsAnalyzed = localViewSignals.length;
       let vision: VisionScanReport | null = null;
-      let deepInspection: PlaneReport["deepInspection"] = scanMode === "quick" ? "not-applicable" : cloudVisionEnabled ? "unavailable" : "off";
-      if (scanMode !== "quick" && cloudVisionEnabled) {
-        setProgress(68); setStage("Running deep AI inspection across all six photos");
+      let deepInspection: PlaneReport["deepInspection"] = useGemini ? "unavailable" : scanMode === "quick" ? "not-applicable" : cloudVisionEnabled ? "unavailable" : "off";
+      if (useGemini || (scanMode !== "quick" && cloudVisionEnabled)) {
+        setProgress(68); setStage(useGemini ? "Gemini is inspecting your photos" : "Running deep AI inspection across all six photos");
         try {
-          const prepared = await Promise.all(scanViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, 760)] as const));
+          const prepared = await Promise.all(requiredViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, useGemini ? 1280 : 760)] as const));
           const response = await fetch("/api/pro-scan", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-            body: JSON.stringify({ images: Object.fromEntries(prepared), coachId: getScanClientId() }),
+            body: JSON.stringify({ images: Object.fromEntries(prepared), coachId: getScanClientId(), modelVersion: selectedModel, scanMode }),
           });
-          const payload = await response.json() as { analysis?: VisionScanReport };
-          if (response.ok && payload.analysis?.recognizable) { vision = payload.analysis; deepInspection = "used"; }
-        } catch { /* The on-device photo measurements remain available. */ }
+          const payload = await response.json() as { analysis?: VisionScanReport; model?: string };
+          if (response.ok && payload.analysis?.recognizable) { vision = { ...payload.analysis, model: payload.model }; deepInspection = "used"; }
+          else if (useGemini) throw new Error(response.ok ? payload.analysis?.inspectionSummary || "Gemini could not identify a paper airplane in these photos." : "Gemini could not analyze these photos. Please try again.");
+        } catch (error) {
+          if (useGemini) throw error;
+          /* Older versions retain their on-device fallback. */
+        }
       }
       const topScore = signals.symmetry * .55 + signals.outline * .3 + signals.foldVisibility * .15;
       const crossViewScore = localViewSignals.reduce((sum, item) => sum + item.symmetry * .45 + item.outline * .35 + item.foldVisibility * .2, 0) / Math.max(1, localViewsAnalyzed);
@@ -507,12 +519,12 @@ function ProPlaneCoach() {
         `Top-view wing symmetry measured ${signals.symmetry}%.`,
         scanMode === "multiview" ? `On-device checks found usable paper-airplane geometry in ${localViewsAnalyzed} of 6 photos and combined those checks with the top-view measurements.` : "This quick check measured only the visible top-view outline, wing balance, and fold contrast.",
         ...(vision?.observations ?? []),
-        deepInspection === "used" ? "Deep Visual Inspection compared nose alignment, both wing angles, underside folds, and tail edges across all six photos." : deepInspection === "unavailable" ? "Deep Visual Inspection could not connect, so no cloud findings were added; the report clearly falls back to on-device photo checks." : scanMode === "multiview" ? "Deep Visual Inspection was off; the photos stayed on this device." : "Hidden and underside folds were not inspected in Quick Check.",
+        deepInspection === "used" ? `${useGemini ? "Gemini" : "Deep Visual Inspection"} inspected ${requiredViews.length === 1 ? "the top photo; hidden and underside folds were not visible" : "nose alignment, both wing angles, underside folds, and tail edges across all six photos"}.` : deepInspection === "unavailable" ? "Deep Visual Inspection could not connect, so no cloud findings were added; the report clearly falls back to on-device photo checks." : scanMode === "multiview" ? "Deep Visual Inspection was off; the photos stayed on this device." : "Hidden and underside folds were not inspected in Quick Check.",
         activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
         `The last reported flight behavior was ${behavior}.`,
       ].slice(0, 9);
-      const headline = vision?.issues[0] ? vision.issues[0] : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
-      const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
+      const headline = vision?.issues[0] ? vision.issues[0] : useGemini ? "Gemini photo inspection complete" : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
+      const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? useGemini ? "Gemini inspected the uploaded images and added its findings for the report and Coach." : "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
       setProgress(89); setStage("Matching this plane with its saved flights");
       await new Promise((resolve) => window.setTimeout(resolve, 180));
       setProgress(99); setStage("Finishing the evidence report");
@@ -533,6 +545,7 @@ function ProPlaneCoach() {
     <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Photo-based plane intelligence</p><h2>Inspect your plane</h2></div><p>Choose a fast one-photo check or add six labeled angles for stronger visual evidence. Flight Lab reports only what the photos actually show.</p></div>
     <div className="pro-plane-grid">
       <div className="pro-upload-panel">
+        <label>Photo + Coach model<select aria-label="Photo and Coach model version" value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select></label>
         <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
         <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
         <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}>Full inspection <small>6 photos</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}>Quick check <small>1 photo</small></button></div>
@@ -540,7 +553,7 @@ function ProPlaneCoach() {
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
         </div>
-        {scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
+        {useGemini ? <p>v40 sends your {scanMode === "quick" ? "top photo" : "six photos"} to Gemini for visual analysis.</p> : scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
         <div className="pro-form-grid">
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
@@ -548,13 +561,14 @@ function ProPlaneCoach() {
           <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
           <label className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
         </div>
-        <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing your plane…" : scanMode !== "quick" ? cloudVisionEnabled ? "Run deep six-photo inspection" : "Analyze six photos on device" : "Run quick one-photo check"}</button>
+        <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing your plane…" : useGemini ? "Analyze photos with Gemini" : scanMode !== "quick" ? cloudVisionEnabled ? "Run deep six-photo inspection" : "Analyze six photos on device" : "Run quick one-photo check"}</button>
         {error && <p className="pro-inline-error" role="alert">{error}</p>}
       </div>
       <div className="pro-result-panel">
         {analyzing ? <AnalysisLoader progress={progress} label={stage} /> : report ? <div className="pro-plane-report" aria-live="polite">
           <div className="pro-report-photos" aria-label={`${report.viewCount} photos used in this analysis`}>{requiredViews.map((view) => scanPhotos[view.id] ? <img key={view.id} src={scanPhotos[view.id]} alt={`${view.label} view used in the analysis`} /> : null)}</div>
           <span>Analysis complete · {report.confidence}% confidence · {report.planeName}</span><h3>{report.headline}</h3>
+          {report.vision?.model?.startsWith("gemini-") && <div><b>Gemini visual analysis</b><p>{report.vision.inspectionSummary}</p>{report.vision.uncertainties.length > 0 && <p>Uncertain: {report.vision.uncertainties.join(" ")}</p>}</div>}
           <div className="pro-range"><small>Estimated next flight</small><b>{report.range}</b></div><p>{report.detail}</p>
           <ul className="pro-evidence-list">{report.evidence.map((item) => <li key={item}>{item}</li>)}</ul>
           <div className="pro-signal-row"><span><b>{report.signals.symmetry}%</b> top symmetry</span><span><b>{report.localViewsAnalyzed}/{report.viewCount}</b> usable views</span><span><b>{report.score}</b> build score</span></div>
@@ -822,6 +836,7 @@ export default function ProDashboard({
   displayName: string;
   sharedPass?: boolean;
 }) {
+  const [selectedModel] = useModelVersion();
   return (
     <main className="pro-dashboard">
       <header className="pro-nav">
@@ -832,7 +847,7 @@ export default function ProDashboard({
 
       <section className="pro-dashboard-hero" id="pro-top">
         <div className="pro-hero-copy">
-          <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active · v39" : "Lifetime Pro active · v39"}</span></div>
+          <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {selectedModel}</span></div>
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">Track the full flight, rate the build, measure with personal calibration, and ask a smarter knowledge-first Coach without unnecessary searches.</p>
