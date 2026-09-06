@@ -131,6 +131,14 @@ function paperAircraftRecord(text: string): BuiltInKnowledgeAnswer | null {
 
 function athleticsRecord(text: string): BuiltInKnowledgeAnswer | null {
   if (!includesAny(text, ["record", "fastest", "highest", "farthest", "furthest"])) return null;
+  if (/\bfastest\b.*\b(?:world|human|person|man|runner)\b|\b(?:world|human|person|man)\b.*\bfastest\b.*\brunner\b/.test(text)) {
+    return {
+      answer: "Usain Bolt is generally called the fastest runner in the world because he holds the men’s 100-meter world record: 9.58 seconds, set in Berlin in 2009. If you meant the women’s record, Florence Griffith-Joyner holds it at 10.49 seconds.",
+      source: FACTS[2].source,
+      sourceName: "World Athletics",
+      verifiedOn: VERIFIED_ON,
+    };
+  }
   const event = /\b100 ?(?:m|meter|metre)s?\b/.test(text) ? "100"
     : /\b200 ?(?:m|meter|metre)s?\b/.test(text) ? "200"
       : /\b400 ?(?:m|meter|metre)s?\b/.test(text) ? "400"

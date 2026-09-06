@@ -961,7 +961,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-dashboard select, .pro-dashboard input:not(.sr-only):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) { height: 52px; min-height: 52px; padding: 0 14px; font-size: 16px; }
 .pro-dashboard button { white-space: normal; overflow-wrap: anywhere; }
 .pro-dashboard .pro-command-button, .pro-dashboard .pro-video-actions button { min-height: 52px; height: auto; padding: 13px 16px; border-radius: 18px; }
-.pro-dashboard .pro-scan-mode button { min-height: 52px; border-radius: 18px; padding: 12px; }
+.pro-dashboard .pro-scan-mode { padding: 0; gap: 12px; border-radius: 0; background: transparent; }
+.pro-dashboard .pro-scan-mode button { min-height: 64px; padding: 13px 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; border: 1px solid rgba(133,181,219,.28); border-radius: 20px; background: rgba(3,16,29,.78); font-size: 14px; line-height: 1.25; text-align: left; text-transform: none; }
+.pro-dashboard .pro-scan-mode button small { font-size: 12px; line-height: 1.25; white-space: nowrap; }
+.pro-dashboard .pro-scan-mode button.selected { border-color: rgba(67,220,255,.62); background: linear-gradient(135deg, rgba(23,105,255,.26), rgba(67,220,255,.08)); }
 .pro-dashboard .pro-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pro-dashboard .pro-coach-plane-bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; }
 .pro-dashboard .pro-coach-plane-bar label { min-width: 0; }

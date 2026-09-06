@@ -1,6 +1,6 @@
 // Server-only: import this module from API routes, never from client components.
 export const GEMINI_MODEL = "gemini-3.5-flash";
-const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+const FALLBACK_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"] as const;
 
 export class AIError extends Error {
   code: string;
@@ -52,7 +52,8 @@ type GeminiOptions = {
 export async function generateGeminiResult(options: GeminiOptions) {
   const key = (process.env.GEMINI_API_KEY ?? "").trim();
   if (!key) throw new AIError("not_configured", 503);
-  for (const [attempt, model] of [GEMINI_MODEL, FALLBACK_MODEL].entries()) {
+  const models = [GEMINI_MODEL, ...FALLBACK_MODELS];
+  for (const [attempt, model] of models.entries()) {
     try {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
@@ -64,7 +65,7 @@ export async function generateGeminiResult(options: GeminiOptions) {
       ...(options.search ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         maxOutputTokens: 4096,
-        thinkingConfig: { thinkingLevel: model === FALLBACK_MODEL ? "minimal" : "low" },
+        thinkingConfig: { thinkingLevel: model === GEMINI_MODEL ? "low" : "minimal" },
         ...(options.schema ? { responseMimeType: "application/json", responseJsonSchema: options.schema } : {}),
       },
     }),
@@ -91,7 +92,7 @@ export async function generateGeminiResult(options: GeminiOptions) {
     } catch (error) {
       const failure = error instanceof AIError ? error : new AIError(error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") ? "timeout" : "unavailable", 502, true);
       console.warn("flight_lab_ai_failure", { code: failure.code, status: failure.status, model, attempt: attempt + 1, search: Boolean(options.search) });
-      if (!failure.retryable || attempt === 1) throw failure;
+      if (!failure.retryable || attempt === models.length - 1) throw failure;
     }
   }
   throw new AIError("unavailable", 502, true);

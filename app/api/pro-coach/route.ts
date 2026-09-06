@@ -38,6 +38,13 @@ function json(body: object, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 }
 
+function reliableAnswer(answer: NonNullable<ReturnType<typeof findBuiltInAnswer>>, model: string) {
+  return new Response(`${answer.answer}\n\nBuilt-in source: ${answer.sourceName}\n${answer.source}\nVerified: ${answer.verifiedOn}`, { headers: {
+    "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, max-age=3600",
+    "X-Flight-Lab-Model": model, "X-Flight-Lab-Source": "built-in",
+  } });
+}
+
 function validSharePath(request: Request) {
   const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
   const suppliedPath = request.headers.get("x-flight-lab-pro-path") ?? "";
@@ -135,21 +142,14 @@ export async function POST(request: Request) {
   const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
   const modelVersion = body.modelVersion === "v40" || body.modelVersion === "v38" ? body.modelVersion : "v39";
   const builtIn = modelVersion === "v39" && searchMode !== "search" ? findBuiltInAnswer(message) : null;
-  if (builtIn) {
-    return new Response(`${builtIn.answer}\n\nBuilt-in source: ${builtIn.sourceName}\n${builtIn.source}\nVerified: ${builtIn.verifiedOn}`, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "private, max-age=3600",
-        "X-Flight-Lab-Model": "v39-knowledge-pack",
-        "X-Flight-Lab-Source": "built-in",
-      },
-    });
-  }
+  if (builtIn) return reliableAnswer(builtIn, "v39-knowledge-pack");
 
   const context = safeContext(body.context);
   const conversation = safeHistory(body.history);
   // Only the explicitly selected v40 uses Gemini; earlier versions keep their provider.
   if (modelVersion === "v40") {
+    const instantAnswer = searchMode !== "search" ? findBuiltInAnswer(message) : null;
+    if (instantAnswer) return reliableAnswer(instantAnswer, "v40-reliable-answer");
     if (!geminiAvailable()) return json({ error: "coach_unavailable" }, 503);
     try {
       const answer = await generateGeminiResult({

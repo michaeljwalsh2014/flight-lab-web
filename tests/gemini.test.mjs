@@ -8,7 +8,6 @@ function loadRoutes({ fetch, env = { GEMINI_API_KEY: "test-secret" }, owner = tr
   function load(name) {
     if (name === "next/server") return { NextResponse: { json: (value, init) => Response.json(value, init) } };
     if (name === "@/app/pro-access") return { getProAccess: async () => ({ user: owner ? { email: "owner@example.com" } : null, isOwner: owner }) };
-    if (name === "@/app/knowledge-base") return { findBuiltInAnswer: () => null };
     if (name === "react") return {};
     if (cache.has(name)) return cache.get(name);
     const file = new URL(`../${name.replace("@/", "")}.ts`, import.meta.url);
@@ -78,10 +77,10 @@ test("busy and timed-out requests use a backup; quota errors do not retry", asyn
       }
       return completion("A complete answer.");
     } });
-    assert.deepEqual(await gemini.generateGeminiResult({ instructions: "Answer", contents: [] }), { text: "A complete answer.", model: "gemini-3.1-flash-lite" });
+    assert.deepEqual(await gemini.generateGeminiResult({ instructions: "Answer", contents: [] }), { text: "A complete answer.", model: "gemini-3.5-flash-lite" });
     assert.equal(calls.length, 2);
     assert.match(calls[0], /gemini-3.5-flash:/);
-    assert.match(calls[1], /gemini-3.1-flash-lite:/);
+    assert.match(calls[1], /gemini-3.5-flash-lite:/);
   }
   let count = 0;
   const { coach } = loadRoutes({ fetch: async () => { count++; return new Response("secret", { status: 429 }); } });
@@ -89,6 +88,16 @@ test("busy and timed-out requests use a backup; quota errors do not retry", asyn
   assert.equal(response.status, 429);
   assert.match((await response.json()).message, /Choose Answer/);
   assert.equal(count, 1);
+});
+
+test("v40 answers a known factual question immediately without exposing a cloud outage", async () => {
+  let count = 0;
+  const { coach } = loadRoutes({ fetch: async () => { count++; return new Response("busy", { status: 503 }); } });
+  const response = await coach.POST(request({ coachId: "runner-test-001", message: "Who's the fastest world runner?", searchMode: "answer" }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-Flight-Lab-Source"), "built-in");
+  assert.match(await response.text(), /Usain Bolt.*9\.58/s);
+  assert.equal(count, 0);
 });
 
 test("video review sends chronological real frames and rejects invalid or unauthorized requests", async () => {
