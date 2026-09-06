@@ -143,6 +143,9 @@ test("keeps Pro mobile layout vertical and uses full-size controls", async () =>
   assert.match(styles, /\.pro-dashboard :is\(\.pro-model-field, \.pro-form-grid\) select \{[^}]*border-radius: 999px !important/);
   assert.match(styles, /\.pro-dashboard \.pro-coach-plane-bar select \{[^}]*border-radius: 999px !important/);
   assert.match(styles, /\.plane-select, \.scanner-controls select \{[^}]*border-radius: 999px/);
+  assert.match(styles, /button \{ border-radius: 18px !important; \}/);
+  assert.match(styles, /\.pro-dashboard button, \.pro-coach button \{ border-radius: 22px !important; \}/);
+  assert.match(styles, /select \{[\s\S]*?appearance: none;[\s\S]*?border-radius: 999px !important;[\s\S]*?background-position: right 18px center;/);
 });
 
 test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", async () => {
