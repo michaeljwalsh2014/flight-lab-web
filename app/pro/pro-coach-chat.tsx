@@ -549,7 +549,7 @@ export default function ProCoachChat() {
     setCloudAvailable(null);
     fetch(`/api/pro-coach?modelVersion=${selectedModel}`, { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
       .then((response) => response.ok ? response.json() : null)
-      .then((result: { available?: unknown } | null) => { if (active) setCloudAvailable(result?.available === true); })
+      .then((result: unknown) => { if (active) setCloudAvailable(Boolean(result && typeof result === "object" && "available" in result && result.available === true)); })
       .catch(() => { if (active) setCloudAvailable(false); });
     return () => { active = false; };
   }, [selectedModel]);
