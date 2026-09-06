@@ -170,6 +170,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /arithmeticReply/);
   assert.match(coach, /one: 1/);
   assert.match(coach, /youtubeSearchUrl/);
+  assert.match(coach, /Recommend a YouTube plane tutorial/);
+  assert.match(coach, /const trustedLinkReply/);
+  assert.match(coach, /!trustedLinkReply && !knowledge/);
   assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
   assert.match(coach, /pairedPlaneRecommendation/);
   assert.match(coach, /youtube\.com\/@walshwonders\/videos/);

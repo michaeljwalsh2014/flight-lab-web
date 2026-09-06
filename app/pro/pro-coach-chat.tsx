@@ -8,7 +8,7 @@ type ChatMessage = {
   id?: string;
   role: "user" | "assistant";
   text: string;
-  source?: "cloud" | "device" | "web" | "built-in" | "error";
+  source?: "cloud" | "device" | "web" | "built-in" | "links" | "error";
 };
 
 type FlightHistoryContext = {
@@ -44,6 +44,7 @@ const QUICK_PROMPTS = [
   "Who are you?",
   "What world records do you know?",
   "What’s the longest paper plane flight?",
+  "Recommend a YouTube plane tutorial",
   "Who’s Festival Toronto?",
   "Find me a plane to fold",
   "What do you like to do?",
@@ -607,7 +608,8 @@ export default function ProCoachChat() {
     const history = loadFlightHistory();
     const searchMode = selectedMode === "auto" ? coachSearchMode(clean) : selectedMode;
     const question = questionWithoutMode(clean, searchMode);
-    const fallbackReply = deviceReply(question, context, history, previous, lessons, selectedModel);
+    const trustedLinkReply = contextualPlaneRecommendation(question, previous) ?? planeDiscoveryReply(question);
+    const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, selectedModel);
     const cloudContext: CloudCoachContext = {
       ...context,
       flightHistory: history,
@@ -623,9 +625,9 @@ export default function ProCoachChat() {
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
       setPendingRepair({ cue, reply: lastReply });
     }
-    const knowledge = selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
+    const knowledge = !trustedLinkReply && selectedModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
     if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const cloudReply = !knowledge && (selectedModel === "v40" || cloudAvailable !== false)
+    const cloudReply = !trustedLinkReply && !knowledge && (selectedModel === "v40" || cloudAvailable !== false)
       ? await askCloudCoach(question, previous, cloudContext, searchMode, selectedModel)
       : null;
     const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
@@ -633,10 +635,10 @@ export default function ProCoachChat() {
     const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
       : "";
-    const finalReply = cloudReply?.text ?? (selectedModel === "v40"
+    const finalReply = trustedLinkReply ?? cloudReply?.text ?? (selectedModel === "v40"
       ? "Advanced AI could not answer this request. Please try again, or switch to v39 Knowledge for built-in help."
       : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
-    const source: ChatMessage["source"] = cloudReply?.source ?? (selectedModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
+    const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (selectedModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
     if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
     setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
     setSending(false);
@@ -702,7 +704,7 @@ export default function ProCoachChat() {
         {retryQuestion && <button className="coach-controls-toggle" type="button" disabled={sending} onClick={() => askCoach(retryQuestion)}>Try again</button>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
-            {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Live sourced answer" : message.source === "built-in" ? "Flight Lab Coach · Built-in knowledge" : "Flight Lab Coach"}</small>}
+            {message.role === "assistant" && <small>{message.source === "web" ? "Flight Lab Coach · Live sourced answer" : message.source === "built-in" ? "Flight Lab Coach · Built-in knowledge" : message.source === "links" ? "Flight Lab Coach · Trusted video links" : "Flight Lab Coach"}</small>}
             <p>{message.text ? messageWithLinks(message.text) : "Thinking…"}</p>
             {message.role === "assistant" && index > 0 && <button className="coach-feedback-button" type="button" onClick={() => requestRepair(message.text, index)}>Not helpful?</button>}
           </div>)}
