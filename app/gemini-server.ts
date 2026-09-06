@@ -47,6 +47,7 @@ type GeminiOptions = {
   contents: GeminiContent[];
   schema?: object;
   search?: boolean;
+  thinkingLevel?: "minimal" | "low" | "medium" | "high" | null;
 };
 
 export async function generateGeminiResult(options: GeminiOptions) {
@@ -65,7 +66,7 @@ export async function generateGeminiResult(options: GeminiOptions) {
       ...(options.search ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         maxOutputTokens: 4096,
-        thinkingConfig: { thinkingLevel: model === GEMINI_MODEL ? "low" : "minimal" },
+        ...(options.thinkingLevel === null ? {} : { thinkingConfig: { thinkingLevel: options.thinkingLevel ?? (model === GEMINI_MODEL ? "low" : "minimal") } }),
         ...(options.schema ? { responseMimeType: "application/json", responseJsonSchema: options.schema } : {}),
       },
     }),

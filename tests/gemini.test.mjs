@@ -130,14 +130,25 @@ test("text Coach uses Gemini, passes conversation history and evidence, and omit
     const body = JSON.parse(init.body);
     assert.equal(body.contents[0].role, "model");
     assert.match(body.contents.at(-1).parts[0].text, /left wing/);
+    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "high");
     return completion("Try one small adjustment.");
   } });
   const status = await coach.GET(new Request("https://flightlab.test/api?modelVersion=v40"));
   assert.equal((await status.json()).typedModel, "gemini-3.5-flash");
-  const response = await coach.POST(request({ coachId: "coach-test-02", message: "What should I try?", history: [{ role: "assistant", text: "Tell me about the plane." }], context: { observation: "left wing" } }));
+  const response = await coach.POST(request({ coachId: "coach-test-02", message: "What should I try?", thinkingMode: "hard", history: [{ role: "assistant", text: "Tell me about the plane." }], context: { observation: "left wing" } }));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash");
   assert.equal(await response.text(), "Try one small adjustment.");
+});
+
+test("Coach Auto lets Gemini choose thinking dynamically", async () => {
+  const { coach } = loadRoutes({ fetch: async (_url, init) => {
+    const body = JSON.parse(init.body);
+    assert.equal(body.generationConfig.thinkingConfig, undefined);
+    return completion("Automatic answer.");
+  } });
+  const response = await coach.POST(request({ coachId: "coach-test-auto", message: "Explain lift", thinkingMode: "auto" }));
+  assert.equal(response.status, 200);
 });
 
 test("existing OpenAI fallback and explicit web search remain available", async () => {

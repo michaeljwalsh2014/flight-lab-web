@@ -174,11 +174,11 @@ export function findBuiltInAnswer(question: string): BuiltInKnowledgeAnswer | nu
   }
 
   if (/\b(?:what (?:version|model) are you|which (?:version|model)|are you version 39)\b/.test(normalized)) {
-    return internalAnswer("You’re talking to Flight Lab Coach version 39. The app still lets you switch to v38 Improved or v37 Classic under Show more.");
+    return internalAnswer("You’re talking to Flight Lab Coach version 39. Use the settings button beside Send to switch between v38 Improved, v39 Knowledge, and v40 Advanced.");
   }
 
   if (/\b(?:what can you do|how can you help|what do you know|tell me about yourself)\b/.test(normalized)) {
-    return internalAnswer("I’m Flight Lab Coach v39. I can answer thousands of recognized question phrasings from my built-in knowledge pack, chat normally, do basic calculations, explain science and aviation, answer saved world-record and reference questions, and coach your paper-airplane tests. For changing facts I can search when you choose Search.");
+    return internalAnswer("I’m Flight Lab Coach v39. I can answer thousands of recognized question phrasings from my built-in knowledge pack, chat normally, do basic calculations, explain science and aviation, answer saved world-record and reference questions, and coach your paper-airplane tests. For changing facts I automatically decide when current information should be checked.");
   }
 
   const paperRecord = paperAircraftRecord(normalized);
