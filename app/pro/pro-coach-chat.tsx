@@ -26,12 +26,6 @@ type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string; verifiedOn?: string; sourceType?: "built-in" };
 type CoachSearchMode = "auto" | "search" | "answer";
 
-const COACH_MODE_OPTIONS: Array<{ mode: CoachSearchMode; label: string; detail: string }> = [
-  { mode: "auto", label: "Auto", detail: "Coach decides" },
-  { mode: "search", label: "Search", detail: "Always look it up" },
-  { mode: "answer", label: "Answer", detail: "Never search" },
-];
-
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "wrong", label: "It was wrong" },
@@ -526,7 +520,6 @@ export default function ProCoachChat() {
   const [sending, setSending] = useState(false);
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
-  const [selectedMode, setSelectedMode] = useState<CoachSearchMode>("auto");
   const [selectedModel, chooseModel] = useModelVersion();
   const [cloudAvailable, setCloudAvailable] = useState<boolean | null>(null);
   const [context, setContext] = useState<ProAiContext>({});
@@ -546,11 +539,6 @@ export default function ProCoachChat() {
   }, []);
 
   useEffect(() => {
-    const savedMode = window.localStorage.getItem("flight-lab-coach-search-mode");
-    if (savedMode === "auto" || savedMode === "search" || savedMode === "answer") setSelectedMode(savedMode);
-  }, []);
-
-  useEffect(() => {
     let active = true;
     setCloudAvailable(null);
     fetch(`/api/pro-coach?modelVersion=${selectedModel}`, { headers: { "X-Flight-Lab-Pro-Path": window.location.pathname } })
@@ -559,12 +547,6 @@ export default function ProCoachChat() {
       .catch(() => { if (active) setCloudAvailable(false); });
     return () => { active = false; };
   }, [selectedModel]);
-
-  function chooseMode(mode: CoachSearchMode) {
-    setSelectedMode(mode);
-    window.localStorage.setItem("flight-lab-coach-search-mode", mode);
-  }
-
 
   useEffect(() => {
     try {
@@ -606,7 +588,7 @@ export default function ProCoachChat() {
     const steps = thinkingSteps(clean, hasAnalysis);
     setThinkingStatus(steps[0]);
     const history = loadFlightHistory();
-    const searchMode = selectedMode === "auto" ? coachSearchMode(clean) : selectedMode;
+    const searchMode = coachSearchMode(clean);
     const question = questionWithoutMode(clean, searchMode);
     const trustedLinkReply = contextualPlaneRecommendation(question, previous) ?? planeDiscoveryReply(question);
     const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, selectedModel);
@@ -679,13 +661,9 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{selectedModel} active · {status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">You can chat normally—no upload required. v39 recognizes thousands of question phrasings from built-in knowledge before using cloud AI. Say “search the browser for…” or choose Search only for live information.</p>}
+        {!hasAnalysis && <p className="pro-coach-context">You can chat normally—no upload required. Coach automatically decides when built-in knowledge is enough and when current information should be checked.</p>}
         <button className="coach-controls-toggle" type="button" onClick={() => setControlsExpanded((value) => !value)} aria-expanded={controlsExpanded} aria-controls="coach-extra-controls">{controlsExpanded ? "Show less" : "Show more"}</button>
         {controlsExpanded && <div id="coach-extra-controls" className="coach-extra-controls">
-          <div className="coach-mode-picker" role="group" aria-label="Choose how the Coach answers">
-            <span>Response mode</span>
-            <div>{COACH_MODE_OPTIONS.map((option) => <button type="button" key={option.mode} className={selectedMode === option.mode ? "selected" : ""} aria-pressed={selectedMode === option.mode} onClick={() => chooseMode(option.mode)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
-          </div>
           <div className="coach-mode-picker coach-model-picker" role="group" aria-label="Choose the Coach model version">
             <span>AI version</span>
             <div>{COACH_MODEL_OPTIONS.map((option) => <button type="button" key={option.model} className={selectedModel === option.model ? "selected" : ""} aria-pressed={selectedModel === option.model} onClick={() => chooseModel(option.model)}><b>{option.label}</b><small>{option.detail}</small></button>)}</div>
