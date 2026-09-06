@@ -976,7 +976,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-dashboard label { gap: 11px; font-size: 14px; line-height: 1.4; }
 .pro-dashboard label > small { font-size: 13px; line-height: 1.5; }
 .pro-dashboard .pro-coach-plane-bar { padding: 18px; gap: 18px; }
-.pro-dashboard .pro-coach-plane-bar select { height: 60px !important; min-height: 60px !important; padding: 0 18px; border-radius: 18px !important; }
+.pro-dashboard .pro-coach-plane-bar select { height: 60px !important; min-height: 60px !important; padding: 0 22px; border-radius: 999px !important; }
 .pro-dashboard .pro-scan-view-grid button b { font-size: 14px; line-height: 1.35; }
 .pro-dashboard .pro-scan-view-grid button small { font-size: 12px; line-height: 1.5; }
 .pro-dashboard :is(.pro-test-feedback, .pro-history-tabs, .path-toolbar, .measure-button-row) button { padding: 14px 16px; border-radius: 20px; line-height: 1.4; }
@@ -984,6 +984,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-dashboard .pro-coach-plane-bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; }
 .pro-dashboard .pro-coach-plane-bar label { min-width: 0; }
 .pro-dashboard .pro-model-field { margin-bottom: 24px; }
+.pro-dashboard :is(.pro-model-field, .pro-form-grid) select { padding-inline: 22px 46px; border-radius: 999px !important; }
+.pro-dashboard .pro-saved-plane { border-radius: 22px; }
+.pro-dashboard .pro-plane-select { border-radius: 17px; }
+.pro-dashboard .pro-active-plane-bar > a { border-radius: 999px; }
+.plane-select, .scanner-controls select { padding-inline: 18px 42px; border-radius: 999px; }
 .pro-dashboard .pro-video-ai-review { margin: 24px 0; padding: 24px; border: 1px solid rgba(133,181,219,.25); border-radius: 24px; background: #0a2138; overflow-wrap: anywhere; }
 .pro-video-ai-review > span { color: var(--lime); font-size: 12px; }
 .pro-video-ai-review p, .pro-video-ai-review li { line-height: 1.6; }
