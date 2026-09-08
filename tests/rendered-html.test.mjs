@@ -158,6 +158,28 @@ test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", 
   assert.match(dashboard, /ProVideoLab/);
 });
 
+test("counts anonymous site visits and shows only the owner a live total", async () => {
+  const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  const tracker = await readFile(new URL("../app/page-view-tracker.tsx", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/views/route.ts", import.meta.url), "utf8");
+  const store = await readFile(new URL("../app/analytics-store.ts", import.meta.url), "utf8");
+  const counter = await readFile(new URL("../app/pro/pro-view-counter.tsx", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  const hosting = await readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../drizzle/0000_real_dakota_north.sql", import.meta.url), "utf8");
+  assert.match(layout, /PageViewTracker/);
+  assert.match(tracker, /sessionStorage/);
+  assert.match(tracker, /fetch\("\/api\/views", \{ method: "POST"/);
+  assert.doesNotMatch(tracker + route + store, /ip address|user-agent|fingerprint|email/i);
+  assert.match(route, /if \(!isOwner\)/);
+  assert.match(store, /total_views = total_views \+ 1/);
+  assert.match(counter, /10_000/);
+  assert.match(counter, /anonymous visits/);
+  assert.match(dashboard, /!sharedPass && <ProViewCounter/);
+  assert.match(hosting, /"d1": "DB"/);
+  assert.match(migration, /CREATE TABLE `site_analytics`/);
+});
+
 test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");

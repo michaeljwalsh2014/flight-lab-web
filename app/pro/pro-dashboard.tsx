@@ -8,6 +8,7 @@ import { publishProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
+import ProViewCounter from "./pro-view-counter";
 
 type PlaneKind = "dart" | "glider" | "stunt" | "custom";
 type ThrowStrength = "gentle" | "normal" | "strong";
@@ -848,6 +849,7 @@ export default function ProDashboard({
       <section className="pro-dashboard-hero" id="pro-top">
         <div className="pro-hero-copy">
           <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {selectedModel}</span></div>
+          {!sharedPass && <ProViewCounter />}
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">Track the full flight, rate the build, measure with personal calibration, and ask a smarter knowledge-first Coach without unnecessary searches.</p>
