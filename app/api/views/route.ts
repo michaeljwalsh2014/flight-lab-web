@@ -12,6 +12,8 @@ export async function POST(request: Request) {
   }
 
   try {
+    const { isOwner } = await getProAccess();
+    if (isOwner) return NextResponse.json({ counted: false, ownerExcluded: true }, { headers: responseHeaders });
     await recordAnonymousView();
     return NextResponse.json({ counted: true }, { headers: responseHeaders });
   } catch {

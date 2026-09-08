@@ -172,6 +172,7 @@ test("counts anonymous site visits and shows only the owner a live total", async
   assert.match(tracker, /fetch\("\/api\/views", \{ method: "POST"/);
   assert.doesNotMatch(tracker + route + store, /ip address|user-agent|fingerprint|email/i);
   assert.match(route, /if \(!isOwner\)/);
+  assert.match(route, /if \(isOwner\).*ownerExcluded: true/);
   assert.match(store, /total_views = total_views \+ 1/);
   assert.match(counter, /10_000/);
   assert.match(counter, /anonymous visits/);
