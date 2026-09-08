@@ -150,8 +150,6 @@ export async function POST(request: Request) {
   const conversation = safeHistory(body.history);
   // Only the explicitly selected v40 uses Gemini; earlier versions keep their provider.
   if (modelVersion === "v40") {
-    const instantAnswer = searchMode !== "search" ? findBuiltInAnswer(message) : null;
-    if (instantAnswer) return reliableAnswer(instantAnswer, "v40-reliable-answer");
     if (!geminiAvailable()) return json({ error: "coach_unavailable" }, 503);
     try {
       const answer = await generateGeminiResult({

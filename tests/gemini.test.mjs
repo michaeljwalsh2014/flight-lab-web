@@ -90,14 +90,18 @@ test("busy and timed-out requests use a backup; quota errors do not retry", asyn
   assert.equal(count, 1);
 });
 
-test("v40 answers a known factual question immediately without exposing a cloud outage", async () => {
+test("v40 always sends factual questions to Gemini instead of the built-in pack", async () => {
   let count = 0;
-  const { coach } = loadRoutes({ fetch: async () => { count++; return new Response("busy", { status: 503 }); } });
-  const response = await coach.POST(request({ coachId: "runner-test-001", message: "Who's the fastest world runner?", searchMode: "answer" }));
+  const { coach } = loadRoutes({ fetch: async (url) => {
+    count++;
+    assert.match(url, /generativelanguage\.googleapis\.com/);
+    return completion("Parker Solar Probe is the fastest human-made object.");
+  } });
+  const response = await coach.POST(request({ coachId: "object-test-001", message: "What's the fastest man-made object?", searchMode: "answer" }));
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("X-Flight-Lab-Source"), "built-in");
-  assert.match(await response.text(), /Usain Bolt.*9\.58/s);
-  assert.equal(count, 0);
+  assert.equal(response.headers.get("X-Flight-Lab-Source"), "cloud");
+  assert.match(await response.text(), /Parker Solar Probe/);
+  assert.equal(count, 1);
 });
 
 test("video review sends chronological real frames and rejects invalid or unauthorized requests", async () => {
@@ -168,7 +172,7 @@ test("only v40 uses Gemini, while v38 and v39 retain their existing provider", a
   assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.model), ["v40", "v39", "v38"]);
   for (const version of ["v38", "v39", "v40"]) assert.equal(models.normalizeModelVersion(version), version);
   assert.equal(models.normalizeModelVersion("v37"), "v38");
-  assert.equal(models.normalizeModelVersion(null), "v39");
+  assert.equal(models.normalizeModelVersion(null), "v40");
   for (const version of ["v38", "v39"]) {
     const status = await coach.GET(new Request(`https://flightlab.test/api?modelVersion=${version}`));
     assert.deepEqual(await status.json(), { available: false, typedModel: "gpt-5.6-terra", voiceModel: "gpt-realtime-2.1" });
