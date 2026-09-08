@@ -333,6 +333,18 @@ test("offers honest one-photo and six-photo inspections and remembers experiment
   assert.match(context, /recommendationId/);
 });
 
+test("lets Pro users record a new video or choose one already in Photos", async () => {
+  const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(videoLab, /recordInputRef/);
+  assert.match(videoLab, /libraryInputRef/);
+  assert.match(videoLab, /capture="environment"/);
+  assert.match(videoLab, /Record a video/);
+  assert.match(videoLab, /Choose from Photos/);
+  assert.match(videoLab, /Use a video you already recorded/);
+  assert.match(styles, /\.pro-video-source-picker/);
+});
+
 test("can select and delete planes without offering individual throw deletion", async () => {
   const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
   assert.match(page, /function deletePlane/);

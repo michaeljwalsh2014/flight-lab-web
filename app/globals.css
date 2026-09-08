@@ -720,6 +720,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-dashboard .pro-video-picker { min-height: 440px; border: 1px dashed rgba(133,181,219,.44); border-radius: 14px; color: white; background: radial-gradient(circle at 50% 42%, rgba(23,105,255,.24), rgba(3,16,29,.82)); }
 .pro-dashboard .pro-video-picker > span { background: rgba(200,243,75,.12); border: 1px solid rgba(200,243,75,.32); color: var(--lime); }
 .pro-dashboard .pro-video-picker small { color: var(--pro-muted); }
+.pro-video-source-picker { min-height: 440px; padding: 34px; display: grid; grid-template-columns: 1fr 1fr; align-content: center; gap: 14px; border: 1px dashed rgba(133,181,219,.44); border-radius: 20px; background: radial-gradient(circle at 50% 35%, rgba(23,105,255,.2), rgba(3,16,29,.82)); }
+.pro-video-source-picker > div { grid-column: 1 / -1; margin-bottom: 12px; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.pro-video-source-picker > div span { color: var(--cyan); font-size: 10px; font-weight: 950; letter-spacing: .14em; text-transform: uppercase; }
+.pro-video-source-picker > div b { color: white; font-size: 27px; letter-spacing: -.035em; }
+.pro-video-source-picker > div small { color: var(--pro-muted); font-size: 12px; line-height: 1.5; }
+.pro-dashboard .pro-video-source-picker > button { min-height: 150px; padding: 20px; display: grid; align-content: center; justify-items: center; gap: 6px; border: 1px solid rgba(133,181,219,.25); border-radius: 20px; color: white; background: rgba(255,255,255,.045); text-align: center; }
+.pro-dashboard .pro-video-source-picker > button:hover, .pro-dashboard .pro-video-source-picker > button:focus-visible { border-color: #ff7a3d; background: rgba(255,122,61,.09); }
+.pro-video-source-picker > button > span { width: 48px; height: 48px; margin-bottom: 5px; display: grid; place-items: center; border-radius: 50%; color: #061321; background: #ff8b50; font-size: 10px; font-weight: 950; letter-spacing: .08em; }
+.pro-video-source-picker > button b { font-size: 15px; }
+.pro-video-source-picker > button small { color: var(--pro-muted); font-size: 11px; line-height: 1.45; }
 .pro-dashboard .pro-video-actions { margin-top: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pro-dashboard .pro-video-actions button, .measure-button-row button, .measure-result button { min-height: 64px; padding: 14px 20px; border: 1px solid var(--pro-line); border-radius: 11px; color: white; background: transparent; font-size: 14px; font-weight: 950; line-height: 1.25; letter-spacing: .04em; text-transform: uppercase; }
 .pro-dashboard .pro-video-actions button.primary, .measure-button-row button.primary { border-color: var(--lime); color: #061321; background: var(--lime); }
@@ -948,6 +958,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pro-test-feedback > span { grid-column: 1 / -1; }
   .pro-loader-copy { width: 100%; }
   .pro-dashboard .pro-video-picker { min-height: 330px; padding: 24px; }
+  .pro-video-source-picker { min-height: 330px; padding: 20px; grid-template-columns: 1fr; }
+  .pro-video-source-picker > div { grid-column: auto; }
   .pro-dashboard .pro-video-actions, .measure-button-row { grid-template-columns: 1fr; }
   .path-toolbar { align-items: flex-start; flex-direction: column; }
   .path-toolbar > div { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); }

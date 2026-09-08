@@ -632,7 +632,8 @@ function VideoPathReplay({ url, report }: { url: string; report: VideoReport }) 
 
 export default function ProVideoLab({ displayName }: { displayName: string }) {
   const [selectedModel, chooseModel] = useModelVersion();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const recordInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoName, setVideoName] = useState("");
   const [report, setReport] = useState<VideoReport | null>(null);
@@ -687,6 +688,17 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
     setStage("");
     setError("");
     event.target.value = "";
+  }
+
+  function changeVideo() {
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoUrl(null);
+    setVideoName("");
+    setReport(null);
+    setInspection(null);
+    setProgress(0);
+    setStage("");
+    setError("");
   }
 
   async function runAnalysis() {
@@ -756,11 +768,16 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
       <div className="pro-video-grid">
         <div className="pro-video-input">
           <label className="pro-model-field">AI version<select value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select></label>
-          <input ref={inputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseVideo} aria-label="Record or choose a flight video" />
+          <input ref={recordInputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseVideo} aria-label="Record a new flight video" />
+          <input ref={libraryInputRef} className="sr-only" type="file" accept="video/*" onChange={chooseVideo} aria-label="Choose an existing flight video from Photos" />
           {videoUrl ? <>
             <video src={videoUrl} controls playsInline preload="metadata" aria-label={`Selected flight video: ${videoName}`} />
-            <div className="pro-video-actions"><button type="button" disabled={analyzing} onClick={() => inputRef.current?.click()}>Choose another</button><button type="button" className="primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Analyzing…" : "Analyze flight video"}</button></div>
-          </> : <button className="pro-video-picker" type="button" onClick={() => inputRef.current?.click()}><span>VIDEO</span><b>Record or choose one complete throw</b><small>Steady camera · contrasting background · launch and landing in frame · under 45 seconds</small></button>}
+            <div className="pro-video-actions"><button type="button" disabled={analyzing} onClick={changeVideo}>Choose a different video</button><button type="button" className="primary" onClick={runAnalysis} disabled={analyzing}>{analyzing ? "Analyzing…" : "Analyze flight video"}</button></div>
+          </> : <div className="pro-video-source-picker">
+            <div><span>Flight video</span><b>Add one complete throw</b><small>Keep the launch and landing in frame · maximum 45 seconds</small></div>
+            <button type="button" onClick={() => recordInputRef.current?.click()}><span>REC</span><b>Record a video</b><small>Open the camera and film a new throw</small></button>
+            <button type="button" onClick={() => libraryInputRef.current?.click()}><span>LIB</span><b>Choose from Photos</b><small>Use a video you already recorded</small></button>
+          </div>}
           {error && <p className="pro-inline-error" role="alert">{error}</p>}
         </div>
         <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · {selectedModel === "v40" ? "Advanced review sends 12 sampled video frames to cloud AI. Motion tracking runs on this device." : "Your video stays on this device."}</p></aside>
