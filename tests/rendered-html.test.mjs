@@ -173,6 +173,8 @@ test("counts anonymous site visits and shows only the owner a live total", async
   assert.doesNotMatch(tracker + route + store, /ip address|user-agent|fingerprint|email/i);
   assert.match(route, /if \(!isOwner\)/);
   assert.match(route, /if \(isOwner\).*ownerExcluded: true/);
+  assert.match(route, /export async function DELETE\(\)/);
+  assert.match(route, /await resetAnonymousViews\(\)/);
   assert.match(store, /total_views = total_views \+ 1/);
   assert.match(counter, /10_000/);
   assert.match(counter, /anonymous visits/);
@@ -200,13 +202,11 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Normal/);
   assert.match(coach, /Think hard/);
   assert.match(coach, /flight-lab-coach-thinking-mode/);
-  assert.match(coach, /What should I improve/);
-  assert.match(coach, /What do you like/);
+  assert.doesNotMatch(coach, /QUICK_PROMPTS|pro-coach-prompts|Who are you\?/);
   assert.match(coach, /Tell me more about that/);
   assert.match(coach, /arithmeticReply/);
   assert.match(coach, /one: 1/);
   assert.match(coach, /youtubeSearchUrl/);
-  assert.match(coach, /Recommend a YouTube plane tutorial/);
   assert.match(coach, /const trustedLinkReply/);
   assert.match(coach, /coachModel === "v40" \? null/);
   assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
