@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readAnonymousViews, recordAnonymousView, resetAnonymousViews } from "@/app/analytics-store";
+import { applyConfiguredViewReset, readAnonymousViews, recordAnonymousView, resetAnonymousViews } from "@/app/analytics-store";
 import { getProAccess } from "@/app/pro-access";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    await applyConfiguredViewReset();
     const { isOwner } = await getProAccess();
     if (isOwner) return NextResponse.json({ counted: false, ownerExcluded: true }, { headers: responseHeaders });
     await recordAnonymousView();
@@ -22,6 +23,12 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  try {
+    await applyConfiguredViewReset();
+  } catch {
+    return NextResponse.json({ error: "analytics_unavailable" }, { status: 503, headers: responseHeaders });
+  }
+
   const { isOwner } = await getProAccess();
   if (!isOwner) return NextResponse.json({ error: "owner_access_required" }, { status: 403, headers: responseHeaders });
 

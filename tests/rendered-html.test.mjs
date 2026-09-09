@@ -175,6 +175,8 @@ test("counts anonymous site visits and shows only the owner a live total", async
   assert.match(route, /if \(isOwner\).*ownerExcluded: true/);
   assert.match(route, /export async function DELETE\(\)/);
   assert.match(route, /await resetAnonymousViews\(\)/);
+  assert.match(route, /applyConfiguredViewReset/);
+  assert.match(store, /VIEW_COUNTER_RESET_GENERATION/);
   assert.match(store, /total_views = total_views \+ 1/);
   assert.match(counter, /10_000/);
   assert.match(counter, /anonymous visits/);

@@ -33,3 +33,32 @@ export async function resetAnonymousViews() {
       updated_at = CURRENT_TIMESTAMP
   `).run();
 }
+
+export async function applyConfiguredViewReset() {
+  const { env } = await import("cloudflare:workers");
+  const generation = Number((env as unknown as { VIEW_COUNTER_RESET_GENERATION?: string }).VIEW_COUNTER_RESET_GENERATION);
+  if (!Number.isSafeInteger(generation) || generation < 1) return false;
+
+  const db = await analyticsDb();
+  const marker = await db.prepare("SELECT total_views FROM site_analytics WHERE id = ?")
+    .bind(2).first<{ total_views: number }>();
+  if ((Number(marker?.total_views) || 0) >= generation) return false;
+
+  await db.batch([
+    db.prepare(`
+      INSERT INTO site_analytics (id, total_views, updated_at)
+      VALUES (1, 0, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        total_views = 0,
+        updated_at = CURRENT_TIMESTAMP
+    `),
+    db.prepare(`
+      INSERT INTO site_analytics (id, total_views, updated_at)
+      VALUES (2, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        total_views = excluded.total_views,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(generation),
+  ]);
+  return true;
+}
