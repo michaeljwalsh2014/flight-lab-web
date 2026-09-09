@@ -157,6 +157,21 @@ test("Coach Auto lets Gemini choose thinking dynamically", async () => {
   assert.equal(response.status, 200);
 });
 
+test("Coach Fast uses the low-latency model with short minimal-thinking replies", async () => {
+  const { coach } = loadRoutes({ fetch: async (url, init) => {
+    const body = JSON.parse(init.body);
+    assert.match(url, /gemini-3\.5-flash-lite:/);
+    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "minimal");
+    assert.equal(body.generationConfig.maxOutputTokens, 768);
+    assert.match(body.systemInstruction.parts[0].text, /no more than four concise sentences/);
+    return completion("A quick answer.");
+  } });
+  const response = await coach.POST(request({ coachId: "coach-test-fast", message: "Explain lift", thinkingMode: "fast" }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash-lite");
+  assert.equal(await response.text(), "A quick answer.");
+});
+
 test("existing OpenAI fallback and explicit web search remain available", async () => {
   const { coach } = loadRoutes({ env: { GEMINI_API_KEY: "test-secret", OPENAI_API_KEY: "existing-secret" }, fetch: async (url) => {
     assert.equal(url, "https://api.openai.com/v1/responses");
