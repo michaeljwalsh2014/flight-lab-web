@@ -1,3 +1,5 @@
+const VIEW_COUNTER_CONTROL_ROW_ID = 2;
+
 async function analyticsDb() {
   const { env } = await import("cloudflare:workers");
   const db = (env as unknown as { DB?: D1Database }).DB;
@@ -41,7 +43,7 @@ export async function applyConfiguredViewReset() {
 
   const db = await analyticsDb();
   const marker = await db.prepare("SELECT total_views FROM site_analytics WHERE id = ?")
-    .bind(2).first<{ total_views: number }>();
+    .bind(VIEW_COUNTER_CONTROL_ROW_ID).first<{ total_views: number }>();
   if ((Number(marker?.total_views) || 0) >= generation) return false;
 
   await db.batch([
@@ -54,11 +56,11 @@ export async function applyConfiguredViewReset() {
     `),
     db.prepare(`
       INSERT INTO site_analytics (id, total_views, updated_at)
-      VALUES (2, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(id) DO UPDATE SET
         total_views = excluded.total_views,
         updated_at = CURRENT_TIMESTAMP
-    `).bind(generation),
+    `).bind(VIEW_COUNTER_CONTROL_ROW_ID, generation),
   ]);
   return true;
 }
