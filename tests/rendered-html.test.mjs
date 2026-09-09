@@ -192,8 +192,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Talk to Coach/);
   assert.doesNotMatch(coach, /Start voice|SpeechRecognition|webkitSpeechRecognition|speechSynthesis/);
   assert.doesNotMatch(coach, /controlsExpanded|Show more|Show less|coach-extra-controls/);
-  assert.match(coach, /coach-settings-button/);
-  assert.match(coach, /coach-settings-menu/);
+  assert.doesNotMatch(coach, /coach-settings-button|coach-settings-menu|settingsOpen/);
+  assert.match(coach, /coach-response-mode/);
+  assert.match(coach, /coach-horizontal-rail/);
   assert.match(coach, /Response mode/);
   assert.match(coach, /type="range"/);
   assert.match(coach, /COACH_LEVEL_OPTIONS/);

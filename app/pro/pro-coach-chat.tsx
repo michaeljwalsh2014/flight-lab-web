@@ -511,7 +511,6 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
 export default function ProCoachChat() {
   const [open, setOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
@@ -694,26 +693,18 @@ export default function ProCoachChat() {
           <div>{FEEDBACK_OPTIONS.map((option) => <button type="button" key={option.reason} onClick={() => rememberLesson(option.reason)}>{option.label}</button>)}</div>
           <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
         </div>}
+        <section className="coach-response-mode" aria-label="Coach response mode">
+          <div className="coach-response-heading"><span>Response mode</span><b>{COACH_LEVEL_OPTIONS[coachLevel].label}<small>{COACH_LEVEL_OPTIONS[coachLevel].detail}</small></b></div>
+          <div className="coach-horizontal-rail">
+            <i className="coach-slider-track" />
+            <i className="coach-slider-fill" style={{ width: `${coachLevel * 25}%` }} />
+            {COACH_LEVEL_OPTIONS.map((option, level) => <i key={option.label} className={`coach-slider-dot ${level <= coachLevel ? "filled" : ""} ${level === coachLevel ? "current" : ""}`} style={{ left: `${level * 25}%` }} />)}
+            <input type="range" min="0" max="4" step="1" value={coachLevel} onChange={(event) => chooseCoachLevel(Number(event.target.value))} aria-label="Coach response mode" aria-valuetext={COACH_LEVEL_OPTIONS[coachLevel].label} />
+          </div>
+          <div className="coach-horizontal-labels" aria-hidden="true">{COACH_LEVEL_OPTIONS.map((option, level) => <b key={option.label} className={level === coachLevel ? "current" : ""}>{option.label}</b>)}</div>
+        </section>
         <form onSubmit={submit}>
-          {settingsOpen && <div className="coach-settings-menu" role="dialog" aria-label="Coach response mode">
-            <section className="coach-thinking-control">
-              <span>Response mode</span>
-              <div className="coach-thinking-slider">
-                <div className="coach-slider-rail">
-                  <i className="coach-slider-track" />
-                  <i className="coach-slider-fill" style={{ height: `${coachLevel * 20}%` }} />
-                  {[...COACH_LEVEL_OPTIONS].reverse().map((option, visualIndex) => {
-                    const level = COACH_LEVEL_OPTIONS.length - 1 - visualIndex;
-                    return <i key={option.label} className={`coach-slider-dot ${level <= coachLevel ? "filled" : ""} ${level === coachLevel ? "current" : ""}`} style={{ top: `${10 + visualIndex * 20}%` }} />;
-                  })}
-                  <input type="range" min="0" max="4" step="1" value={coachLevel} onChange={(event) => chooseCoachLevel(Number(event.target.value))} aria-label="Coach response mode" aria-valuetext={COACH_LEVEL_OPTIONS[coachLevel].label} />
-                </div>
-                <div className="coach-slider-labels" aria-hidden="true">{[...COACH_LEVEL_OPTIONS].reverse().map((option, visualIndex) => <div key={option.label} className={COACH_LEVEL_OPTIONS.length - 1 - visualIndex === coachLevel ? "current" : ""}><b>{option.label}</b><small>{option.detail}</small></div>)}</div>
-              </div>
-            </section>
-          </div>}
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Flight Lab Coach</label>
-          <button className="coach-settings-button" type="button" onClick={() => setSettingsOpen((value) => !value)} aria-expanded={settingsOpen} aria-label={`Coach response mode: ${COACH_LEVEL_OPTIONS[coachLevel].label}`}>☰</button>
           <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything…" />
           <button type="submit" disabled={!input.trim() || sending} aria-label="Send message">➤</button>
         </form>
