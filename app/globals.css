@@ -869,8 +869,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-messages .thinking i:nth-child(2) { animation-delay: .16s; }
 .pro-coach-messages .thinking i:nth-child(3) { animation-delay: .32s; }
 @keyframes coach-pulse { 50% { opacity: .25; transform: translateY(-3px); } }
-.pro-coach-prompts { padding: 0 14px 11px; display: flex; overflow-x: auto; gap: 7px; scrollbar-width: none; }
-.pro-coach-prompts button { min-height: 44px; padding: 8px 12px; flex: 0 0 auto; border: 1px solid rgba(67,220,255,.25); border-radius: 99px; color: #bcd3e7; background: rgba(67,220,255,.055); font-size: 11px; font-weight: 850; }
 .pro-coach-panel form { padding: 12px; position: relative; display: grid; grid-template-columns: 48px 1fr 56px; gap: 9px; border-top: 1px solid rgba(133,181,219,.18); background: #061626; }
 .pro-coach-panel textarea { width: 100%; min-height: 58px; max-height: 120px; padding: 12px 14px; resize: vertical; border: 2px solid rgba(145,185,215,.32); border-radius: 13px; outline: none; color: white; background: #03101d; font: 750 14px/1.4 Arial, Helvetica, sans-serif; }
 .pro-coach-panel textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(67,220,255,.1); }
@@ -982,7 +980,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pro-coach-panel { width: calc(100vw - 20px); height: min(680px, calc(100dvh - 94px)); border-radius: 19px; }
   .pro-coach-launcher { min-width: 176px; min-height: 62px; }
   .pro-coach-panel > header button { width: 52px; min-width: 52px; height: 52px; }
-  .pro-coach-prompts button { min-height: 48px; }
   .pro-coach-voice { grid-template-columns: 44px 1fr; }
   .pro-coach-voice > button, .pro-coach-voice > .voice-actions { grid-column: 1 / -1; width: 100%; }
   .pro-coach-voice > button { min-height: 48px; }

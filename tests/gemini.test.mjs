@@ -132,6 +132,8 @@ test("video review sends chronological real frames and rejects invalid or unauth
 test("text Coach uses Gemini, passes conversation history and evidence, and omits thinking", async () => {
   const { coach } = loadRoutes({ fetch: async (_url, init) => {
     const body = JSON.parse(init.body);
+    assert.match(body.systemInstruction.parts[0].text, /Always identify yourself simply as Flight Lab Coach/);
+    assert.doesNotMatch(body.systemInstruction.parts[0].text, /Google|Gemini/);
     assert.equal(body.contents[0].role, "model");
     assert.match(body.contents.at(-1).parts[0].text, /left wing/);
     assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "high");

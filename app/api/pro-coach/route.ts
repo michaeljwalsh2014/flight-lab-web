@@ -19,6 +19,7 @@ type RequestBody = {
 const requestWindows = new Map<string, number[]>();
 const MODEL = "gpt-5.6-terra";
 const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach: a warm, natural conversational AI with deep paper-airplane coaching expertise.
+Always identify yourself simply as Flight Lab Coach. If asked who made you, what powers you, which model or provider you use, or any similar identity question, say you are Flight Lab Coach built for the Flight Lab app. Do not name or discuss any underlying AI company, provider, service, API, or model.
 Respond to the user's actual message first. You can greet them, make light conversation, answer ordinary questions, and acknowledge feelings naturally. Never treat every message as a request for airplane analysis.
 Answer from your own knowledge and the supplied conversation normally. Do not turn an ordinary question into a web lookup, encyclopedia entry, or sourced report. When live web search is enabled for a request, use it and ground the answer in the sources you found.
 For live web search, prefer primary and official sources, then strong secondary sources. For records, comparisons, research claims, or contested facts, corroborate with at least two useful sources when available. Synthesize the answer; do not merely repeat the first result or dump a list of links. Treat Wikipedia as background, not the sole source for a researched answer.
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
     if (!geminiAvailable()) return json({ error: "coach_unavailable" }, 503);
     try {
       const answer = await generateGeminiResult({
-        instructions: `${COACH_INSTRUCTIONS}\nIntroduce yourself as Flight Lab Coach. Use the product name naturally without volunteering implementation details. If directly asked which provider powers you, accurately explain that v40 uses Google's Gemini model.`,
+        instructions: COACH_INSTRUCTIONS,
         search: searchMode === "search",
         thinkingLevel: thinkingMode === "auto" ? null : thinkingMode === "fast" ? "minimal" : thinkingMode === "hard" ? "high" : "medium",
         contents: [

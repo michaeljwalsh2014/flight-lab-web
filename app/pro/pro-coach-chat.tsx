@@ -43,19 +43,6 @@ const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "too-plane-focused", label: "Too much plane talk" },
 ];
 
-const QUICK_PROMPTS = [
-  "Who are you?",
-  "What world records do you know?",
-  "What’s the longest paper plane flight?",
-  "Recommend a YouTube plane tutorial",
-  "Who’s Festival Toronto?",
-  "Find me a plane to fold",
-  "What do you like to do?",
-  "What should I improve?",
-  "Why did my plane turn?",
-  "What should I test next?",
-];
-
 const TRUSTED_PLANE_LINKS = {
   arrowhead: {
     page: "https://www.foldableflight.com/arrowhead-paper-airplane",
@@ -707,9 +694,6 @@ export default function ProCoachChat() {
           <div>{FEEDBACK_OPTIONS.map((option) => <button type="button" key={option.reason} onClick={() => rememberLesson(option.reason)}>{option.label}</button>)}</div>
           <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
         </div>}
-        <div className="pro-coach-prompts">
-          {QUICK_PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => askCoach(prompt)}>{prompt}</button>)}
-        </div>
         <form onSubmit={submit}>
           {settingsOpen && <div className="coach-settings-menu" role="dialog" aria-label="Coach response mode">
             <section className="coach-thinking-control">
