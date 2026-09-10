@@ -5,7 +5,10 @@ import { geminiAvailable, generateGeminiResult, publicAIError, type GeminiPart }
 export const dynamic = "force-dynamic";
 
 type ScanView = "top" | "nose" | "left" | "right" | "underside" | "tail";
-type RequestBody = { images?: unknown; coachId?: unknown; modelVersion?: unknown; scanMode?: unknown };
+type RequestBody = {
+  images?: unknown; coachId?: unknown; modelVersion?: unknown; scanMode?: unknown;
+  planeStyle?: unknown; ageRange?: unknown; throwStrength?: unknown; lastFlight?: unknown; measuredBest?: unknown;
+};
 
 const MODEL = "gpt-5.6-terra";
 const viewOrder: ScanView[] = ["top", "nose", "left", "right", "underside", "tail"];
@@ -99,7 +102,12 @@ export async function POST(request: Request) {
   if (useGemini) {
     if (!geminiAvailable()) return json({ error: "vision_unavailable" }, 503);
     try {
-      const parts: GeminiPart[] = [{ text: `Inspect these ${requestedViews.length} labeled views of one paper airplane. Compare visible left/right shape, nose alignment, wing dihedral, fold definition, and tail edges. Describe specific visible evidence and uncertainty. Do not estimate flight distance or diagnose flight behavior from appearance alone. If only the top view is provided, do not claim to see the underside or other hidden features.` }];
+      const planeStyle = ["dart", "glider", "stunt", "custom"].includes(String(body.planeStyle)) ? String(body.planeStyle) : "custom";
+      const ageRange = ["not-set", "under-8", "8-10", "11-13", "14-17", "adult"].includes(String(body.ageRange)) ? String(body.ageRange) : "not-set";
+      const throwStrength = ["gentle", "normal", "strong"].includes(String(body.throwStrength)) ? String(body.throwStrength) : "normal";
+      const lastFlight = ["straight", "dives", "stalls", "turns", "wobbles", "spirals"].includes(String(body.lastFlight)) ? String(body.lastFlight) : "straight";
+      const measuredBest = typeof body.measuredBest === "number" && Number.isFinite(body.measuredBest) && body.measuredBest > 0 && body.measuredBest < 1000 ? body.measuredBest : null;
+      const parts: GeminiPart[] = [{ text: `Inspect these ${requestedViews.length} labeled views of one paper airplane. Compare visible left/right shape, nose alignment, wing dihedral, fold definition, and tail edges. Describe specific visible evidence and uncertainty. User-entered test context: plane style ${planeStyle}; age range ${ageRange}; reported throw strength ${throwStrength}; last flight ${lastFlight}; measured best ${measuredBest === null ? "not supplied" : `${measuredBest.toFixed(1)} feet`}. Treat this context as reported information, not visual fact. Use the last-flight result only to prioritize what visible build details to check. Do not estimate flight distance or claim the photos prove the reported behavior or throw strength. If only the top view is provided, do not claim to see the underside or other hidden features.` }];
       for (const view of requestedViews) {
         const [prefix, data] = images[view].split(",");
         parts.push({ text: `${view.toUpperCase()} VIEW` }, { inlineData: { mimeType: prefix.slice(5, prefix.indexOf(";")), data } });

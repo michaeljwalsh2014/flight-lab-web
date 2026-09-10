@@ -14,6 +14,8 @@ export type PlaneCoachContext = {
   outline: number;
   planeStyle: string;
   lastFlight: string;
+  ageRange: string;
+  throwStrength: string;
   scanMode: "quick" | "multiview";
   viewCount: number;
   localViewsAnalyzed: number;
@@ -58,6 +60,8 @@ export type ProAiContext = {
   videoInspection?: {
     canReview: boolean; summary: string; observations: string[];
     uncertainties: string[]; nextTest: string; sampledFrames: number;
+    releaseStrength: "gentle" | "normal" | "strong" | "uncertain";
+    releaseConfidence: number;
   } | null;
 };
 

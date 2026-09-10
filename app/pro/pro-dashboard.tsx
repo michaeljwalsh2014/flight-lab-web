@@ -4,7 +4,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/flight-lab-app";
 import ProCoachChat from "./pro-coach-chat";
-import { publishProAiContext, type CoachTestMemory } from "./pro-ai-context";
+import { publishProAiContext, readProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
@@ -98,10 +98,10 @@ const unrelatedClasses = new Set([
 ]);
 
 const planeBaselines: Record<PlaneKind, number> = {
-  dart: 38,
-  glider: 34,
-  stunt: 27,
-  custom: 31,
+  dart: 44,
+  glider: 40,
+  stunt: 29,
+  custom: 34,
 };
 
 const ageFactors: Record<AgeRange, number> = {
@@ -113,10 +113,11 @@ const ageFactors: Record<AgeRange, number> = {
   adult: 1,
 };
 
-const strengthFactors: Record<ThrowStrength, number> = {
-  gentle: .78,
-  normal: 1,
-  strong: 1.17,
+const strengthFactorsByPlane: Record<PlaneKind, Record<ThrowStrength, number>> = {
+  dart: { gentle: .74, normal: 1, strong: 1.34 },
+  glider: { gentle: 1.08, normal: 1, strong: .82 },
+  stunt: { gentle: .9, normal: 1, strong: .94 },
+  custom: { gentle: .84, normal: 1, strong: 1.12 },
 };
 
 const behaviorFactors: Record<FlightBehavior, number> = {
@@ -408,7 +409,7 @@ function ProPlaneCoach() {
         planeId: report.planeId, planeName: report.planeName, score: report.score, range: report.range,
         confidence: report.confidence, headline: report.headline, nextTest: report.nextTest,
         recommendationId: report.recommendationId, evidence: report.evidence,
-        symmetry: report.signals.symmetry, outline: report.signals.outline, planeStyle: planeKind,
+        symmetry: report.signals.symmetry, outline: report.signals.outline, planeStyle: planeKind, ageRange, throwStrength: strength,
         lastFlight: behavior, scanMode: report.scanMode, viewCount: report.viewCount,
         localViewsAnalyzed: report.localViewsAnalyzed,
         deepInspection: report.deepInspection,
@@ -421,7 +422,7 @@ function ProPlaneCoach() {
       },
       coachMemory: memory,
     });
-  }, [behavior, planeKind, report]);
+  }, [ageRange, behavior, planeKind, report, strength]);
 
   function selectActivePlane(planeId: number) {
     setActivePlaneId(planeId);
@@ -490,7 +491,7 @@ function ProPlaneCoach() {
           const response = await fetch("/api/pro-scan", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
-            body: JSON.stringify({ images: Object.fromEntries(prepared), coachId: getScanClientId(), modelVersion: selectedModel, scanMode }),
+            body: JSON.stringify({ images: Object.fromEntries(prepared), coachId: getScanClientId(), modelVersion: selectedModel, scanMode, planeStyle: planeKind, ageRange, throwStrength: strength, lastFlight: behavior, measuredBest: Number(knownBest) || null }),
           });
           const payload = await response.json() as { analysis?: VisionScanReport; model?: string; message?: string };
           if (response.ok && payload.analysis?.recognizable) { vision = { ...payload.analysis, model: payload.model }; deepInspection = "used"; }
@@ -505,7 +506,12 @@ function ProPlaneCoach() {
       const localScore = scanMode === "multiview" ? topScore * .68 + crossViewScore * .32 : topScore;
       const score = Math.round(Math.max(0, Math.min(100, vision ? localScore * .7 + vision.symmetryScore * .3 : localScore)));
       const measuredBest = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : Number(knownBest);
-      const base = measuredBest > 0 ? measuredBest : planeBaselines[planeKind] * ageFactors[ageRange] * strengthFactors[strength];
+      const videoReview = selectedModel === "v40" ? readProAiContext().videoInspection : null;
+      const videoStrength = videoReview && videoReview.releaseStrength !== "uncertain" && videoReview.releaseConfidence >= 55 ? videoReview.releaseStrength : null;
+      const selectedStrengthFactor = strengthFactorsByPlane[planeKind][strength];
+      const videoStrengthFactor = videoStrength ? strengthFactorsByPlane[planeKind][videoStrength] : selectedStrengthFactor;
+      const releaseFactor = videoStrength ? selectedStrengthFactor * .65 + videoStrengthFactor * .35 : selectedStrengthFactor;
+      const base = measuredBest > 0 ? measuredBest : planeBaselines[planeKind] * ageFactors[ageRange] * releaseFactor;
       const designFactor = .88 + score / 710;
       const center = base * behaviorFactors[behavior] * designFactor;
       const baseUncertainty = measuredBest > 0 ? .12 : ageRange === "not-set" ? .24 : .18;
@@ -523,6 +529,8 @@ function ProPlaneCoach() {
         deepInspection === "used" ? `${useGemini ? "Advanced AI" : "Deep Visual Inspection"} inspected ${requiredViews.length === 1 ? "the top photo; hidden and underside folds were not visible" : "nose alignment, both wing angles, underside folds, and tail edges across all six photos"}.` : deepInspection === "unavailable" ? "Deep Visual Inspection could not connect, so no cloud findings were added; the report clearly falls back to on-device photo checks." : scanMode === "multiview" ? "Deep Visual Inspection was off; the photos stayed on this device." : "Hidden and underside folds were not inspected in Quick Check.",
         activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
         `The last reported flight behavior was ${behavior}.`,
+        `The estimate uses the ${ageRange === "not-set" ? "unspecified" : ageRange} age range and a ${strength} release for this ${planeKind} design.`,
+        ...(videoStrength ? [`The latest video review classified the visible release as ${videoStrength} (${Math.round(videoReview!.releaseConfidence)}% confidence), so it was used as a cross-check.`] : []),
       ].slice(0, 9);
       const headline = vision?.issues[0] ? vision.issues[0] : useGemini ? "Advanced AI photo inspection complete" : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
       const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? useGemini ? "Advanced AI inspected the uploaded images and added its findings for the report and Coach." : "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
@@ -559,7 +567,7 @@ function ProPlaneCoach() {
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
           <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
-          <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select></label>
+          <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select><small>{planeKind === "glider" ? "Gliders usually travel farther with a smooth, gentle release; a hard throw is penalized." : planeKind === "dart" ? "Darts usually gain distance from a firm, level throw." : "Flight Lab adjusts the same strength differently for each plane style."}</small></label>
           <label className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
         </div>
         <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing your plane…" : useGemini ? "Analyze photos with Advanced AI" : scanMode !== "quick" ? cloudVisionEnabled ? "Run deep six-photo inspection" : "Analyze six photos on device" : "Run quick one-photo check"}</button>
@@ -843,7 +851,7 @@ export default function ProDashboard({
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
         <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
-        <a className="back-to-lab" href="/">Free Flight Lab</a>
+        <div className="pro-nav-actions"><a className="pro-measure-shortcut" href="#smart-measure">Measure</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
       <section className="pro-dashboard-hero" id="pro-top">

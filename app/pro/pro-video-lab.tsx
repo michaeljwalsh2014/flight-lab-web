@@ -312,18 +312,15 @@ function cleanTrack(raw: Candidate[], totalSamples: number) {
     pathLength += Math.hypot(smoothed[index].x - smoothed[index - 1].x, smoothed[index].y - smoothed[index - 1].y);
   }
   const straightness = directLength / Math.max(directLength, pathLength);
-  const correction = clampNumber((.78 - straightness) * 1.7, 0, .68);
+  const uncertaintyPenalty = clampNumber((.78 - straightness) * 22, 0, 15);
 
-  return smoothed.map((point, index, all) => {
-    const progress = index / Math.max(1, all.length - 1);
-    const lineX = first.x + directX * progress;
-    const lineY = first.y + directY * progress;
+  return smoothed.map((point) => {
     return {
-      x: point.x * (1 - correction) + lineX * correction,
-      y: point.y * (1 - correction) + lineY * correction,
+      x: point.x,
+      y: point.y,
       time: point.time,
       confidence: Math.round(clampNumber(
-        48 + point.energy / Math.max(1, point.area) * 1.8 + forwardFiltered.length / totalSamples * 38 - correction * 18,
+        48 + point.energy / Math.max(1, point.area) * 1.8 + forwardFiltered.length / totalSamples * 38 - uncertaintyPenalty,
         0,
         97,
       )),
@@ -437,18 +434,15 @@ function projectPath(
   const first = report.points[0];
   const last = report.points.at(-1)!;
   const directX = last.x - first.x;
-  const directY = last.y - first.y;
-  const directLength = Math.max(.001, Math.hypot(directX, directY));
-  const directionX = directX / directLength;
-  const directionY = directY / directLength;
+  const duration = Math.max(.001, last.time - first.time);
+  const horizontalSpan = Math.max(.18, Math.abs(directX));
+  const verticalScale = Math.max(.18, horizontalSpan * .72);
   return report.points.map((point) => {
-    const relativeX = point.x - first.x;
-    const relativeY = point.y - first.y;
-    const along = relativeX * directionX + relativeY * directionY;
-    const lateral = relativeX * -directionY + relativeY * directionX;
-    let x = (along / directLength - .5) * 2.2;
-    let y = (.5 - point.y) * 1.65;
-    let z = lateral / Math.max(.34, directLength) * .82;
+    const progress = clampNumber((point.time - first.time) / duration, 0, 1);
+    const expectedScreenX = first.x + directX * progress;
+    let x = (progress - .5) * 2.2;
+    let y = clampNumber((first.y - point.y) / verticalScale, -1.25, 1.25);
+    let z = (point.x - expectedScreenX) / horizontalSpan * .9;
     const yawX = x * Math.cos(yaw) - z * Math.sin(yaw);
     const yawZ = x * Math.sin(yaw) + z * Math.cos(yaw);
     const pitchY = y * Math.cos(pitch) - yawZ * Math.sin(pitch);
@@ -785,15 +779,15 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
-      {inspection && <section className="pro-video-ai-review" aria-live="polite"><span>v40 Advanced · Video review</span><h3>{inspection.canReview ? "What the flight shows" : "More visual evidence needed"}</h3><p>{inspection.summary}</p><ul>{inspection.observations.map((item) => <li key={item}>{item}</li>)}</ul>{inspection.uncertainties.length > 0 && <p><b>Uncertain:</b> {inspection.uncertainties.join(" ")}</p>}<p><b>Next test:</b> {inspection.nextTest}</p><small>Reviewed {inspection.sampledFrames} sampled frames. This review does not measure physical speed, distance, or true 3D position.</small></section>}
+      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>v40 Advanced · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
         <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>
         <VideoPathReplay url={videoUrl} report={report} />
         <InteractiveFlightPath report={report} />
-        <div className="pro-report-metrics"><article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article><article><span>Relative speed</span><b>{report.relativeSpeed.toFixed(2)} <small>screen/sec</small></b></article></div>
-        <div className="pro-video-observations"><span>On-device coach observations</span><ul>{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></div>
-        <p className="pro-report-note">Tracked from {report.sampledFrames} sampled video frames. Orange uncertainty points deserve review. These are screen-motion measurements, not radar speed or true three-dimensional distance.</p>
+        <div className="pro-report-metrics compact"><article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article></div>
+        <p className="pro-video-summary"><b>On-device coach observations:</b> {report.observations[0]} <span>Relative speed: {report.relativeSpeed.toFixed(2)} screen/sec.</span></p>
+        <p className="pro-report-note">{report.sampledFrames} frames tracked · orange points are uncertain · screen motion, not real-world distance.</p>
       </div>}
     </section>
   );

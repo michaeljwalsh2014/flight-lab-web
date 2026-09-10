@@ -664,7 +664,7 @@ export default function FlightLabApp({
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Flight Lab home"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
         <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#pro">Pro</a></nav>
-        <div className="topbar-actions"><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : sharedProPass ? "Pro Pass" : ownerHasPro ? "Open Pro" : "Upgrade to Pro"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
+        <div className="topbar-actions"><button className="header-measure" type="button" onClick={openMeasure}>Measure</button><button className={`header-pro ${ownerHasPro ? "active" : ""}`} type="button" onClick={openProAccess}>{proAccess.status === "loading" ? "Checking Pro…" : sharedProPass ? "Pro Pass" : ownerHasPro ? "Open Pro" : "Upgrade to Pro"}</button><button className="header-add" type="button" onClick={() => setPlaneModalOpen(true)}>＋ Add a plane</button></div>
       </header>
 
       <section className="hero" id="top">

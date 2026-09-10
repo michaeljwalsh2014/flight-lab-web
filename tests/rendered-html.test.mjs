@@ -348,6 +348,24 @@ test("lets Pro users record a new video or choose one already in Photos", async 
   assert.match(videoLab, /Choose from Photos/);
   assert.match(videoLab, /Use a video you already recorded/);
   assert.match(styles, /\.pro-video-source-picker/);
+  assert.match(videoLab, /releaseStrength/);
+  assert.match(videoLab, /observations\.slice\(0, 2\)/);
+  assert.match(videoLab, /let y = clampNumber\(\(first\.y - point\.y\)/);
+  assert.doesNotMatch(videoLab, /point\.y \* \(1 - correction\)/);
+});
+
+test("uses personal launch context for estimates and keeps Measure one tap away", async () => {
+  const page = await readFile(new URL("../app/flight-lab-app.tsx", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  const scanRoute = await readFile(new URL("../app/api/pro-scan/route.ts", import.meta.url), "utf8");
+  assert.match(page, /className="header-measure"/);
+  assert.match(dashboard, /className="pro-measure-shortcut"/);
+  assert.match(dashboard, /strengthFactorsByPlane/);
+  assert.match(dashboard, /glider: \{ gentle: 1\.08, normal: 1, strong: \.82 \}/);
+  assert.match(dashboard, /ageFactors\[ageRange\]/);
+  assert.match(dashboard, /videoReview\.releaseStrength/);
+  assert.match(dashboard, /lastFlight: behavior/);
+  assert.match(scanRoute, /User-entered test context/);
 });
 
 test("can select and delete planes without offering individual throw deletion", async () => {

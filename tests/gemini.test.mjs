@@ -106,7 +106,7 @@ test("v40 always sends factual questions to Gemini instead of the built-in pack"
 
 test("video review sends chronological real frames and rejects invalid or unauthorized requests", async () => {
   const frames = [0, 1, 2, 3].map((time) => ({ time, image: images.top }));
-  const review = { canReview: false, summary: "No motion evidence.", observations: ["Identical images."], uncertainties: ["Flight is not visible."], nextTest: "Film a complete throw." };
+  const review = { canReview: false, summary: "No motion evidence.", observations: ["Identical images."], uncertainties: ["Flight is not visible."], nextTest: "Film a complete throw.", releaseStrength: "uncertain", releaseConfidence: 10 };
   let count = 0;
   const { video } = loadRoutes({ fetch: async (_url, init) => {
     count++;
@@ -117,6 +117,7 @@ test("video review sends chronological real frames and rejects invalid or unauth
     assert.match(parts[1].text, /0.000 seconds/);
     assert.match(parts[7].text, /3.000 seconds/);
     assert.match(body.systemInstruction.parts[0].text, /Never invent physical distance/);
+    assert.match(body.systemInstruction.parts[0].text, /release strength/i);
     return completion(JSON.stringify(review));
   } });
   const body = { duration: 4, coachId: "video-test-001", frames };
@@ -197,13 +198,15 @@ test("only v40 uses Gemini, while v38 and v39 retain their existing provider", a
   }
 });
 
-test("v40 quick check sends the actual single photo, not local measurements", async () => {
+test("v40 quick check sends the actual single photo and reported flight context", async () => {
   const { scan } = loadRoutes({ fetch: async (_url, init) => {
     const body = JSON.parse(init.body);
     assert.deepEqual(body.contents[0].parts.filter((part) => part.inlineData), [{ inlineData: { mimeType: "image/png", data: "aGVsbG8=" } }]);
+    assert.match(body.contents[0].parts[0].text, /last flight dives/);
+    assert.match(body.contents[0].parts[0].text, /reported throw strength strong/);
     return completion(JSON.stringify(analysis));
   } });
-  const response = await scan.POST(request({ scanMode: "quick", coachId: "quick-test-001", images: { top: images.top } }));
+  const response = await scan.POST(request({ scanMode: "quick", coachId: "quick-test-001", images: { top: images.top }, planeStyle: "dart", ageRange: "11-13", throwStrength: "strong", lastFlight: "dives", measuredBest: 52 }));
   assert.equal(response.status, 200);
 });
 
