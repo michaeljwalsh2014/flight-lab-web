@@ -730,9 +730,9 @@ export default function FlightLabApp({
 
       <section className="pro-preview" id="pro">
         <div className="pro-copy">
-          <p className="pro-kicker">Flight Lab Pro · Version 39</p>
+          <p className="pro-kicker">Flight Lab Pro · Version 3.9</p>
           <h2>See the whole flight,<br /><em>not just the landing.</em></h2>
-          <p>Record a throw for traced flight paths, airtime, curves, stall and dive detection—then ask the v39 Coach questions using built-in knowledge before any live search.</p>
+          <p>Record a throw for traced flight paths, airtime, curves, stall and dive detection—then ask the 3.9 Coach questions using built-in knowledge before any live search.</p>
           <button className="pro-primary" type="button" onClick={openProAccess}>{sharedProPass ? "Open Pro tools" : ownerHasPro ? "Open Flight Lab Pro" : "Upgrade to Pro"}</button>
           <small>{sharedProPass ? "This Pro Pass includes every premium analyzer—no sign-in needed." : ownerHasPro ? `Pro is active for ${proAccess.displayName}.` : "Unlock advanced tracking, calibrated measurement, and deeper flight analysis."}</small>
         </div>

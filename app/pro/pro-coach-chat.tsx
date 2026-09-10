@@ -28,11 +28,11 @@ type CoachSearchMode = "auto" | "search" | "answer";
 type CoachThinkingMode = "auto" | "fast" | "normal" | "hard";
 
 const COACH_LEVEL_OPTIONS: Array<{ model: "v39" | "v40"; mode: CoachThinkingMode; label: string; detail: string }> = [
-  { model: "v39", mode: "auto", label: "v39", detail: "Built-in knowledge" },
-  { model: "v40", mode: "fast", label: "v40 Fast", detail: "Quick replies" },
-  { model: "v40", mode: "auto", label: "v40 Auto", detail: "Chooses for you" },
-  { model: "v40", mode: "normal", label: "v40 Normal", detail: "Balanced thinking" },
-  { model: "v40", mode: "hard", label: "v40 Think hard", detail: "Deepest reasoning" },
+  { model: "v39", mode: "auto", label: "3.9", detail: "Built-in knowledge" },
+  { model: "v40", mode: "fast", label: "4.0 Fast", detail: "Quick replies" },
+  { model: "v40", mode: "auto", label: "4.0 Auto", detail: "Chooses for you" },
+  { model: "v40", mode: "normal", label: "4.0 Normal", detail: "Balanced thinking" },
+  { model: "v40", mode: "hard", label: "4.0 Think hard", detail: "Deepest reasoning" },
 ];
 
 
@@ -622,7 +622,7 @@ export default function ProCoachChat() {
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
       : "";
     const finalReply = trustedLinkReply ?? cloudReply?.text ?? (coachModel === "v40"
-      ? "Advanced AI could not answer this request. Please try again, or switch to v39 Knowledge for built-in help."
+      ? "Advanced AI could not answer this request. Please try again, or switch to 3.9 Knowledge for built-in help."
       : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
     const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (coachModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
     if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
@@ -676,7 +676,7 @@ export default function ProCoachChat() {
           <div><span><i /> Flight Lab Coach</span><b>{COACH_LEVEL_OPTIONS[coachLevel].label} · {status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">{coachModel === "v40" ? "You can chat normally—no upload required. Every v40 reply uses Advanced AI." : "You can chat normally—no upload required. v39 may use Flight Lab’s built-in knowledge."}</p>}
+        {!hasAnalysis && <p className="pro-coach-context">{coachModel === "v40" ? "You can chat normally—no upload required. Every 4.0 reply uses Advanced AI." : "You can chat normally—no upload required. 3.9 may use Flight Lab’s built-in knowledge."}</p>}
         {retryQuestion && <button className="coach-controls-toggle" type="button" disabled={sending} onClick={() => askCoach(retryQuestion)}>Try again</button>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>

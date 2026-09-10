@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const title = "Flight Lab — Throw. Measure. Improve.";
-  const description = "Flight Lab Pro v39 measures paper-airplane flights, analyzes designs, and adds a built-in knowledge-first AI coach that can answer common facts without searching the web.";
+  const description = "Flight Lab Pro 3.9 measures paper-airplane flights, analyzes designs, and adds a built-in knowledge-first AI coach that can answer common facts without searching the web.";
 
   return {
     metadataBase: new URL(origin),
@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og-v39.png`, width: 1731, height: 909, alt: "Flight Lab Pro version 39 knowledge-first coach and paper-airplane flight path" }],
+      images: [{ url: `${origin}/og-v39.png`, width: 1731, height: 909, alt: "Flight Lab Pro version 3.9 knowledge-first coach and paper-airplane flight path" }],
     },
     twitter: {
       card: "summary_large_image",

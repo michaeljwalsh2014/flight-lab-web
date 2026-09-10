@@ -1,7 +1,7 @@
 {
   "name": "Flight Lab — Paper Airplane Tracker",
   "short_name": "Flight Lab",
-  "description": "Measure paper airplane throws, analyze designs, and ask the knowledge-first Flight Lab Pro v39 coach.",
+  "description": "Measure paper airplane throws, analyze designs, and ask the knowledge-first Flight Lab Pro 3.9 coach.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#091d36",

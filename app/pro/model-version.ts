@@ -3,10 +3,15 @@
 import { useEffect, useState } from "react";
 
 export type CoachModelVersion = "v38" | "v39" | "v40";
+export const COACH_MODEL_NUMBER: Record<CoachModelVersion, string> = {
+  v38: "3.8",
+  v39: "3.9",
+  v40: "4.0",
+};
 export const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
-  { model: "v40", label: "v40 Advanced", detail: "Photos, video + Coach" },
-  { model: "v39", label: "v39 Knowledge", detail: "Built-in facts first" },
-  { model: "v38", label: "v38 Improved", detail: "Context + memory" },
+  { model: "v40", label: "4.0 Advanced", detail: "Photos, video + Coach" },
+  { model: "v39", label: "3.9 Knowledge", detail: "Built-in facts first" },
+  { model: "v38", label: "3.8 Improved", detail: "Context + memory" },
 ];
 const storageKey = "flight-lab-coach-model";
 const changedEvent = "flight-lab-model-changed";

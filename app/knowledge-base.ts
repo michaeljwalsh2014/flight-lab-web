@@ -110,7 +110,7 @@ function internalAnswer(answer: string): BuiltInKnowledgeAnswer {
   return {
     answer,
     source: "flight-lab://knowledge/v39",
-    sourceName: "Flight Lab Pro v39 knowledge pack",
+    sourceName: "Flight Lab Pro 3.9 knowledge pack",
     verifiedOn: VERIFIED_ON,
   };
 }
@@ -170,15 +170,15 @@ export function findBuiltInAnswer(question: string): BuiltInKnowledgeAnswer | nu
   if (!normalized) return null;
 
   if (/\b(?:who are you|what are you|what(?:'s| is) your name|tell me your name|who am i talking to)\b/.test(normalized)) {
-    return internalAnswer("I’m Flight Lab Coach, the assistant inside Flight Lab Pro. You can call me Flight Lab Coach. Version 39 can chat, answer its saved knowledge without searching, help with paper-airplane experiments, and use live search only when you ask for current information.");
+    return internalAnswer("I’m Flight Lab Coach, the assistant inside Flight Lab Pro. You can call me Flight Lab Coach. Version 3.9 can chat, answer its saved knowledge without searching, help with paper-airplane experiments, and use live search only when you ask for current information.");
   }
 
-  if (/\b(?:what (?:version|model) are you|which (?:version|model)|are you version 39)\b/.test(normalized)) {
-    return internalAnswer("You’re talking to Flight Lab Coach version 39. Use the settings button beside Send to switch between v38 Improved, v39 Knowledge, and v40 Advanced.");
+  if (/\b(?:what (?:version|model) are you|which (?:version|model)|are you version (?:39|3\.9))\b/.test(normalized)) {
+    return internalAnswer("You’re talking to Flight Lab Coach version 3.9. Use the settings button beside Send to switch between 3.8 Improved, 3.9 Knowledge, and 4.0 Advanced.");
   }
 
   if (/\b(?:what can you do|how can you help|what do you know|tell me about yourself)\b/.test(normalized)) {
-    return internalAnswer("I’m Flight Lab Coach v39. I can answer thousands of recognized question phrasings from my built-in knowledge pack, chat normally, do basic calculations, explain science and aviation, answer saved world-record and reference questions, and coach your paper-airplane tests. For changing facts I automatically decide when current information should be checked.");
+    return internalAnswer("I’m Flight Lab Coach 3.9. I can answer thousands of recognized question phrasings from my built-in knowledge pack, chat normally, do basic calculations, explain science and aviation, answer saved world-record and reference questions, and coach your paper-airplane tests. For changing facts I automatically decide when current information should be checked.");
   }
 
   const paperRecord = paperAircraftRecord(normalized);
@@ -227,9 +227,9 @@ export function findBuiltInAnswer(question: string): BuiltInKnowledgeAnswer | nu
 
   if (/how many (?:built in|saved|programmed) (?:answers|facts)|what do you know offline/.test(normalized)) {
     return {
-      answer: `Flight Lab Pro v39 has ${BUILT_IN_ANSWER_COUNT} curated answer paths recognizing at least ${BUILT_IN_QUESTION_VARIATION_COUNT.toLocaleString("en-US")} tested question variations, plus flexible word order. They cover identity, conversation, world records, aviation, space, geography, animals, science, country capitals, and chemical symbols. I use these before considering a live search.`,
+      answer: `Flight Lab Pro 3.9 has ${BUILT_IN_ANSWER_COUNT} curated answer paths recognizing at least ${BUILT_IN_QUESTION_VARIATION_COUNT.toLocaleString("en-US")} tested question variations, plus flexible word order. They cover identity, conversation, world records, aviation, space, geography, animals, science, country capitals, and chemical symbols. I use these before considering a live search.`,
       source: "flight-lab://knowledge/v39",
-      sourceName: "Flight Lab Pro v39 knowledge pack",
+      sourceName: "Flight Lab Pro 3.9 knowledge pack",
       verifiedOn: VERIFIED_ON,
     };
   }

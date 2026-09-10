@@ -779,7 +779,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
-      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>v40 Advanced · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
+      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>4.0 Advanced · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
         <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>

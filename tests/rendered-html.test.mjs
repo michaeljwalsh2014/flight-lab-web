@@ -242,7 +242,7 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.doesNotMatch(coach, /COACH_MODE_OPTIONS|flight-lab-coach-search-mode|\bselectedMode\b/);
   assert.doesNotMatch(coach, /Always look it up|Never search/);
   assert.match(coach, /const searchMode = coachSearchMode\(clean\)/);
-  assert.match(coach, /Every v40 reply uses Advanced AI/);
+  assert.match(coach, /Every 4\.0 reply uses Advanced AI/);
   assert.doesNotMatch(coach, /<section><span>AI version|aria-pressed/);
   assert.match(coach, /Searching with Advanced AI/);
   assert.match(coach, /searchMode/);
@@ -261,9 +261,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /await askCloudCoach/);
   assert.match(coach, /cloudReply\?\.source/);
   const modelVersions = await readFile(new URL("../app/pro/model-version.ts", import.meta.url), "utf8");
-  assert.match(modelVersions, /v40 Advanced/);
-  assert.match(modelVersions, /v39 Knowledge/);
-  assert.match(modelVersions, /v38 Improved/);
+  assert.match(modelVersions, /4\.0 Advanced/);
+  assert.match(modelVersions, /3\.9 Knowledge/);
+  assert.match(modelVersions, /3\.8 Improved/);
   assert.doesNotMatch(modelVersions, /v37 Classic/);
   assert.match(modelVersions, /flight-lab-coach-model/);
   assert.match(coach, /contextualPlaneRecommendation/);

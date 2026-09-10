@@ -7,7 +7,7 @@ import ProCoachChat from "./pro-coach-chat";
 import { publishProAiContext, readProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
-import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
+import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 import ProViewCounter from "./pro-view-counter";
 
 type PlaneKind = "dart" | "glider" | "stunt" | "custom";
@@ -562,7 +562,7 @@ function ProPlaneCoach() {
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
         </div>
-        {useGemini ? <p>v40 sends your {scanMode === "quick" ? "top photo" : "six photos"} to cloud AI for visual analysis.</p> : scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
+        {useGemini ? <p>4.0 sends your {scanMode === "quick" ? "top photo" : "six photos"} to cloud AI for visual analysis.</p> : scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
         <div className="pro-form-grid">
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
@@ -856,7 +856,7 @@ export default function ProDashboard({
 
       <section className="pro-dashboard-hero" id="pro-top">
         <div className="pro-hero-copy">
-          <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {selectedModel}</span></div>
+          <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {COACH_MODEL_NUMBER[selectedModel]}</span></div>
           {!sharedPass && <ProViewCounter />}
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>

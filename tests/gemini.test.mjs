@@ -188,6 +188,7 @@ test("existing OpenAI fallback and explicit web search remain available", async 
 test("only v40 uses Gemini, while v38 and v39 retain their existing provider", async () => {
   const { coach, scan, models } = loadRoutes({ fetch: async () => { throw new Error("Provider must not be called"); } });
   assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.model), ["v40", "v39", "v38"]);
+  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["4.0 Advanced", "3.9 Knowledge", "3.8 Improved"]);
   for (const version of ["v38", "v39", "v40"]) assert.equal(models.normalizeModelVersion(version), version);
   assert.equal(models.normalizeModelVersion("v37"), "v38");
   assert.equal(models.normalizeModelVersion(null), "v40");
