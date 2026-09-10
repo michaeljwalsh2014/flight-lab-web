@@ -93,6 +93,8 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(proPage, /ProDashboard/);
   assert.match(proPage, /redirect\("\/#pro"\)/);
   assert.match(dashboard, /Rate my plane/);
+  assert.match(dashboard, /href="#smart-measure">Measure a throw/);
+  assert.doesNotMatch(dashboard, /href="#video-lab">Analyze a flight/);
   assert.match(dashboard, /Smart Walk Measure/);
   assert.match(dashboard, /Average distance/);
   assert.match(dashboard, /Newest 5/);

@@ -861,7 +861,7 @@ export default function ProDashboard({
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">Track the full flight, rate the build, measure with personal calibration, and ask a smarter knowledge-first Coach without unnecessary searches.</p>
-          <div className="pro-hero-actions"><a href="#video-lab">Analyze a flight</a><a href="#plane-coach">Rate my plane</a></div>
+          <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a><a href="#plane-coach">Rate my plane</a></div>
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
         <div className="pro-hero-visual">
