@@ -348,7 +348,7 @@ function ProPlaneHangar() {
 
 function ProPlaneCoach() {
   const [selectedModel, chooseModel] = useModelVersion();
-  const useGemini = selectedModel === "v40";
+  const useGemini = selectedModel === "v40" || selectedModel === "v46";
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingViewRef = useRef<ScanView>("top");
   const [scanMode, setScanMode] = useState<ScanMode>("quick");
@@ -506,7 +506,7 @@ function ProPlaneCoach() {
       const localScore = scanMode === "multiview" ? topScore * .68 + crossViewScore * .32 : topScore;
       const score = Math.round(Math.max(0, Math.min(100, vision ? localScore * .7 + vision.symmetryScore * .3 : localScore)));
       const measuredBest = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : Number(knownBest);
-      const videoReview = selectedModel === "v40" ? readProAiContext().videoInspection : null;
+      const videoReview = selectedModel === "v40" || selectedModel === "v46" ? readProAiContext().videoInspection : null;
       const videoStrength = videoReview && videoReview.releaseStrength !== "uncertain" && videoReview.releaseConfidence >= 55 ? videoReview.releaseStrength : null;
       const selectedStrengthFactor = strengthFactorsByPlane[planeKind][strength];
       const videoStrengthFactor = videoStrength ? strengthFactorsByPlane[planeKind][videoStrength] : selectedStrengthFactor;
@@ -562,7 +562,7 @@ function ProPlaneCoach() {
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
         </div>
-        {useGemini ? <p>4.0 sends your {scanMode === "quick" ? "top photo" : "six photos"} to cloud AI for visual analysis.</p> : scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
+        {useGemini ? <p>{COACH_MODEL_NUMBER[selectedModel]} sends your {scanMode === "quick" ? "top photo" : "six photos"} to cloud AI for visual analysis.</p> : scanMode !== "quick" ? <label className="pro-cloud-vision-choice"><input type="checkbox" checked={cloudVisionEnabled} onChange={(event) => setCloudVisionEnabled(event.target.checked)} /><span><b>Deep visual inspection</b><small>When on, cloud AI compares all six photos for nose alignment, uneven wing angles, fold quality, underside folds, and tail-edge differences. When off, all analysis stays on this device.</small></span></label> : null}
         <div className="pro-form-grid">
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>

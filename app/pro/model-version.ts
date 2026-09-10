@@ -2,22 +2,24 @@
 
 import { useEffect, useState } from "react";
 
-export type CoachModelVersion = "v38" | "v39" | "v40";
+export type CoachModelVersion = "v38" | "v39" | "v40" | "v46";
 export const COACH_MODEL_NUMBER: Record<CoachModelVersion, string> = {
   v38: "3.8",
   v39: "3.9",
   v40: "4.0",
+  v46: "4.6",
 };
 export const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
-  { model: "v40", label: "4.0 Advanced", detail: "Photos, video + Coach" },
-  { model: "v39", label: "3.9 Knowledge", detail: "Built-in facts first" },
-  { model: "v38", label: "3.8 Improved", detail: "Context + memory" },
+  { model: "v46", label: "Flight Lab 4.6", detail: "More advanced intelligence" },
+  { model: "v40", label: "Flight Lab 4.0", detail: "Advanced intelligence" },
+  { model: "v39", label: "Flight Lab 3.9", detail: "Built-in knowledge" },
+  { model: "v38", label: "Flight Lab 3.8", detail: "Improved context + memory" },
 ];
 const storageKey = "flight-lab-coach-model";
 const changedEvent = "flight-lab-model-changed";
 
 export function normalizeModelVersion(value: string | null): CoachModelVersion {
-  if (value === "v40" || value === "v39" || value === "v38") return value;
+  if (value === "v46" || value === "v40" || value === "v39" || value === "v38") return value;
   return value === "v37" ? "v38" : "v40";
 }
 

@@ -3,7 +3,7 @@
 import { ChangeEvent, PointerEvent as ReactPointerEvent, WheelEvent, useEffect, useMemo, useRef, useState } from "react";
 import { publishProAiContext, type ProAiContext } from "./pro-ai-context";
 import { AnalysisLoader } from "./pro-ui";
-import { COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
+import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
 type TrackPoint = { x: number; y: number; time: number; confidence: number };
 type Candidate = { x: number; y: number; area: number; energy: number; frame: number; time: number };
@@ -710,16 +710,16 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
       try {
         const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
           if (generation !== reviewGeneration.current) return;
-          setProgress(selectedModel === "v40" ? Math.round(nextProgress * .6) : nextProgress);
+          setProgress(selectedModel === "v40" || selectedModel === "v46" ? Math.round(nextProgress * .6) : nextProgress);
           setStage(nextStage);
         });
         if (generation !== reviewGeneration.current) return;
         setReport(nextReport);
       } catch (failure) {
-        if (selectedModel !== "v40") throw failure;
+        if (selectedModel !== "v40" && selectedModel !== "v46") throw failure;
         localError = failure instanceof Error ? failure.message : "Local tracking was unavailable.";
       }
-      if (selectedModel === "v40") {
+      if (selectedModel === "v40" || selectedModel === "v46") {
         if (generation !== reviewGeneration.current) return;
         setProgress(65); setStage("Preparing frames for advanced review");
         const sampled = await sampleVideoForReview(videoUrl);
@@ -774,12 +774,12 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
           </div>}
           {error && <p className="pro-inline-error" role="alert">{error}</p>}
         </div>
-        <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · {selectedModel === "v40" ? "Advanced review sends 12 sampled video frames to cloud AI. Motion tracking runs on this device." : "Your video stays on this device."}</p></aside>
+        <aside className="pro-video-guide"><span>Tracking checklist</span><ol><li><b>01</b><div><strong>Hold still</strong><small>Brace the phone or iPad against something solid.</small></div></li><li><b>02</b><div><strong>Use contrast</strong><small>A bright plane against a darker background works best.</small></div></li><li><b>03</b><div><strong>Leave space</strong><small>Keep the complete throw inside the picture.</small></div></li></ol><p>{displayName} · {selectedModel === "v40" || selectedModel === "v46" ? "Advanced review sends 12 sampled video frames to cloud AI. Motion tracking runs on this device." : "Your video stays on this device."}</p></aside>
       </div>
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
-      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>4.0 Advanced · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
+      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>Flight Lab {COACH_MODEL_NUMBER[selectedModel]} · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
         <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>

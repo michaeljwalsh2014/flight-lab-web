@@ -26,14 +26,35 @@ type PendingRepair = { cue: string; reply: string };
 type KnowledgeAnswer = { answer: string; source: string; sourceName: string; verifiedOn?: string; sourceType?: "built-in" };
 type CoachSearchMode = "auto" | "search" | "answer";
 type CoachThinkingMode = "auto" | "fast" | "normal" | "hard";
+type CoachModelGroup = "default" | CoachModelVersion;
+type CoachLevelOption = { model: CoachModelVersion; mode: CoachThinkingMode; label: string; shortLabel: string; detail: string };
 
-const COACH_LEVEL_OPTIONS: Array<{ model: "v39" | "v40"; mode: CoachThinkingMode; label: string; detail: string }> = [
-  { model: "v39", mode: "auto", label: "3.9", detail: "Built-in knowledge" },
-  { model: "v40", mode: "fast", label: "4.0 Fast", detail: "Quick replies" },
-  { model: "v40", mode: "auto", label: "4.0 Auto", detail: "Chooses for you" },
-  { model: "v40", mode: "normal", label: "4.0 Normal", detail: "Balanced thinking" },
-  { model: "v40", mode: "hard", label: "4.0 Think hard", detail: "Deepest reasoning" },
+const modeDetails: Record<CoachThinkingMode, string> = { fast: "Quick replies", auto: "Chooses for you", normal: "Balanced thinking", hard: "Deepest reasoning" };
+const modeLabels: Record<CoachThinkingMode, string> = { fast: "Fast", auto: "Auto", normal: "Normal", hard: "Think hard" };
+const level = (model: CoachModelVersion, mode: CoachThinkingMode): CoachLevelOption => ({
+  model, mode, label: `Flight Lab ${model.slice(1, 2)}.${model.slice(2)} ${modeLabels[mode]}`,
+  shortLabel: `${model.slice(1, 2)}.${model.slice(2)} ${modeLabels[mode]}`,
+  detail: model === "v46" ? `${modeDetails[mode]} · More advanced intelligence` : model === "v40" ? `${modeDetails[mode]} · Advanced intelligence` : model === "v39" ? `${modeDetails[mode]} · Built-in knowledge` : `${modeDetails[mode]} · Improved context`,
+});
+const allModes = (model: CoachModelVersion) => (["fast", "auto", "normal", "hard"] as CoachThinkingMode[]).map((mode) => level(model, mode));
+const COACH_LEVEL_OPTIONS: Record<CoachModelGroup, CoachLevelOption[]> = {
+  default: [level("v38", "auto"), level("v40", "fast"), level("v40", "auto"), level("v40", "hard"), level("v46", "auto")],
+  v38: allModes("v38"),
+  v39: allModes("v39"),
+  v40: allModes("v40"),
+  v46: allModes("v46"),
+};
+const COACH_MODEL_GROUPS: Array<{ id: CoachModelGroup; label: string; detail: string }> = [
+  { id: "default", label: "Default", detail: "Recommended choices" },
+  { id: "v46", label: "Flight Lab 4.6", detail: "More advanced intelligence" },
+  { id: "v40", label: "Flight Lab 4.0", detail: "Advanced intelligence" },
+  { id: "v39", label: "Flight Lab 3.9", detail: "Built-in knowledge" },
+  { id: "v38", label: "Flight Lab 3.8", detail: "Improved context" },
 ];
+
+function usesAdvancedAI(model: CoachModelVersion) {
+  return model === "v40" || model === "v46";
+}
 
 
 const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
@@ -244,15 +265,15 @@ async function askCloudCoach(message: string, history: ChatMessage[], context: C
       body: JSON.stringify({ message, history: history.filter((item) => item.source !== "error"), context, searchMode, modelVersion, thinkingMode, coachId: getCoachClientId() }),
     });
     if (!response.ok) {
-      if (modelVersion !== "v40") return null;
+      if (!usesAdvancedAI(modelVersion)) return null;
       const failure = await response.json().catch(() => null) as { message?: string; retryable?: boolean } | null;
       return { text: failure?.message ?? (response.status === 403 ? "Your Pro session has expired. Refresh the page and sign in again." : "The AI connection is temporarily unavailable. Please try again."), source: "error", retryable: failure?.retryable ?? response.status >= 500 };
     }
     const reply = (await response.text()).trim();
     const replySource = response.headers.get("X-Flight-Lab-Source");
-    return reply ? { text: reply, source: replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : modelVersion === "v40" ? { text: "The AI returned an empty response. Please try again.", source: "error", retryable: true } : null;
+    return reply ? { text: reply, source: replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : usesAdvancedAI(modelVersion) ? { text: "The AI returned an empty response. Please try again.", source: "error", retryable: true } : null;
   } catch {
-    return modelVersion === "v40" ? { text: "The connection was interrupted. Check your internet connection and try again.", source: "error", retryable: true } : null;
+    return usesAdvancedAI(modelVersion) ? { text: "The connection was interrupted. Check your internet connection and try again.", source: "error", retryable: true } : null;
   }
 }
 function loadFlightHistory(): FlightHistoryContext {
@@ -516,9 +537,13 @@ export default function ProCoachChat() {
   const [retryQuestion, setRetryQuestion] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState("Thinking about your question");
   const [thinkingMode, setThinkingMode] = useState<CoachThinkingMode>("auto");
+  const [modelGroup, setModelGroup] = useState<CoachModelGroup>("default");
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [selectedModel, chooseModel] = useModelVersion();
-  const coachModel: CoachModelVersion = selectedModel === "v40" ? "v40" : "v39";
-  const coachLevel = Math.max(0, COACH_LEVEL_OPTIONS.findIndex((option) => option.model === coachModel && (coachModel === "v39" || option.mode === thinkingMode)));
+  const coachModel: CoachModelVersion = selectedModel;
+  const coachOptions = COACH_LEVEL_OPTIONS[modelGroup];
+  const coachLevel = Math.max(0, coachOptions.findIndex((option) => option.model === coachModel && option.mode === thinkingMode));
+  const activeCoachOption = coachOptions[coachLevel];
   const [cloudAvailable, setCloudAvailable] = useState<boolean | null>(null);
   const [context, setContext] = useState<ProAiContext>({});
   const [lessons, setLessons] = useState<CoachLesson[]>([]);
@@ -532,7 +557,17 @@ export default function ProCoachChat() {
   useEffect(() => {
     const saved = window.localStorage.getItem("flight-lab-coach-thinking-mode");
     if (saved === "auto" || saved === "fast" || saved === "normal" || saved === "hard") setThinkingMode(saved);
+    const savedGroup = window.localStorage.getItem("flight-lab-coach-model-group");
+    if (savedGroup === "default" || savedGroup === "v38" || savedGroup === "v39" || savedGroup === "v40" || savedGroup === "v46") setModelGroup(savedGroup);
   }, []);
+
+  useEffect(() => {
+    const selectedIsVisible = COACH_LEVEL_OPTIONS[modelGroup].some((option) => option.model === selectedModel && option.mode === thinkingMode);
+    if (!selectedIsVisible) {
+      setModelGroup(selectedModel);
+      window.localStorage.setItem("flight-lab-coach-model-group", selectedModel);
+    }
+  }, [modelGroup, selectedModel, thinkingMode]);
 
   useEffect(() => {
     setContext(readProAiContext());
@@ -593,8 +628,8 @@ export default function ProCoachChat() {
     const history = loadFlightHistory();
     const searchMode = coachSearchMode(clean);
     const question = questionWithoutMode(clean, searchMode);
-    // v40 always goes through the cloud AI. Local answers remain available only in legacy modes.
-    const trustedLinkReply = coachModel === "v40" ? null : contextualPlaneRecommendation(question, previous) ?? planeDiscoveryReply(question);
+    // Flight Lab 4.x goes through advanced cloud AI. Local answers remain available in earlier versions.
+    const trustedLinkReply = usesAdvancedAI(coachModel) ? null : contextualPlaneRecommendation(question, previous) ?? planeDiscoveryReply(question);
     const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, coachModel);
     const cloudContext: CloudCoachContext = {
       ...context,
@@ -605,7 +640,7 @@ export default function ProCoachChat() {
     };
     const needsLookup = searchMode === "search";
     const knowledgeQuestion = questionWithKnowledgeContext(question, previous);
-    setThinkingStatus(needsLookup ? "Searching with Advanced AI" : coachModel === "v40" ? "Asking Advanced AI" : "Checking built-in knowledge");
+    setThinkingStatus(needsLookup ? "Searching with Advanced AI" : usesAdvancedAI(coachModel) ? "Asking Advanced AI" : "Checking built-in knowledge");
     if (isFrustrated(clean)) {
       const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
       const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
@@ -613,7 +648,7 @@ export default function ProCoachChat() {
     }
     const knowledge = !trustedLinkReply && coachModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
     if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const cloudReply = !trustedLinkReply && !knowledge && (coachModel === "v40" || cloudAvailable !== false)
+    const cloudReply = !trustedLinkReply && !knowledge && (usesAdvancedAI(coachModel) || cloudAvailable !== false)
       ? await askCloudCoach(question, previous, cloudContext, searchMode, coachModel, thinkingMode)
       : null;
     const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
@@ -621,10 +656,10 @@ export default function ProCoachChat() {
     const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
       ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
       : "";
-    const finalReply = trustedLinkReply ?? cloudReply?.text ?? (coachModel === "v40"
+    const finalReply = trustedLinkReply ?? cloudReply?.text ?? (usesAdvancedAI(coachModel)
       ? "Advanced AI could not answer this request. Please try again, or switch to 3.9 Knowledge for built-in help."
       : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
-    const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (coachModel !== "v40" && resolvedKnowledge ? "built-in" : "device");
+    const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (!usesAdvancedAI(coachModel) && resolvedKnowledge ? "built-in" : "device");
     if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
     setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
     setSending(false);
@@ -664,19 +699,31 @@ export default function ProCoachChat() {
   }
 
   function chooseCoachLevel(level: number) {
-    const option = COACH_LEVEL_OPTIONS[level];
+    const option = coachOptions[level];
     chooseModel(option.model);
     chooseThinkingMode(option.mode);
+  }
+
+  function chooseModelGroup(next: CoachModelGroup) {
+    setModelGroup(next);
+    setModelMenuOpen(false);
+    window.localStorage.setItem("flight-lab-coach-model-group", next);
+    const options = COACH_LEVEL_OPTIONS[next];
+    if (!options.some((option) => option.model === selectedModel && option.mode === thinkingMode)) {
+      const closest = options.find((option) => option.model === selectedModel && option.mode === "auto") ?? options.find((option) => option.mode === "auto") ?? options[0];
+      chooseModel(closest.model);
+      chooseThinkingMode(closest.mode);
+    }
   }
 
   return (
     <aside className={`pro-coach ${open ? "open" : ""}`}>
       {open && <div className="pro-coach-panel" role="dialog" aria-label="Flight Lab Coach">
         <header>
-          <div><span><i /> Flight Lab Coach</span><b>{COACH_LEVEL_OPTIONS[coachLevel].label} · {status}</b></div>
+          <div><span><i /> Flight Lab Coach</span><b>{activeCoachOption.label} · {status}</b></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Flight Lab Coach">×</button>
         </header>
-        {!hasAnalysis && <p className="pro-coach-context">{coachModel === "v40" ? "You can chat normally—no upload required. Every 4.0 reply uses Advanced AI." : "You can chat normally—no upload required. 3.9 may use Flight Lab’s built-in knowledge."}</p>}
+        {!hasAnalysis && <p className="pro-coach-context">{usesAdvancedAI(coachModel) ? `You can chat normally—no upload required. Flight Lab ${coachModel === "v46" ? "4.6 uses more advanced intelligence" : "4.0 uses advanced intelligence"}.` : `You can chat normally—no upload required. Flight Lab ${coachModel === "v39" ? "3.9 may use built-in knowledge" : "3.8 keeps improved context and memory"}.`}</p>}
         {retryQuestion && <button className="coach-controls-toggle" type="button" disabled={sending} onClick={() => askCoach(retryQuestion)}>Try again</button>}
         <div className="pro-coach-messages" aria-live="polite">
           {messages.map((message, index) => <div className={message.role} key={message.id ?? `${message.role}-${index}`}>
@@ -694,14 +741,18 @@ export default function ProCoachChat() {
           <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
         </div>}
         <section className="coach-response-mode" aria-label="Coach response mode">
-          <div className="coach-response-heading"><span>Response mode</span><b>{COACH_LEVEL_OPTIONS[coachLevel].label}<small>{COACH_LEVEL_OPTIONS[coachLevel].detail}</small></b></div>
+          <div className="coach-model-group">
+            <button type="button" aria-expanded={modelMenuOpen} aria-haspopup="menu" onClick={() => setModelMenuOpen((value) => !value)}><span>ϟ</span><b>{COACH_MODEL_GROUPS.find((group) => group.id === modelGroup)?.label}</b><i>›</i></button>
+            {modelMenuOpen && <div role="menu" aria-label="Flight Lab model lists">{COACH_MODEL_GROUPS.map((group) => <button type="button" role="menuitem" className={group.id === modelGroup ? "selected" : ""} key={group.id} onClick={() => chooseModelGroup(group.id)}><b>{group.label}</b><small>{group.detail}</small></button>)}</div>}
+          </div>
+          <div className="coach-response-heading"><span>Response mode</span><b>{activeCoachOption.label}<small>{activeCoachOption.detail}</small></b></div>
           <div className="coach-horizontal-rail">
             <i className="coach-slider-track" />
-            <i className="coach-slider-fill" style={{ width: `${coachLevel * 25}%` }} />
-            {COACH_LEVEL_OPTIONS.map((option, level) => <i key={option.label} className={`coach-slider-dot ${level <= coachLevel ? "filled" : ""} ${level === coachLevel ? "current" : ""}`} style={{ left: `${level * 25}%` }} />)}
-            <input type="range" min="0" max="4" step="1" value={coachLevel} onChange={(event) => chooseCoachLevel(Number(event.target.value))} aria-label="Coach response mode" aria-valuetext={COACH_LEVEL_OPTIONS[coachLevel].label} />
+            <i className="coach-slider-fill" style={{ width: `${coachLevel / Math.max(1, coachOptions.length - 1) * 100}%` }} />
+            {coachOptions.map((option, level) => <i key={`${option.model}-${option.mode}`} className={`coach-slider-dot ${level <= coachLevel ? "filled" : ""} ${level === coachLevel ? "current" : ""}`} style={{ left: `${level / Math.max(1, coachOptions.length - 1) * 100}%` }} />)}
+            <input type="range" min="0" max={coachOptions.length - 1} step="1" value={coachLevel} onChange={(event) => chooseCoachLevel(Number(event.target.value))} aria-label="Coach response mode" aria-valuetext={activeCoachOption.label} />
           </div>
-          <div className="coach-horizontal-labels" aria-hidden="true">{COACH_LEVEL_OPTIONS.map((option, level) => <b key={option.label} className={level === coachLevel ? "current" : ""}>{option.label}</b>)}</div>
+          <div className="coach-horizontal-labels" style={{ gridTemplateColumns: `repeat(${coachOptions.length}, minmax(0, 1fr))` }} aria-hidden="true">{coachOptions.map((option, level) => <b key={`${option.model}-${option.mode}`} className={level === coachLevel ? "current" : ""}>{option.shortLabel}</b>)}</div>
         </section>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Flight Lab Coach</label>

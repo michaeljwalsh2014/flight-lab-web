@@ -185,11 +185,11 @@ test("existing OpenAI fallback and explicit web search remain available", async 
   assert.equal((await (await fallback.coach.GET(new Request("https://flightlab.test/api"))).json()).typedModel, "gpt-5.6-terra");
 });
 
-test("only v40 uses Gemini, while v38 and v39 retain their existing provider", async () => {
+test("Flight Lab 4.0 and 4.6 use advanced AI while 3.8 and 3.9 retain their existing provider", async () => {
   const { coach, scan, models } = loadRoutes({ fetch: async () => { throw new Error("Provider must not be called"); } });
-  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.model), ["v40", "v39", "v38"]);
-  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["4.0 Advanced", "3.9 Knowledge", "3.8 Improved"]);
-  for (const version of ["v38", "v39", "v40"]) assert.equal(models.normalizeModelVersion(version), version);
+  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.model), ["v46", "v40", "v39", "v38"]);
+  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["Flight Lab 4.6", "Flight Lab 4.0", "Flight Lab 3.9", "Flight Lab 3.8"]);
+  for (const version of ["v38", "v39", "v40", "v46"]) assert.equal(models.normalizeModelVersion(version), version);
   assert.equal(models.normalizeModelVersion("v37"), "v38");
   assert.equal(models.normalizeModelVersion(null), "v40");
   for (const version of ["v38", "v39"]) {
@@ -197,6 +197,45 @@ test("only v40 uses Gemini, while v38 and v39 retain their existing provider", a
     assert.deepEqual(await status.json(), { available: false, typedModel: "gpt-5.6-terra", voiceModel: "gpt-realtime-2.1" });
     assert.equal((await scan.POST(request({ modelVersion: version, coachId: "legacy-test-01", images }))).status, 503);
   }
+});
+
+test("Flight Lab 4.6 uses Gemini 3.8 Flash while its Fast mode stays on Flash-Lite", async () => {
+  const calls = [];
+  const { coach } = loadRoutes({ fetch: async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return completion(calls.length === 1 ? "A deeper answer." : "A fast answer.");
+  } });
+  const status = await coach.GET(new Request("https://flightlab.test/api?modelVersion=v46"));
+  assert.equal((await status.json()).typedModel, "gemini-3.8-flash");
+  const deeper = await coach.POST(request({ modelVersion: "v46", coachId: "coach-v46-hard", message: "Explain this flight", thinkingMode: "hard" }));
+  assert.equal(deeper.headers.get("X-Flight-Lab-Model"), "gemini-3.8-flash");
+  assert.match(calls[0].url, /gemini-3\.8-flash:/);
+  assert.equal(calls[0].body.generationConfig.thinkingConfig.thinkingLevel, "high");
+  const fast = await coach.POST(request({ modelVersion: "v46", coachId: "coach-v46-fast", message: "Answer quickly", thinkingMode: "fast" }));
+  assert.equal(fast.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash-lite");
+  assert.match(calls[1].url, /gemini-3\.5-flash-lite:/);
+  assert.equal(calls[1].body.generationConfig.thinkingConfig.thinkingLevel, "minimal");
+});
+
+test("Flight Lab 4.6 photo and video reviews use the newer visual model", async () => {
+  const scan = loadRoutes({ fetch: async (url, init) => {
+    assert.match(url, /gemini-3\.8-flash:/);
+    assert.equal(JSON.parse(init.body).generationConfig.thinkingConfig.thinkingLevel, "medium");
+    return completion(JSON.stringify(analysis));
+  } }).scan;
+  const scanResponse = await scan.POST(request({ modelVersion: "v46", scanMode: "quick", coachId: "scan-v46-001", images: { top: images.top } }));
+  assert.equal(scanResponse.status, 200);
+  assert.equal((await scanResponse.json()).model, "gemini-3.8-flash");
+
+  const frames = [0, 1, 2, 3].map((time) => ({ time, image: images.top }));
+  const review = { canReview: true, summary: "Flight visible.", observations: ["The release is visible."], uncertainties: [], nextTest: "Repeat the throw.", releaseStrength: "normal", releaseConfidence: 70 };
+  const video = loadRoutes({ fetch: async (url) => {
+    assert.match(url, /gemini-3\.8-flash:/);
+    return completion(JSON.stringify(review));
+  } }).video;
+  const videoResponse = await video.POST(request({ modelVersion: "v46", duration: 4, coachId: "video-v46-001", frames }));
+  assert.equal(videoResponse.status, 200);
+  assert.equal((await videoResponse.json()).model, "gemini-3.8-flash");
 });
 
 test("v40 quick check sends the actual single photo and reported flight context", async () => {

@@ -880,6 +880,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-coach-panel textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(67,220,255,.1); }
 .pro-coach-panel form button { width: 56px; min-height: 58px; border: 0; border-radius: 13px; color: #071523; background: var(--lime); font-size: 22px; font-weight: 950; }
 .coach-response-mode { padding: 11px 20px 5px; display: grid; gap: 6px; border-top: 1px solid rgba(133,181,219,.18); background: #061626; }
+.coach-model-group { position: relative; }
+.coach-model-group > button { width: 100%; min-height: 48px; padding: 8px 12px; display: grid; grid-template-columns: 30px 1fr auto; gap: 9px; align-items: center; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; color: white; background: rgba(255,255,255,.055); text-align: left; }
+.coach-model-group > button span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; color: #071523; background: var(--blue); font-size: 18px; font-weight: 950; }
+.coach-model-group > button b { font-size: 14px; }
+.coach-model-group > button i { color: #8ca4b8; font-size: 22px; font-style: normal; transform: rotate(90deg); }
+.coach-model-group > div { max-height: 300px; position: absolute; z-index: 8; right: 0; bottom: calc(100% + 7px); left: 0; padding: 6px; display: grid; overflow-y: auto; gap: 4px; border: 1px solid rgba(100,199,255,.3); border-radius: 15px; background: #061626; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+.coach-model-group > div button { min-height: 52px; padding: 8px 11px; display: grid; gap: 3px; border: 1px solid transparent; border-radius: 11px; color: #dceaf6; background: transparent; text-align: left; }
+.coach-model-group > div button b { font-size: 12px; }
+.coach-model-group > div button small { color: #7f98ae; font-size: 9px; }
+.coach-model-group > div button.selected { border-color: rgba(67,220,255,.38); background: rgba(67,220,255,.09); }
+.coach-model-group > div button.selected small { color: var(--cyan); }
 .coach-response-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .coach-response-heading > span { color: #8da7bd; font-size: 9px; font-weight: 950; letter-spacing: .1em; text-transform: uppercase; }
 .coach-response-heading > b { display: flex; align-items: baseline; gap: 7px; color: #ff9b45; font-size: 12px; }
@@ -892,7 +903,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .coach-horizontal-rail .coach-slider-dot.filled { background: #ff7a3d; box-shadow: 0 0 0 2px #ff7a3d; }
 .coach-horizontal-rail .coach-slider-dot.current { width: 22px; height: 22px; background: #ff9b45; box-shadow: 0 0 0 3px rgba(255,122,61,.3), 0 0 16px rgba(255,122,61,.5); }
 .coach-horizontal-rail input[type="range"] { width: calc(100% + 16px); height: 30px; position: absolute; z-index: 2; left: -8px; top: 0; margin: 0; opacity: 0; cursor: pointer; }
-.coach-horizontal-labels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; }
+.coach-horizontal-labels { display: grid; align-items: start; }
 .coach-horizontal-labels b { color: #879aac; font-size: 9px; line-height: 1.15; text-align: center; transition: color .18s ease; }
 .coach-horizontal-labels b.current { color: #ff9b45; }
 .pro-coach-panel form button:disabled { opacity: .38; cursor: default; }

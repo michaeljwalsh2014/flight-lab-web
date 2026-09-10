@@ -1,5 +1,6 @@
 // Server-only: import this module from API routes, never from client components.
 export const GEMINI_MODEL = "gemini-3.5-flash";
+export const GEMINI_ADVANCED_MODEL = "gemini-3.8-flash";
 export const GEMINI_FAST_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
@@ -50,15 +51,17 @@ type GeminiOptions = {
   search?: boolean;
   thinkingLevel?: "minimal" | "low" | "medium" | "high" | null;
   preferFastModel?: boolean;
+  preferAdvancedModel?: boolean;
   maxOutputTokens?: number;
 };
 
 export async function generateGeminiResult(options: GeminiOptions) {
   const key = (process.env.GEMINI_API_KEY ?? "").trim();
   if (!key) throw new AIError("not_configured", 503);
+  const primaryModel = options.preferAdvancedModel ? GEMINI_ADVANCED_MODEL : GEMINI_MODEL;
   const models = options.preferFastModel
-    ? [GEMINI_FAST_MODEL, GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
-    : [GEMINI_MODEL, GEMINI_FAST_MODEL, GEMINI_FALLBACK_MODEL];
+    ? [GEMINI_FAST_MODEL, primaryModel, GEMINI_FALLBACK_MODEL]
+    : [primaryModel, GEMINI_FAST_MODEL, GEMINI_FALLBACK_MODEL];
   for (const [attempt, model] of models.entries()) {
     try {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -71,7 +74,7 @@ export async function generateGeminiResult(options: GeminiOptions) {
       ...(options.search ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         maxOutputTokens: options.maxOutputTokens ?? 4096,
-        ...(options.thinkingLevel === null ? {} : { thinkingConfig: { thinkingLevel: options.thinkingLevel ?? (model === GEMINI_MODEL ? "low" : "minimal") } }),
+        ...(options.thinkingLevel === null ? {} : { thinkingConfig: { thinkingLevel: options.thinkingLevel ?? (model === GEMINI_ADVANCED_MODEL ? "medium" : model === GEMINI_MODEL ? "low" : "minimal") } }),
         ...(options.schema ? { responseMimeType: "application/json", responseJsonSchema: options.schema } : {}),
       },
     }),
