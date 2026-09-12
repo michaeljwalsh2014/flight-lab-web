@@ -339,8 +339,8 @@ test("offers honest one-photo and six-photo inspections and remembers experiment
   assert.match(scanRoute, /gpt-5\.6-terra/);
   assert.match(scanRoute, /reasoning: \{ effort: "medium" \}/);
   assert.match(scanRoute, /inspectionSummary/);
-  assert.match(dashboard, /what happened\?/i);
-  assert.match(dashboard, /recordOutcome\("better"\)/);
+  assert.doesNotMatch(dashboard, /pro-evidence-list|pro-signal-row|pro-next-test|pro-test-feedback|pro-honesty-note/);
+  assert.match(dashboard, /readCoachMemory/);
   assert.match(dashboard, /chooseFreshTest/);
   assert.match(dashboard, /activeThrows/);
   assert.match(context, /CoachTestMemory/);

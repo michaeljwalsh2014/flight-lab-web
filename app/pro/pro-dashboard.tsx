@@ -588,11 +588,6 @@ function ProPlaneCoach() {
           <span>Analysis complete · {report.confidence}% confidence · {report.planeName}</span><h3>{report.headline}</h3>
           {report.vision?.model?.startsWith("gemini-") && <div><b>Advanced AI visual analysis</b><p>{report.vision.inspectionSummary}</p>{report.vision.uncertainties.length > 0 && <p>Uncertain: {report.vision.uncertainties.join(" ")}</p>}</div>}
           <div className="pro-range"><small>Estimated next flight</small><b>{report.range}</b></div><p>{report.detail}</p>
-          <ul className="pro-evidence-list">{report.evidence.map((item) => <li key={item}>{item}</li>)}</ul>
-          <div className="pro-signal-row"><span><b>{report.signals.symmetry}%</b> top symmetry</span><span><b>{report.localViewsAnalyzed}/{report.viewCount}</b> usable views</span><span><b>{report.score}</b> build score</span></div>
-          <div className="pro-next-test"><small>One change · then three throws</small><b>{report.nextTest}</b></div>
-          <div className="pro-test-feedback"><span>After testing, what happened?</span><button type="button" className={testOutcome === "better" ? "selected" : ""} onClick={() => recordOutcome("better")}>Better</button><button type="button" className={testOutcome === "same" ? "selected" : ""} onClick={() => recordOutcome("same")}>Same</button><button type="button" className={testOutcome === "worse" ? "selected" : ""} onClick={() => recordOutcome("worse")}>Worse</button></div>
-          <p className="pro-honesty-note">Photo analysis can flag visible differences, but it cannot see hidden geometry or predict exact flight performance. Confirm every recommendation with measured throws.</p>
         </div> : <div className="pro-empty-result"><div className="pro-photo-analysis-placeholder"><span>{scanMode === "multiview" ? "6" : "1"}</span><b>{scanMode === "multiview" ? "Six-angle evidence" : "Top-view evidence"}</b></div><span>Photo analysis</span><h3>{scanMode === "multiview" ? "Add six clear photos for the strongest inspection." : "Start with one clear top view."}</h3><p>{scanMode === "multiview" ? "Deep Visual Inspection can compare visible folds and alignment across every angle." : "Quick Check measures top-view outline, balance, and fold contrast."}</p></div>}
       </div>
     </div>
