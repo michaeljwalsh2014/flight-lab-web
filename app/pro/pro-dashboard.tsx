@@ -24,6 +24,7 @@ type VisionScanReport = {
   observations: string[];
   uncertainties: string[];
   issues: string[];
+  visibleBuildRisk: number;
   symmetryScore: number;
   noseAlignment: "centered" | "left" | "right" | "uncertain";
   wingDihedral: "flat" | "slight" | "strong" | "uneven" | "uncertain";
@@ -523,7 +524,13 @@ function ProPlaneCoach() {
       const releaseFactor = videoStrength ? selectedStrengthFactor * .65 + videoStrengthFactor * .35 : selectedStrengthFactor;
       const base = measuredBest > 0 ? measuredBest : planeBaselines[planeKind] * ageFactors[ageRange] * releaseFactor;
       const designFactor = .88 + score / 710;
-      const center = base * behaviorFactors[behavior] * designFactor;
+      const localBuildRisk = Math.round(Math.max(0, 76 - signals.symmetry, 70 - signals.outline, 62 - signals.foldVisibility) * 1.25);
+      const visibleBuildRisk = Math.max(localBuildRisk, vision?.visibleBuildRisk ?? 0);
+      // A severe, clearly visible construction problem should affect a prediction,
+      // while small wrinkles and uncertain photos should not drag a normal range down.
+      const visibleBuildFactor = visibleBuildRisk <= 55 ? 1 : Math.max(.4, 1 - (visibleBuildRisk - 55) * .0133);
+      const measuredBuildFactor = measuredBest > 0 ? Math.max(.78, visibleBuildFactor) : visibleBuildFactor;
+      const center = base * behaviorFactors[behavior] * designFactor * measuredBuildFactor;
       const baseUncertainty = measuredBest > 0 ? .12 : ageRange === "not-set" ? .24 : .18;
       const uncertainty = Math.max(.08, baseUncertainty - (scanMode !== "quick" ? .035 : 0));
       const low = Math.max(5, Math.round(center * (1 - uncertainty)));
@@ -540,9 +547,10 @@ function ProPlaneCoach() {
         activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
         `The last reported flight behavior was ${behavior}.`,
         `The estimate uses the ${ageRange === "not-set" ? "unspecified" : ageRange} age range and a ${strength} release for this ${planeKind} design.`,
+        ...(visibleBuildRisk >= 80 ? ["Clearly visible build defects reduced this estimate; repair the folds, then measure a real throw to replace the prediction with evidence."] : []),
         ...(videoStrength ? [`The latest video review classified the visible release as ${videoStrength} (${Math.round(videoReview!.releaseConfidence)}% confidence), so it was used as a cross-check.`] : []),
       ].slice(0, 9);
-      const headline = vision?.issues[0] ? vision.issues[0] : useGemini ? "Advanced AI photo inspection complete" : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
+      const headline = visibleBuildRisk >= 80 ? "Visible build problems are likely limiting this plane" : vision?.issues[0] ? vision.issues[0] : useGemini ? "Advanced AI photo inspection complete" : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
       const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? useGemini ? "Advanced AI inspected the uploaded images and added its findings for the report and Coach." : "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
       setProgress(89); setStage("Matching this plane with its saved flights");
       await new Promise((resolve) => window.setTimeout(resolve, 180));

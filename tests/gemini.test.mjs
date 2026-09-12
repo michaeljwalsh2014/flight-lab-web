@@ -21,7 +21,7 @@ function loadRoutes({ fetch, env = { GEMINI_API_KEY: "test-secret" }, owner = tr
 }
 const views = ["top", "nose", "left", "right", "underside", "tail"];
 const images = Object.fromEntries(views.map((view) => [view, "data:image/png;base64,aGVsbG8="]));
-const analysis = { recognizable: true, confidence: 70, observations: ["Left wing visible", "Nose centered"], uncertainties: [], issues: [], symmetryScore: 80, noseAlignment: "centered", wingDihedral: "slight", foldDefinition: "crisp", inspectionSummary: "Visible folds appear consistent." };
+const analysis = { recognizable: true, confidence: 70, observations: ["Left wing visible", "Nose centered"], uncertainties: [], issues: [], visibleBuildRisk: 12, symmetryScore: 80, noseAlignment: "centered", wingDihedral: "slight", foldDefinition: "crisp", inspectionSummary: "Visible folds appear consistent." };
 const request = (body) => new Request("https://flightlab.test/api", { method: "POST", body: JSON.stringify({ modelVersion: "v40", ...body }) });
 const completion = (text, finishReason = "STOP") => Response.json({ candidates: [{ finishReason, content: { parts: [{ thought: true, text: "private reasoning" }, { text }] } }] });
 
@@ -37,6 +37,8 @@ test("six-view scan sends labeled image bytes to Gemini and preserves the report
     assert.equal(parts.filter((part) => part.inlineData).length, 6);
     assert.deepEqual(parts.filter((part) => part.inlineData).map((part) => part.inlineData), views.map(() => ({ mimeType: "image/png", data: "aGVsbG8=" })));
     for (const view of views) assert.ok(parts.some((part) => part.text === `${view.toUpperCase()} VIEW`));
+    assert.match(parts[0].text, /age range not-set; reported throw strength normal/);
+    assert.match(body.systemInstruction.parts[0].text, /visibleBuildRisk/);
     assert.equal(body.generationConfig.responseJsonSchema.type, "object");
     return completion(JSON.stringify(analysis));
   } });
