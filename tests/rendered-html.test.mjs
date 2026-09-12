@@ -375,6 +375,9 @@ test("uses personal launch context for estimates and keeps Measure one tap away"
   assert.match(dashboard, /videoReview\.releaseStrength/);
   assert.match(dashboard, /lastFlight: behavior/);
   assert.match(scanRoute, /User-entered test context/);
+  assert.match(dashboard, /Or type a throw distance/);
+  assert.match(dashboard, /Log typed throw/);
+  assert.match(dashboard, /function saveTypedThrow/);
 });
 
 test("can select and delete planes without offering individual throw deletion", async () => {

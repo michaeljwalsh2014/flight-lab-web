@@ -622,6 +622,7 @@ function ProSmartMeasure() {
   const [sensorOn, setSensorOn] = useState(false);
   const [maxDrift, setMaxDrift] = useState(0);
   const [result, setResult] = useState<{ distance: number; confidence: number; drift: number } | null>(null);
+  const [typedDistance, setTypedDistance] = useState("");
   const [message, setMessage] = useState("");
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
@@ -731,6 +732,12 @@ function ProSmartMeasure() {
     const driftPenalty = Math.min(28, maxDrift * .7);
     const confidence = Math.round(Math.max(55, Math.min(96, 94 - driftPenalty - (steps < 6 ? 8 : 0))));
     setResult({ distance, confidence, drift: maxDrift });
+    saveFlight(distance);
+    setMode("idle");
+    setMessage("");
+  }
+
+  function saveFlight(distance: number) {
     const savedFlight: StoredThrow = {
       id: Date.now(),
       planeId: activePlaneId ?? planes[0]?.id ?? 0,
@@ -742,8 +749,17 @@ function ProSmartMeasure() {
     window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
     // Keep the Hangar and plane Coach in sync before the user can switch planes.
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
-    setMode("idle");
-    setMessage("");
+  }
+
+  function saveTypedThrow() {
+    const distance = Number(typedDistance);
+    if (!Number.isFinite(distance) || distance <= 0 || distance > 1000) {
+      setMessage("Enter a distance between 0.1 and 1,000 feet.");
+      return;
+    }
+    saveFlight(Math.round(distance * 10) / 10);
+    setTypedDistance("");
+    setMessage("Throw saved to the current plane.");
   }
 
   function chooseActivePlane(planeId: number) {
@@ -776,6 +792,8 @@ function ProSmartMeasure() {
           {mode === "idle" && !result && <>
             <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>
             <div className="measure-button-row"><button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button><button type="button" className="primary" onClick={() => begin("measuring")} disabled={!stride || !planes.length}>Measure a throw</button></div>
+            <label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label>
+            <button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button>
           </>}
           {mode !== "idle" && <div className="active-measure">
             <span>{mode === "calibrating" ? `Walk exactly ${calibrationDistance} feet` : "Walk straight to the landing point"}</span>
