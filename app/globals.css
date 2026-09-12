@@ -532,7 +532,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   100% { transform: rotateX(16deg) rotateY(330deg) rotateZ(-8deg); }
 }
 
-.pro-tool-deck { width: min(1180px, 86vw); margin: 0 auto 45px; display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--pro-line); border-radius: 18px; overflow: hidden; background: rgba(8,26,45,.78); box-shadow: 0 25px 90px rgba(0,0,0,.25); }
+.pro-tool-deck { width: min(1180px, 86vw); margin: 0 auto 45px; display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--pro-line); border-radius: 18px; overflow: hidden; background: rgba(8,26,45,.78); box-shadow: 0 25px 90px rgba(0,0,0,.25); }
 .pro-tool-deck a { min-height: 138px; padding: 22px; display: grid; align-content: center; gap: 7px; border-right: 1px solid var(--pro-line); transition: background .18s ease, transform .18s ease; }
 .pro-tool-deck a:last-child { border-right: 0; }
 .pro-tool-deck a:hover { background: rgba(23,105,255,.12); }
@@ -913,8 +913,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .pro-dashboard-hero { grid-template-columns: 1fr; padding-top: 72px; }
   .pro-hero-visual { min-height: 460px; }
   .pro-tool-deck { grid-template-columns: 1fr 1fr; }
-  .pro-tool-deck a:nth-child(2) { border-right: 0; }
-  .pro-tool-deck a:nth-child(-n+2) { border-bottom: 1px solid var(--pro-line); }
+  .pro-tool-deck a:nth-child(2), .pro-tool-deck a:nth-child(4) { border-right: 0; }
+  .pro-tool-deck a:nth-child(-n+4) { border-bottom: 1px solid var(--pro-line); }
   .pro-tool-heading, .pro-hangar-grid, .pro-plane-grid, .pro-video-grid, .smart-measure-grid { grid-template-columns: 1fr; }
   .pro-tool-heading { align-items: start; }
   .pro-result-panel { min-height: 520px; }

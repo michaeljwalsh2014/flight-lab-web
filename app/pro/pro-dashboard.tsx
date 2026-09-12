@@ -6,6 +6,7 @@ import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/fligh
 import ProCoachChat from "./pro-coach-chat";
 import { publishProAiContext, readProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
+import ProFoldingReview from "./pro-folding-review";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 import ProViewCounter from "./pro-view-counter";
@@ -751,7 +752,7 @@ function ProSmartMeasure() {
   return (
     <section className="pro-tool-section pro-measure-section" id="smart-measure">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">03</span><p>Calibrated distance</p><h2>Smart Walk Measure</h2></div>
+        <div><span className="pro-index">04</span><p>Calibrated distance</p><h2>Smart Walk Measure</h2></div>
         <p>Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks.</p>
       </div>
       <div className="smart-measure-grid">
@@ -828,7 +829,7 @@ function ExperimentLab() {
   return (
     <section className="pro-tool-section pro-experiment-section" id="experiment-lab">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">04</span><p>Controlled testing</p><h2>Experiment Builder</h2></div>
+        <div><span className="pro-index">05</span><p>Controlled testing</p><h2>Experiment Builder</h2></div>
         <p>Change one thing, run a fair test, and know whether the plane actually improved.</p>
       </div>
       <div className="experiment-grid">
@@ -854,7 +855,7 @@ export default function ProDashboard({
     <main className="pro-dashboard">
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
-        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
+        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#folding-review">Folding</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
         <div className="pro-nav-actions"><a className="pro-measure-shortcut" href="#smart-measure">Measure</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
@@ -878,13 +879,15 @@ export default function ProDashboard({
       <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
         <a href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
-        <a href="#smart-measure"><span>03</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
-        <a href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
+        <a href="#folding-review"><span>03</span><b>Folding Review</b><small>Build-process feedback</small></a>
+        <a href="#smart-measure"><span>04</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
+        <a href="#experiment-lab"><span>05</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>
 
       <ProPlaneHangar />
       <ProPlaneCoach />
       <ProVideoLab displayName={displayName} />
+      <ProFoldingReview displayName={displayName} />
       <ProSmartMeasure />
       <ExperimentLab />
       <ProCoachChat />
