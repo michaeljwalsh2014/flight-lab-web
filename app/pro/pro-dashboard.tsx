@@ -486,6 +486,13 @@ function ProPlaneCoach() {
       let deepInspection: PlaneReport["deepInspection"] = useGemini ? "unavailable" : scanMode === "quick" ? "not-applicable" : cloudVisionEnabled ? "unavailable" : "off";
       if (useGemini || (scanMode !== "quick" && cloudVisionEnabled)) {
         setProgress(68); setStage(useGemini ? "Advanced AI is inspecting your photos" : "Running deep AI inspection across all six photos");
+        const cloudInspectionStartedAt = Date.now();
+        const cloudProgressTimer = window.setInterval(() => {
+          // Cloud analysis has no useful per-token progress signal. Advance steadily
+          // through its expected wait instead of leaving the indicator frozen at 68%.
+          const elapsedSeconds = (Date.now() - cloudInspectionStartedAt) / 1000;
+          setProgress(Math.min(87, 68 + Math.floor(elapsedSeconds / .9)));
+        }, 450);
         try {
           const prepared = await Promise.all(requiredViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, useGemini ? 1280 : 760)] as const));
           const response = await fetch("/api/pro-scan", {
@@ -499,6 +506,8 @@ function ProPlaneCoach() {
         } catch (error) {
           if (useGemini) throw error;
           /* Older versions retain their on-device fallback. */
+        } finally {
+          window.clearInterval(cloudProgressTimer);
         }
       }
       const topScore = signals.symmetry * .55 + signals.outline * .3 + signals.foldVisibility * .15;

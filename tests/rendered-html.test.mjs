@@ -329,6 +329,8 @@ test("offers honest one-photo and six-photo inspections and remembers experiment
   assert.match(dashboard, /crossViewScore/);
   assert.match(dashboard, /deepInspection === "used"/);
   assert.match(dashboard, /Deep Visual Inspection could not connect/);
+  assert.match(dashboard, /cloudProgressTimer/);
+  assert.match(dashboard, /Math\.min\(87, 68 \+ Math\.floor\(elapsedSeconds \/ \.9\)\)/);
   assert.match(dashboard, /No 3D model or hidden geometry was invented/);
   assert.doesNotMatch(dashboard, /ReconstructedPlaneModel|reconstructPlaneMesh|GuidedVideoScanner|Build shaped 3D model/);
   assert.match(scanRoute, /input_image/);
