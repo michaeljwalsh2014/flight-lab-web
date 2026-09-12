@@ -250,7 +250,11 @@ function ProPlaneHangar() {
   }
 
   function selectPlane(planeId: number) {
-    saveHangar(planes, throws, planeId);
+    // Selecting a plane must never write the Hangar's cached throws back to
+    // storage. Smart Measure can save a throw between Hangar renders.
+    setActivePlaneId(planeId);
+    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
   }
 
   function choosePreset(preset: typeof proPlanePresets[number]) {
@@ -736,6 +740,8 @@ function ProSmartMeasure() {
     const nextHistory = [savedFlight, ...flightHistory];
     setFlightHistory(nextHistory);
     window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
+    // Keep the Hangar and plane Coach in sync before the user can switch planes.
+    window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
     setMode("idle");
     setMessage("");
   }

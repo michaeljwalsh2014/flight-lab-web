@@ -389,3 +389,9 @@ test("can select and delete planes without offering individual throw deletion", 
   assert.doesNotMatch(page, /function deleteFlight/);
   assert.doesNotMatch(page, /title="Delete this flight"/);
 });
+
+test("keeps newly measured throws when switching planes", async () => {
+  const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  assert.match(dashboard, /Selecting a plane must never write the Hangar's cached throws back to/);
+  assert.match(dashboard, /window\.localStorage\.setItem\("flight-lab-v2-throws", JSON\.stringify\(nextHistory\)\);\s*\/\/ Keep the Hangar/);
+});
