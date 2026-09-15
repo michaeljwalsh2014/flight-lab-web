@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const PROGRESS_TICK_MS = 90;
+const WORKING_PROGRESS_LIMIT = 98;
 
 export function SpinningPlane({ compact = false }: { compact?: boolean }) {
   return (
@@ -29,15 +32,31 @@ export function AnalysisLoader({
 }) {
   const targetProgress = Math.max(0, Math.min(100, Math.round(progress)));
   const [safeProgress, setSafeProgress] = useState(0);
+  const targetRef = useRef(targetProgress);
+
+  useEffect(() => {
+    targetRef.current = Math.max(targetRef.current, targetProgress);
+  }, [targetProgress]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSafeProgress((current) => {
-        if (current === targetProgress) { window.clearInterval(timer); return current; }
-        return current + Math.sign(targetProgress - current);
+        const target = targetRef.current;
+        if (current >= 100) {
+          window.clearInterval(timer);
+          return 100;
+        }
+
+        // Server-side AI does not expose meaningful percentage updates. Keep one
+        // calm, monotonic cadence between real milestones so the loader never
+        // races to a milestone and then appears frozen. Reserve 100% for a real
+        // completion signal from the task.
+        if (target >= 100) return current + 1;
+        return Math.min(WORKING_PROGRESS_LIMIT, current + 1);
       });
-    }, 38);
+    }, PROGRESS_TICK_MS);
     return () => window.clearInterval(timer);
-  }, [targetProgress]);
+  }, []);
   return (
     <div className="pro-analysis-loader" role="status" aria-live="polite">
       <div className="pro-evidence-loader" aria-hidden="true">
