@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
 import { useModelVersion, type CoachModelVersion } from "./model-version";
+import { evidenceLabel } from "./evidence-label";
 
 type ChatMessage = {
   id?: string;
@@ -441,7 +442,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
 
     const evidence = {
       drift: flight ? `The tracked path drifted ${flight.driftDirection} with a curve score of ${flight.curve}/100.` : "",
-      visual: plane?.vision ? `Deep Visual Inspection found “${plane.vision.issues[0]}” at ${plane.vision.confidence}% inspection confidence; the top-view symmetry measurement was ${plane.symmetry}%.` : "",
+      visual: plane?.vision ? `Deep Visual Inspection found “${plane.vision.issues[0]}” at ${evidenceLabel(plane.vision.confidence).toLowerCase()} (a heuristic evidence check); the top-view symmetry measurement was ${plane.symmetry}%.` : "",
       symmetry: plane ? `${plane.planeName}'s clearest scan signal is wing symmetry at ${plane.symmetry}%.` : "",
       stability: flight ? `The clearest flight signal is stability at ${flight.stability}/100.` : "",
       curve: flight ? `The path curve measured ${flight.curve}/100 and drifted ${flight.driftDirection}.` : "",
@@ -452,7 +453,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
       general: plane
         ? `${plane.planeName}'s ${plane.viewCount}-view scan scored ${plane.score}/100 with ${plane.symmetry}% symmetry. ${plane.evidence[0] ?? ""}`
         : flight
-          ? `The latest ${flight.profile.toLowerCase()} path scored ${flight.stability}/100 for stability with ${flight.confidence}% tracking confidence.`
+          ? `The latest ${flight.profile.toLowerCase()} path scored ${flight.stability}/100 for stability with ${evidenceLabel(flight.confidence).toLowerCase()} (not measured accuracy).`
           : "",
     }[issue];
 
@@ -609,7 +610,7 @@ export default function ProCoachChat() {
 
   const hasAnalysis = Boolean(context.plane || context.flight);
   const status = useMemo(() => context.flight
-    ? `${context.flight.profile} · ${context.flight.confidence}% track`
+    ? `${context.flight.profile} · ${evidenceLabel(context.flight.confidence)}`
     : context.plane
       ? `${context.plane.score}/100 plane scan`
       : "Ready for your question", [context]);

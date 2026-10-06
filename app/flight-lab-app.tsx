@@ -208,6 +208,7 @@ export default function FlightLabApp({
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
   const [savedDataLoaded, setSavedDataLoaded] = useState(false);
+  const [savedDataError, setSavedDataError] = useState(false);
   const [planeModalOpen, setPlaneModalOpen] = useState(false);
   const [newPlaneName, setNewPlaneName] = useState("");
   const [newPlaneImage, setNewPlaneImage] = useState(planePresets[0].image);
@@ -253,6 +254,7 @@ export default function FlightLabApp({
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as PlaneRecord[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as ThrowRecord[];
+        if (!Array.isArray(savedPlanes) || !Array.isArray(savedThrows)) throw new Error("Invalid saved records");
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(savedPlanes);
         setThrows(savedThrows);
@@ -262,11 +264,9 @@ export default function FlightLabApp({
           setHeightInches(savedHeight);
           setHeightDraft(String(savedHeight));
         }
-      } catch {
-        window.localStorage.removeItem("flight-lab-v2-planes");
-        window.localStorage.removeItem("flight-lab-v2-throws");
-      } finally {
         setSavedDataLoaded(true);
+      } catch {
+        setSavedDataError(true);
       }
     }, 0);
     return () => window.clearTimeout(loadSavedData);
@@ -661,6 +661,7 @@ export default function FlightLabApp({
 
   return (
     <main>
+      {savedDataError && <p role="alert">Your saved records could not be loaded. They are preserved on this device; new planes and throws will not be saved until recovery.</p>}
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Flight Lab home"><span className="brand-mark" aria-hidden="true">➤</span><span>Flight Lab</span></a>
         <nav aria-label="Main navigation"><a href="#hangar">My planes</a><a href="#performance">Performance</a><a href="#analyzer">Photo analyzer</a><a href="#pro">Pro</a></nav>

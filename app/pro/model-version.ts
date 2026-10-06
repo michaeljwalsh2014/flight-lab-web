@@ -10,10 +10,10 @@ export const COACH_MODEL_NUMBER: Record<CoachModelVersion, string> = {
   v46: "4.6",
 };
 export const COACH_MODEL_OPTIONS: Array<{ model: CoachModelVersion; label: string; detail: string }> = [
-  { model: "v46", label: "Flight Lab 4.6", detail: "More advanced intelligence" },
-  { model: "v40", label: "Flight Lab 4.0", detail: "Advanced intelligence" },
-  { model: "v39", label: "Flight Lab 3.9", detail: "Built-in knowledge" },
-  { model: "v38", label: "Flight Lab 3.8", detail: "Improved context + memory" },
+  { model: "v46", label: "Flight Lab 4.6 · More advanced AI", detail: "More advanced intelligence" },
+  { model: "v40", label: "Flight Lab 4.0 · Advanced AI", detail: "Advanced intelligence" },
+  { model: "v39", label: "Flight Lab 3.9 · Knowledge", detail: "Built-in knowledge" },
+  { model: "v38", label: "Flight Lab 3.8 · Improved context", detail: "Improved context + memory" },
 ];
 const storageKey = "flight-lab-coach-model";
 const changedEvent = "flight-lab-model-changed";

@@ -190,7 +190,7 @@ test("existing OpenAI fallback and explicit web search remain available", async 
 test("Flight Lab 4.0 and 4.6 use advanced AI while 3.8 and 3.9 retain their existing provider", async () => {
   const { coach, scan, models } = loadRoutes({ fetch: async () => { throw new Error("Provider must not be called"); } });
   assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.model), ["v46", "v40", "v39", "v38"]);
-  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["Flight Lab 4.6", "Flight Lab 4.0", "Flight Lab 3.9", "Flight Lab 3.8"]);
+  assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["Flight Lab 4.6 · More advanced AI", "Flight Lab 4.0 · Advanced AI", "Flight Lab 3.9 · Knowledge", "Flight Lab 3.8 · Improved context"]);
   for (const version of ["v38", "v39", "v40", "v46"]) assert.equal(models.normalizeModelVersion(version), version);
   assert.equal(models.normalizeModelVersion("v37"), "v38");
   assert.equal(models.normalizeModelVersion(null), "v40");

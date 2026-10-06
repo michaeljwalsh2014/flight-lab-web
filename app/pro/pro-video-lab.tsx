@@ -5,6 +5,8 @@ import { publishProAiContext, type ProAiContext } from "./pro-ai-context";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
+import { evidenceLabel } from "./evidence-label";
+
 type TrackPoint = { x: number; y: number; time: number; confidence: number };
 type Candidate = { x: number; y: number; area: number; energy: number; frame: number; time: number };
 type VideoReport = {
@@ -750,7 +752,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
     }
   }
 
-  const trackQuality = useMemo(() => report ? report.confidence >= 80 ? "High-confidence track" : report.confidence >= 62 ? "Usable track" : "Review uncertain points" : "", [report]);
+  const trackQuality = useMemo(() => report ? report.confidence >= 80 ? "Stronger tracking evidence" : report.confidence >= 62 ? "Some tracking evidence" : "Review uncertain points" : "", [report]);
 
   return (
     <section className="pro-tool-section pro-video-lab" id="video-lab">
@@ -761,7 +763,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       <div className="pro-video-grid">
         <div className="pro-video-input">
-          <label className="pro-model-field">AI version<select value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select></label>
+          <label className="pro-model-field">AI version<select value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select><small>{COACH_MODEL_OPTIONS.find((option) => option.model === selectedModel)?.detail}</small></label>
           <input ref={recordInputRef} className="sr-only" type="file" accept="video/*" capture="environment" onChange={chooseVideo} aria-label="Record a new flight video" />
           <input ref={libraryInputRef} className="sr-only" type="file" accept="video/*" onChange={chooseVideo} aria-label="Choose an existing flight video from Photos" />
           {videoUrl ? <>
@@ -779,15 +781,15 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
-      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>Flight Lab {COACH_MODEL_NUMBER[selectedModel]} · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? ` · ${Math.round(inspection.releaseConfidence)}% confidence` : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
+      {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>Flight Lab {COACH_MODEL_NUMBER[selectedModel]} · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? " · AI interpretation" : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
-        <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{report.confidence}%</b><small>{trackQuality}</small></div></div>
+        <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{evidenceLabel(report.confidence)}</b><small>{trackQuality}</small></div></div>
         <VideoPathReplay url={videoUrl} report={report} />
         <InteractiveFlightPath report={report} />
         <div className="pro-report-metrics compact"><article><span>Tracked airtime</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article></div>
         <p className="pro-video-summary"><b>On-device coach observations:</b> {report.observations[0]} <span>Relative speed: {report.relativeSpeed.toFixed(2)} screen/sec.</span></p>
-        <p className="pro-report-note">{report.sampledFrames} frames tracked · orange points are uncertain · screen motion, not real-world distance.</p>
+        <p className="pro-report-note">{report.sampledFrames} frames tracked · orange points are uncertain · screen motion, not real-world distance. The 3D view is an estimated illustration; evidence labels are heuristic checks, not measured accuracy.</p>
       </div>}
     </section>
   );

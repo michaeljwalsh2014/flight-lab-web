@@ -1078,3 +1078,24 @@ select {
   background-position: right 18px center;
   background-size: 16px 16px;
 }
+
+/* Progressive interfaces retain mounted tools and their in-progress work. */
+.pro-dashboard [hidden] { display: none !important; }
+.pro-interface-panel, .pro-first-flight { margin: 24px auto; padding: 28px; max-width: 1280px; background: #101b2a; border: 1px solid #334155; border-radius: 24px; color: #f1f5f9; }
+.pro-interface-panel h2, .pro-first-flight h2 { font-size: clamp(22px, 3vw, 32px); margin: 8px 0 12px; }
+.pro-interface-eyebrow { color: #93c5fd; text-transform: uppercase; letter-spacing: .12em; }
+.pro-interface-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.pro-interface-options button { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px; min-height: 100px; background: #172436; border: 2px solid #475569; color: #f1f5f9; text-align: left; }
+.pro-interface-options button[aria-pressed="true"] { background: #183a4b; border-color: #67e8f9; }
+.pro-interface-options b { font-size: 20px; }
+.pro-interface-options small { font-size: 14px; line-height: 1.5; }
+.pro-first-flight ol { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 0; list-style: none; gap: 16px; }
+.pro-first-flight a { display: flex; flex-direction: column; gap: 10px; color: #f1f5f9; padding: 16px; background: #172436; border-radius: 16px; min-height: 110px; }
+.pro-first-flight span { font-size: 14px; line-height: 1.5; color: #cbd5e1; }
+.pro-backup-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.pro-backup button { padding: 16px 22px; min-height: 56px; }
+.pro-backup-preview { margin-top: 20px; padding: 24px; border: 1px solid #475569; border-radius: 20px; }
+.pro-backup-preview button { margin: 8px 8px 0 0; }
+.pro-dashboard .pro-tool-deck { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.pro-interface-options button:focus-visible, .pro-first-flight a:focus-visible, .pro-backup button:focus-visible { outline: 3px solid #67e8f9; outline-offset: 4px; }
+@media (max-width: 640px) { .pro-interface-options, .pro-first-flight ol { grid-template-columns: 1fr; } .pro-interface-panel, .pro-first-flight { margin: 16px 12px; padding: 20px; } .pro-interface-options button { min-height: 84px; } .pro-first-flight a { min-height: 80px; } }

@@ -10,6 +10,9 @@ import ProFoldingReview from "./pro-folding-review";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 import ProViewCounter from "./pro-view-counter";
+import ProBackup from "./pro-backup";
+import { evidenceLabel } from "./evidence-label";
+type InterfaceLevel = "beginner" | "intermediate" | "pro";
 
 type PlaneKind = "dart" | "glider" | "stunt" | "custom";
 type ThrowStrength = "gentle" | "normal" | "strong";
@@ -206,27 +209,13 @@ function ProPlaneHangar() {
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
-        const seenEmptyPlanes = new Set<string>();
-        const keysWithFlights = new Set(savedPlanes.filter((plane) => savedThrows.some((item) => item.planeId === plane.id)).map((plane) => `${plane.preset ?? "custom"}:${plane.name.trim().toLowerCase()}`));
-        const cleanedPlanes = savedPlanes.filter((plane) => {
-          const hasFlights = savedThrows.some((item) => item.planeId === plane.id);
-          const key = `${plane.preset ?? "custom"}:${plane.name.trim().toLowerCase()}`;
-          if (hasFlights) return true;
-          if (keysWithFlights.has(key) || seenEmptyPlanes.has(key)) return false;
-          seenEmptyPlanes.add(key);
-          return true;
-        });
+        const cleanedPlanes = savedPlanes;
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(cleanedPlanes);
         setThrows(savedThrows);
         const nextActivePlaneId = cleanedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : cleanedPlanes[0]?.id ?? null;
         setActivePlaneId(nextActivePlaneId);
-        if (cleanedPlanes.length !== savedPlanes.length) {
-          window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(cleanedPlanes));
-          if (nextActivePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
-          else window.localStorage.setItem(activePlaneStorageKey, String(nextActivePlaneId));
-          setHangarNotice(`${savedPlanes.length - cleanedPlanes.length} empty duplicate ${savedPlanes.length - cleanedPlanes.length === 1 ? "plane was" : "planes were"} removed from this device.`);
-        }
+
       } catch {
         setPlanes([]);
         setThrows([]);
@@ -352,12 +341,13 @@ function ProPlaneHangar() {
   );
 }
 
-function ProPlaneCoach() {
+function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
   const [selectedModel, chooseModel] = useModelVersion();
   const useGemini = selectedModel === "v40" || selectedModel === "v46";
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingViewRef = useRef<ScanView>("top");
-  const [scanMode, setScanMode] = useState<ScanMode>("quick");
+  const [preferredScanMode, setScanMode] = useState<ScanMode>("quick");
+  const scanMode = level === "pro" ? preferredScanMode : "quick";
   const [scanPhotos, setScanPhotos] = useState<Partial<Record<ScanView, string>>>({});
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
   const [throws, setThrows] = useState<StoredThrow[]>([]);
@@ -552,7 +542,7 @@ function ProPlaneCoach() {
         `The last reported flight behavior was ${behavior}.`,
         `The estimate uses the ${ageRange === "not-set" ? "unspecified" : ageRange} age range and a ${strength} release for this ${planeKind} design.`,
         ...(visibleBuildRisk >= 80 ? ["Clearly visible build defects reduced this estimate; repair the folds, then measure a real throw to replace the prediction with evidence."] : []),
-        ...(videoStrength ? [`The latest video review classified the visible release as ${videoStrength} (${Math.round(videoReview!.releaseConfidence)}% confidence), so it was used as a cross-check.`] : []),
+        ...(videoStrength ? [`The latest video review classified the visible release as ${videoStrength} (AI interpretation; verify in the video), so it was used as a cross-check.`] : []),
       ].slice(0, 9);
       const headline = visibleBuildRisk >= 80 ? "Visible build problems are likely limiting this plane" : vision?.issues[0] ? vision.issues[0] : useGemini ? "Advanced AI photo inspection complete" : signals.symmetry < 78 ? "Wing mismatch is the clearest issue" : behavior === "dives" ? "The build looks usable; the dive is the next clue" : behavior === "stalls" ? "The scan points to too much rear lift" : score >= 84 ? "The build is strong enough for a controlled launch test" : "One measured adjustment should clarify the problem";
       const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? useGemini ? "Advanced AI inspected the uploaded images and added its findings for the report and Coach." : "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
@@ -573,13 +563,13 @@ function ProPlaneCoach() {
 
   const analyzing = progress > 0 && progress < 100 && !report;
   return <section className="pro-tool-section" id="plane-coach">
-    <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Photo-based plane intelligence</p><h2>Inspect your plane</h2></div><p>Choose a fast one-photo check or add six labeled angles for stronger visual evidence. Flight Lab reports only what the photos actually show.</p></div>
+    <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Photo-based plane intelligence</p><h2>Inspect your plane</h2></div><p>{level === "pro" ? "Choose a fast one-photo check or add six labeled angles for stronger visual evidence." : "Start with one clear top photo and describe the last flight."} Flight Lab reports only what the photos actually show.</p></div>
     <div className="pro-plane-grid">
       <div className="pro-upload-panel">
-        <label className="pro-model-field">AI version<select aria-label="AI version for photos, video and Coach" value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select></label>
+        <label className="pro-model-field">AI version<select aria-label="AI version for photos, video and Coach" value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select><small>{COACH_MODEL_OPTIONS.find((option) => option.model === selectedModel)?.detail}</small></label>
         <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
         <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
-        <div className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}><span>Full inspection</span><small>6 photos</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}><span>Quick check</span><small>1 photo</small></button></div>
+        <div hidden={level !== "pro"} className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}><span>Full inspection</span><small>6 photos</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}><span>Quick check</span><small>1 photo</small></button></div>
         <div className={`pro-scan-capture ${scanMode}`}>
           <div className="pro-scan-progress"><span>{capturedViews.length}/{requiredViews.length} views captured</span><i><b style={{ width: `${Math.min(100, capturedViews.length / requiredViews.length * 100)}%` }} /></i><small>{requiredViews.find((view) => !scanPhotos[view.id])?.instruction ?? "All required views are ready"}</small></div>
           <div className="pro-scan-view-grid">{requiredViews.map((view) => <button type="button" key={view.id} className={scanPhotos[view.id] ? "captured" : ""} onClick={() => requestView(view.id)}>{scanPhotos[view.id] ? <img src={scanPhotos[view.id]} alt={`${view.label} scan captured`} /> : <span>{view.id === "top" ? "CAM" : "＋"}</span>}<b>{view.label}</b><small>{scanPhotos[view.id] ? "Retake" : view.instruction}</small></button>)}</div>
@@ -588,9 +578,9 @@ function ProPlaneCoach() {
         <div className="pro-form-grid">
           <label>Plane style<select value={planeKind} onChange={(event) => setPlaneKind(event.target.value as PlaneKind)}><option value="dart">Dart</option><option value="glider">Glider</option><option value="stunt">Stunt</option><option value="custom">Custom</option></select></label>
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
-          <label>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
-          <label>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select><small>{planeKind === "glider" ? "Gliders usually travel farther with a smooth, gentle release; a hard throw is penalized." : planeKind === "dart" ? "Darts usually gain distance from a firm, level throw." : "Flight Lab adjusts the same strength differently for each plane style."}</small></label>
-          <label className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
+          <label hidden={level === "beginner"}>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
+          <label hidden={level === "beginner"}>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select><small>{planeKind === "glider" ? "Gliders usually travel farther with a smooth, gentle release; a hard throw is penalized." : planeKind === "dart" ? "Darts usually gain distance from a firm, level throw." : "Flight Lab adjusts the same strength differently for each plane style."}</small></label>
+          <label hidden={level === "beginner"} className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
         </div>
         <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing your plane…" : useGemini ? "Analyze photos with Advanced AI" : scanMode !== "quick" ? cloudVisionEnabled ? "Run deep six-photo inspection" : "Analyze six photos on device" : "Run quick one-photo check"}</button>
         {error && <p className="pro-inline-error" role="alert">{error}</p>}
@@ -598,9 +588,9 @@ function ProPlaneCoach() {
       <div className="pro-result-panel">
         {analyzing ? <AnalysisLoader progress={progress} label={stage} /> : report ? <div className="pro-plane-report" aria-live="polite">
           <div className="pro-report-photos" aria-label={`${report.viewCount} photos used in this analysis`}>{requiredViews.map((view) => scanPhotos[view.id] ? <img key={view.id} src={scanPhotos[view.id]} alt={`${view.label} view used in the analysis`} /> : null)}</div>
-          <span>Analysis complete · {report.confidence}% confidence · {report.planeName}</span><h3>{report.headline}</h3>
+          <span>Analysis complete · {evidenceLabel(report.confidence)} · {report.planeName}</span><h3>{report.headline}</h3><p className="pro-report-note">Evidence quality describes the available inputs, not a measured accuracy percentage. A photo cannot confirm flight distance.</p><p><b>Try next:</b> {report.nextTest}</p>
           {report.vision?.model?.startsWith("gemini-") && <div><b>Advanced AI visual analysis</b><p>{report.vision.inspectionSummary}</p>{report.vision.uncertainties.length > 0 && <p>Uncertain: {report.vision.uncertainties.join(" ")}</p>}</div>}
-          <div className="pro-range"><small>Estimated next flight</small><b>{report.range}</b></div><p>{report.detail}</p>
+          <div className="pro-range"><small>Estimated next flight · verify with a real throw</small><b>{report.range}</b></div><p>{report.detail}</p>
         </div> : <div className="pro-empty-result"><div className="pro-photo-analysis-placeholder"><span>{scanMode === "multiview" ? "6" : "1"}</span><b>{scanMode === "multiview" ? "Six-angle evidence" : "Top-view evidence"}</b></div><span>Photo analysis</span><h3>{scanMode === "multiview" ? "Add six clear photos for the strongest inspection." : "Start with one clear top view."}</h3><p>{scanMode === "multiview" ? "Deep Visual Inspection can compare visible folds and alignment across every angle." : "Quick Check measures top-view outline, balance, and fold contrast."}</p></div>}
       </div>
     </div>
@@ -805,15 +795,15 @@ function ProSmartMeasure() {
           </div>}
           {result && <div className="measure-result">
             <span>Measured flight distance</span><b>{result.distance.toFixed(1)} <small>ft</small></b>
-            <div><strong>{result.confidence}% confidence</strong><small>{result.drift < 15 ? "Straight walk detected" : `${Math.round(result.drift)}° direction change detected`}</small></div>
+            <div><strong>{result.drift < 15 ? "Straighter walking path" : "Walking path needs checking"}</strong><small>{result.drift < 15 ? "Straight walk detected" : `${Math.round(result.drift)}° direction change detected`}</small></div>
             <button type="button" onClick={() => setResult(null)}>Measure another</button>
           </div>}
           {message && <p className="measure-message">{message}</p>}
         </div>
         <aside className="measure-trust-card">
           <span>Why it is better</span>
-          <ol><li><b>01</b><div><strong>Your real stride</strong><small>No generic height-based guess.</small></div></li><li><b>02</b><div><strong>Motion filtering</strong><small>Rejects quick shakes that do not look like steps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Lowers confidence when the walking path bends.</small></div></li></ol>
-          <p>For official records, confirm with a tape or laser. Smart Measure reports confidence instead of claiming impossible precision.</p>
+          <ol><li><b>01</b><div><strong>Your real stride</strong><small>No generic height-based guess.</small></div></li><li><b>02</b><div><strong>Motion filtering</strong><small>Rejects quick shakes that do not look like steps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Flags a walking path that bends.</small></div></li></ol>
+          <p>For official records, confirm with a tape or laser. Walking distance is estimated from counted steps and your calibrated stride. Path checks are not a measured accuracy guarantee.</p>
         </aside>
       </div>
       <div className="pro-flight-history">
@@ -883,45 +873,68 @@ export default function ProDashboard({
   sharedPass?: boolean;
 }) {
   const [selectedModel] = useModelVersion();
+  const [level, setLevel] = useState<InterfaceLevel>("beginner");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("flight-lab-pro-interface-level");
+      if (saved === "beginner" || saved === "intermediate" || saved === "pro") setLevel(saved);
+    } catch { /* The interface works without storage. */ }
+  }, []);
+  function chooseLevel(next: InterfaceLevel) {
+    setLevel(next);
+    try { localStorage.setItem("flight-lab-pro-interface-level", next); } catch { /* Keep this session usable. */ }
+  }
   return (
-    <main className="pro-dashboard">
+    <main className={`pro-dashboard interface-${level}`}>
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
-        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a href="#video-lab">Flight path</a><a href="#folding-review">Folding</a><a href="#smart-measure">Smart Measure</a><a href="#experiment-lab">Experiments</a></nav>
+        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a hidden={level === "beginner"} href="#video-lab">Flight path</a><a hidden={level !== "pro"} href="#folding-review">Folding</a><a href="#smart-measure">Smart Measure</a><a hidden={level !== "pro"} href="#experiment-lab">Experiments</a></nav>
         <div className="pro-nav-actions"><a className="pro-measure-shortcut" href="#smart-measure">Measure</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
+      <section className="pro-interface-panel" aria-label="Choose your interface">
+        <div><p className="pro-interface-eyebrow">Your Flight Lab</p><h2>Choose how much you want to explore</h2><p>Coach is available at every level. Switch whenever you like.</p></div>
+        <div className="pro-interface-options" role="group" aria-label="Interface level">
+          {([{ id: "beginner", title: "Beginner", detail: "Measure, throw, and check your plane" }, { id: "intermediate", title: "Intermediate", detail: "Add flight recording and video analysis" }, { id: "pro", title: "Pro", detail: "All tools, full scans, folding, and experiments" }] as const).map((option) => <button key={option.id} type="button" aria-pressed={level === option.id} onClick={() => chooseLevel(option.id)}><b>{option.title}</b><small>{option.detail}</small></button>)}
+        </div>
+      </section>
       <section className="pro-dashboard-hero" id="pro-top">
         <div className="pro-hero-copy">
           <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {COACH_MODEL_NUMBER[selectedModel]}</span></div>
           {!sharedPass && <ProViewCounter />}
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
-          <p className="pro-hero-lede">Track the full flight, rate the build, measure with personal calibration, and ask a smarter knowledge-first Coach without unnecessary searches.</p>
+          <p className="pro-hero-lede">{level === "beginner" ? "Add your plane, make a throw, and measure where it lands. Coach can help you choose one small improvement." : level === "intermediate" ? "Measure your throws and record a flight to explore what the camera shows. Ask Coach what to try next." : "Explore all Flight Lab tools: full photo inspections, flight videos, folding review, and controlled experiments."}</p>
           <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a><a href="#plane-coach">Rate my plane</a></div>
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
         <div className="pro-hero-visual">
           <img className="pro-hero-plane-photo" src="/plane-presets/nakamura-lock.png" alt="A realistic handmade paper airplane glider" />
-          <div className="pro-visual-readout"><span>GLIDER</span><b>Traditional glider profile</b><small>Build a guided six-angle scan to inspect your own plane.</small></div>
+          <div className="pro-visual-readout"><span>GLIDER</span><b>Traditional glider profile</b><small>{level === "pro" ? "Build a guided six-angle scan to inspect your own plane." : "Start with a top photo of your own plane."}</small></div>
           <i className="visual-axis axis-x">X</i><i className="visual-axis axis-y">Y</i><i className="visual-axis axis-z">Z</i>
         </div>
       </section>
 
+      <section className="pro-first-flight" aria-label="Your next flight">
+        <h2>One change. Another throw.</h2>
+        <ol><li><a href="#plane-hangar"><b>1 · Add your plane</b><span>Choose a design or save your own.</span></a></li><li><a href="#smart-measure"><b>2 · Throw and measure</b><span>Save a baseline from the launch line.</span></a></li><li><a href="#plane-coach"><b>3 · Check one thing</b><span>Take a top photo and describe the flight.</span></a></li><li><a href="#smart-measure"><b>4 · Throw again</b><span>Try one small change and compare three throws.</span></a></li></ol>
+        <p>Open Coach in the corner for help at any step.</p>
+      </section>
       <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
-        <a href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
-        <a href="#folding-review"><span>03</span><b>Folding Review</b><small>Build-process feedback</small></a>
+        <a hidden={level === "beginner"} href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
+        <a hidden={level !== "pro"} href="#folding-review"><span>03</span><b>Folding Review</b><small>Build-process feedback</small></a>
         <a href="#smart-measure"><span>04</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
-        <a href="#experiment-lab"><span>05</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
+        <a hidden={level !== "pro"} href="#experiment-lab"><span>05</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>
 
       <ProPlaneHangar />
-      <ProPlaneCoach />
-      <ProVideoLab displayName={displayName} />
-      <ProFoldingReview displayName={displayName} />
       <ProSmartMeasure />
-      <ExperimentLab />
+      <ProPlaneCoach level={level} />
+      <div hidden={level === "beginner"}><ProVideoLab displayName={displayName} /></div>
+      <div hidden={level !== "pro"}><ProFoldingReview displayName={displayName} /></div>
+      <div hidden={level !== "pro"}><ExperimentLab /></div>
+      <ProBackup />
       <ProCoachChat />
 
       <footer className="pro-footer"><a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a><p>Build smarter. Track the truth. Fly farther.</p></footer>
