@@ -6,7 +6,6 @@ import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/fligh
 import ProCoachChat from "./pro-coach-chat";
 import { publishProAiContext, readProAiContext, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
-import ProFoldingReview from "./pro-folding-review";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 import ProViewCounter from "./pro-view-counter";
@@ -772,7 +771,7 @@ function ProSmartMeasure() {
   return (
     <section className="pro-tool-section pro-measure-section" id="smart-measure">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">04</span><p>Calibrated distance</p><h2>Smart Walk Measure</h2></div>
+        <div><span className="pro-index">03</span><p>Calibrated distance</p><h2>Smart Walk Measure</h2></div>
         <p>Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks.</p>
       </div>
       <div className="smart-measure-grid">
@@ -851,7 +850,7 @@ function ExperimentLab() {
   return (
     <section className="pro-tool-section pro-experiment-section" id="experiment-lab">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">05</span><p>Controlled testing</p><h2>Experiment Builder</h2></div>
+        <div><span className="pro-index">04</span><p>Controlled testing</p><h2>Experiment Builder</h2></div>
         <p>Change one thing, run a fair test, and know whether the plane actually improved.</p>
       </div>
       <div className="experiment-grid">
@@ -888,14 +887,14 @@ export default function ProDashboard({
     <main className={`pro-dashboard interface-${level}`}>
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
-        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a hidden={level === "beginner"} href="#video-lab">Flight path</a><a hidden={level !== "pro"} href="#folding-review">Folding</a><a href="#smart-measure">Smart Measure</a><a hidden={level !== "pro"} href="#experiment-lab">Experiments</a></nav>
+        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a hidden={level === "beginner"} href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a hidden={level !== "pro"} href="#experiment-lab">Experiments</a></nav>
         <div className="pro-nav-actions"><a className="pro-measure-shortcut" href="#smart-measure">Measure</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
       <section className="pro-interface-panel" aria-label="Choose your interface">
         <div><p className="pro-interface-eyebrow">Your Flight Lab</p><h2>Choose how much you want to explore</h2><p>Coach is available at every level. Switch whenever you like.</p></div>
         <div className="pro-interface-options" role="group" aria-label="Interface level">
-          {([{ id: "beginner", title: "Beginner", detail: "Measure, throw, and check your plane" }, { id: "intermediate", title: "Intermediate", detail: "Add flight recording and video analysis" }, { id: "pro", title: "Pro", detail: "All tools, full scans, folding, and experiments" }] as const).map((option) => <button key={option.id} type="button" aria-pressed={level === option.id} onClick={() => chooseLevel(option.id)}><b>{option.title}</b><small>{option.detail}</small></button>)}
+          {([{ id: "beginner", title: "Beginner", detail: "Measure, throw, and check your plane" }, { id: "intermediate", title: "Intermediate", detail: "Add flight recording and video analysis" }, { id: "pro", title: "Pro", detail: "All tools, full scans, and experiments" }] as const).map((option) => <button key={option.id} type="button" aria-pressed={level === option.id} onClick={() => chooseLevel(option.id)}><b>{option.title}</b><small>{option.detail}</small></button>)}
         </div>
       </section>
       <section className="pro-dashboard-hero" id="pro-top">
@@ -904,7 +903,7 @@ export default function ProDashboard({
           {!sharedPass && <ProViewCounter />}
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
-          <p className="pro-hero-lede">{level === "beginner" ? "Add your plane, make a throw, and measure where it lands. Coach can help you choose one small improvement." : level === "intermediate" ? "Measure your throws and record a flight to explore what the camera shows. Ask Coach what to try next." : "Explore all Flight Lab tools: full photo inspections, flight videos, folding review, and controlled experiments."}</p>
+          <p className="pro-hero-lede">{level === "beginner" ? "Add your plane, make a throw, and measure where it lands. Coach can help you choose one small improvement." : level === "intermediate" ? "Measure your throws and record a flight to explore what the camera shows. Ask Coach what to try next." : "Explore all Flight Lab tools: full photo inspections, flight videos, and controlled experiments."}</p>
           <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a><a href="#plane-coach">Rate my plane</a></div>
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
@@ -923,16 +922,14 @@ export default function ProDashboard({
       <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
         <a hidden={level === "beginner"} href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
-        <a hidden={level !== "pro"} href="#folding-review"><span>03</span><b>Folding Review</b><small>Build-process feedback</small></a>
-        <a href="#smart-measure"><span>04</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
-        <a hidden={level !== "pro"} href="#experiment-lab"><span>05</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
+        <a href="#smart-measure"><span>03</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
+        <a hidden={level !== "pro"} href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>
 
       <ProPlaneHangar />
       <ProSmartMeasure />
       <ProPlaneCoach level={level} />
       <div hidden={level === "beginner"}><ProVideoLab displayName={displayName} /></div>
-      <div hidden={level !== "pro"}><ProFoldingReview displayName={displayName} /></div>
       <div hidden={level !== "pro"}><ExperimentLab /></div>
       <ProBackup />
       <ProCoachChat />
