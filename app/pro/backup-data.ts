@@ -17,6 +17,7 @@ export function parseBackup(text: string): Backup {
     if (key === "flight-lab-v2-planes" || key === "flight-lab-v2-throws") {
       const entries: unknown = JSON.parse(raw);
       if (!Array.isArray(entries) || entries.some((item) => !record(item) || !safeId(item.id) || (key.endsWith("planes") ? typeof item.name !== "string" || !item.name.trim() : !safeId(item.planeId) || typeof item.distance !== "number" || !Number.isFinite(item.distance) || item.distance <= 0))) throw new Error("The backup has invalid planes or throws. Nothing was restored.");
+      if (entries.some((item) => (item.createdAt !== undefined && typeof item.createdAt !== "string") || (key.endsWith("planes") && ((item.image !== undefined && typeof item.image !== "string") || (item.preset !== undefined && !["dart", "glider", "custom"].includes(item.preset)))))) throw new Error("Invalid saved record details.");
       if (new Set(entries.map((item) => item.id)).size !== entries.length) throw new Error("This backup has duplicate record IDs.");
     }
     if (["flight-lab-pro-coach-tests-v1", "flight-lab-coach-conversation", "flight-lab-coach-lessons"].includes(key)) {

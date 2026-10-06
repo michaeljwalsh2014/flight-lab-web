@@ -37,6 +37,8 @@ test("invalid files, foreign keys, malformed records and duplicate IDs fail", ()
   assert.throws(() => backup({ [planesKey]: "{}" }));
   assert.throws(() => backup({ [throwsKey]: JSON.stringify([{ ...flight, distance: -1 }]) }));
   assert.throws(() => backup({ [planesKey]: JSON.stringify([plane, plane]) }));
+  assert.throws(() => backup({ [throwsKey]: JSON.stringify([{ ...flight, createdAt: {} }]) }));
+  assert.throws(() => backup({ [planesKey]: JSON.stringify([{ ...plane, image: {} }]) }));
   assert.throws(() => backup({ "flight-lab-coach-conversation": JSON.stringify([{ role: "assistant", text: {} }]) }));
 });
 test("existing saved reports win conflicts while new reports are added", () => {
