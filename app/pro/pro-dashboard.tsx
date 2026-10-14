@@ -66,6 +66,14 @@ const proPlanePresets = [
 ];
 const planesUpdatedEvent = "flight-lab-planes-updated";
 const activePlaneStorageKey = "flight-lab-v2-active-plane-id";
+const measureAgeStorageKey = "flight-lab-pro-measure-age-range";
+const estimatedStrideByAge: Record<Exclude<AgeRange, "not-set">, number> = {
+  "under-8": 1.5,
+  "8-10": 1.8,
+  "11-13": 2.1,
+  "14-17": 2.3,
+  adult: 2.4,
+};
 const coachMemoryStorageKey = "flight-lab-pro-coach-tests-v1";
 const planeReportsStorageKey = "flight-lab-pro-plane-reports-v1";
 
@@ -603,14 +611,16 @@ function headingDistance(first: number, second: number) {
   return Math.min(direct, 360 - direct);
 }
 
-function ProSmartMeasure() {
+function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   const [stride, setStride] = useState(0);
+  const [ageRange, setAgeRange] = useState<AgeRange>("not-set");
+  const [measurementStride, setMeasurementStride] = useState(0);
   const [calibrationDistance, setCalibrationDistance] = useState("20");
   const [steps, setSteps] = useState(0);
   const [mode, setMode] = useState<MeasureMode>("idle");
   const [sensorOn, setSensorOn] = useState(false);
   const [maxDrift, setMaxDrift] = useState(0);
-  const [result, setResult] = useState<{ distance: number; confidence: number; drift: number } | null>(null);
+  const [result, setResult] = useState<{ distance: number; confidence: number; drift: number; estimated: boolean } | null>(null);
   const [typedDistance, setTypedDistance] = useState("");
   const [message, setMessage] = useState("");
   const [planes, setPlanes] = useState<StoredPlane[]>([]);
@@ -625,6 +635,8 @@ function ProSmartMeasure() {
     const loadSavedData = () => {
       const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
       if (saved >= 1.1 && saved <= 4) setStride(saved);
+      const savedAge = window.localStorage.getItem(measureAgeStorageKey);
+      if (savedAge && savedAge in estimatedStrideByAge) setAgeRange(savedAge as AgeRange);
       try {
         const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
         const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
@@ -685,6 +697,12 @@ function ProSmartMeasure() {
   }
 
   async function begin(nextMode: Exclude<MeasureMode, "idle">) {
+    const nextStride = level === "beginner" ? estimatedStrideByAge[ageRange as Exclude<AgeRange, "not-set">] : stride;
+    if (nextMode === "measuring" && (!Number.isFinite(nextStride) || nextStride <= 0)) {
+      setMessage(level === "beginner" ? "Choose your age range to start measuring." : "Calibrate your stride first.");
+      return;
+    }
+    setMeasurementStride(nextStride);
     setSteps(0);
     setResult(null);
     setMessage("");
@@ -713,14 +731,14 @@ function ProSmartMeasure() {
   }
 
   function finishMeasurement() {
-    if (!steps || !stride) {
-      setMessage(stride ? "Count at least one step before finishing." : "Calibrate your stride first.");
+    if (!steps || !measurementStride) {
+      setMessage(measurementStride ? "Count at least one step before finishing." : "Start a new measurement first.");
       return;
     }
-    const distance = Math.round(steps * stride * 10) / 10;
+    const distance = Math.round(steps * measurementStride * 10) / 10;
     const driftPenalty = Math.min(28, maxDrift * .7);
     const confidence = Math.round(Math.max(55, Math.min(96, 94 - driftPenalty - (steps < 6 ? 8 : 0))));
-    setResult({ distance, confidence, drift: maxDrift });
+    setResult({ distance, confidence, drift: maxDrift, estimated: level === "beginner" });
     saveFlight(distance);
     setMode("idle");
     setMessage("");
@@ -757,7 +775,7 @@ function ProSmartMeasure() {
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: planes }));
   }
 
-  const liveDistance = steps * (stride || 0);
+  const liveDistance = steps * measurementStride;
   const activeFlightHistory = flightHistory.filter((flight) => flight.planeId === activePlaneId);
   const averageDistance = activeFlightHistory.length
     ? activeFlightHistory.reduce((sum, flight) => sum + flight.distance, 0) / activeFlightHistory.length
@@ -765,50 +783,49 @@ function ProSmartMeasure() {
   const bestDistance = activeFlightHistory.length
     ? Math.max(...activeFlightHistory.map((flight) => flight.distance))
     : 0;
-  const visibleFlights = historyView === "latest" ? activeFlightHistory.slice(0, 5) : activeFlightHistory;
+  const visibleFlights = level === "beginner" || historyView === "latest" ? activeFlightHistory.slice(0, 5) : activeFlightHistory;
   const planeNames = new Map(planes.map((plane) => [plane.id, plane.name]));
 
   return (
     <section className="pro-tool-section pro-measure-section" id="smart-measure">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">03</span><p>Calibrated distance</p><h2>Smart Walk Measure</h2></div>
-        <p>Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks.</p>
+        <div><span className="pro-index">03</span><p>{level === "beginner" ? "Easy measurement" : "Calibrated distance"}</p><h2>{level === "beginner" ? "Measure a throw" : "Smart Walk Measure"}</h2></div>
+        <p>{level === "beginner" ? "Choose your age range, tap Start, then walk to your plane and tap Finish. The distance is an estimate." : "Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks."}</p>
       </div>
       <div className="smart-measure-grid">
         <div className="measure-control-card">
-          <div className="calibration-status"><span>Personal calibration</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>
+          {level !== "beginner" && <div className="calibration-status"><span>Personal calibration</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>}
           {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => chooseActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
           {mode === "idle" && !result && <>
-            <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>
-            <div className="measure-button-row"><button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button><button type="button" className="primary" onClick={() => begin("measuring")} disabled={!stride || !planes.length}>Measure a throw</button></div>
-            <label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label>
-            <button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button>
+            {level === "beginner" ? <label>Your age range<select value={ageRange} onChange={(event) => { const next = event.target.value as AgeRange; setAgeRange(next); window.localStorage.setItem(measureAgeStorageKey, next); }}><option value="not-set">Choose an age range</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select><small>Used only for an approximate step length on this device.</small></label> : <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>}
+            <div className="measure-button-row">{level !== "beginner" && <button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button>}<button type="button" className="primary" onClick={() => begin("measuring")} disabled={!planes.length || (level === "beginner" ? ageRange === "not-set" : !stride)}>{level === "beginner" ? "Start measuring" : "Measure a throw"}</button></div>
+            {level !== "beginner" && <><label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label><button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button></>}
           </>}
           {mode !== "idle" && <div className="active-measure">
             <span>{mode === "calibrating" ? `Walk exactly ${calibrationDistance} feet` : "Walk straight to the landing point"}</span>
             <b>{mode === "measuring" ? `${liveDistance.toFixed(1)} ft` : steps}</b>
-            <small>{mode === "measuring" ? `${steps} calibrated steps` : `${steps} steps counted`} · {sensorOn ? "automatic counter on" : "manual counter"}</small>
+            <small>{steps} steps counted · {sensorOn ? "automatic counter on" : "use + Step if needed"}</small>
             <div className="step-controls"><button type="button" onClick={() => setSteps((value) => Math.max(0, value - 1))}>−</button><button type="button" onClick={() => setSteps((value) => value + 1)}>＋ Step</button></div>
-            <div className="straight-meter"><span>Walking line</span><i><b style={{ width: `${Math.max(4, 100 - Math.min(100, maxDrift * 2))}%` }} /></i><small>{maxDrift < 12 ? "Straight" : maxDrift < 28 ? "Slight drift" : "Turn detected"}</small></div>
-            <button className="pro-command-button" type="button" onClick={mode === "calibrating" ? finishCalibration : finishMeasurement}>{mode === "calibrating" ? "Finish calibration" : "At airplane · finish"}</button>
+            {level !== "beginner" && <div className="straight-meter"><span>Walking line</span><i><b style={{ width: `${Math.max(4, 100 - Math.min(100, maxDrift * 2))}%` }} /></i><small>{maxDrift < 12 ? "Straight" : maxDrift < 28 ? "Slight drift" : "Turn detected"}</small></div>}
+            <button className="pro-command-button" type="button" onClick={mode === "calibrating" ? finishCalibration : finishMeasurement}>{mode === "calibrating" ? "Finish calibration" : level === "beginner" ? "Finish and save throw" : "At airplane · finish"}</button>
           </div>}
           {result && <div className="measure-result">
-            <span>Measured flight distance</span><b>{result.distance.toFixed(1)} <small>ft</small></b>
-            <div><strong>{result.drift < 15 ? "Straighter walking path" : "Walking path needs checking"}</strong><small>{result.drift < 15 ? "Straight walk detected" : `${Math.round(result.drift)}° direction change detected`}</small></div>
+            <span>{result.estimated ? "Estimated throw distance" : "Measured flight distance"}</span><b>{result.distance.toFixed(1)} <small>ft</small></b>
+            {level !== "beginner" && <div><strong>{result.drift < 15 ? "Straighter walking path" : "Walking path needs checking"}</strong><small>{result.drift < 15 ? "Straight walk detected" : `${Math.round(result.drift)}° direction change detected`}</small></div>}
             <button type="button" onClick={() => setResult(null)}>Measure another</button>
           </div>}
           {message && <p className="measure-message">{message}</p>}
         </div>
-        <aside className="measure-trust-card">
+        {level !== "beginner" && <aside className="measure-trust-card">
           <span>Why it is better</span>
           <ol><li><b>01</b><div><strong>Your real stride</strong><small>No generic height-based guess.</small></div></li><li><b>02</b><div><strong>Motion filtering</strong><small>Rejects quick shakes that do not look like steps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Flags a walking path that bends.</small></div></li></ol>
           <p>For official records, confirm with a tape or laser. Walking distance is estimated from counted steps and your calibrated stride. Path checks are not a measured accuracy guarantee.</p>
-        </aside>
+        </aside>}
       </div>
       <div className="pro-flight-history">
         <div className="pro-history-heading">
           <div><span>Saved performance</span><h3>Your flights</h3></div>
-          <div className="pro-history-tabs" aria-label="Choose how many flights to show">
+          <div className="pro-history-tabs" aria-label="Choose how many flights to show" hidden={level === "beginner"}>
             <button type="button" className={historyView === "latest" ? "active" : ""} onClick={() => setHistoryView("latest")}>Newest 5</button>
             <button type="button" className={historyView === "all" ? "active" : ""} onClick={() => setHistoryView("all")}>Show all flights</button>
           </div>
@@ -888,7 +905,7 @@ export default function ProDashboard({
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
         <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a hidden={level === "beginner"} href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a hidden={level !== "pro"} href="#experiment-lab">Experiments</a></nav>
-        <div className="pro-nav-actions"><a className="pro-measure-shortcut" href="#smart-measure">Measure</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
+        <div className="pro-nav-actions">{level !== "beginner" && <a className="pro-measure-shortcut" href="#smart-measure">Measure</a>}<a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
       <section className="pro-interface-panel" aria-label="Choose your interface">
@@ -904,7 +921,7 @@ export default function ProDashboard({
           <p>Flight intelligence for paper aircraft</p>
           <h1>See what your<br />plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">{level === "beginner" ? "Add your plane, make a throw, and measure where it lands. Coach can help you choose one small improvement." : level === "intermediate" ? "Measure your throws and record a flight to explore what the camera shows. Ask Coach what to try next." : "Explore all Flight Lab tools: full photo inspections, flight videos, and controlled experiments."}</p>
-          <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a><a href="#plane-coach">Rate my plane</a></div>
+          <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a>{level !== "beginner" && <a href="#plane-coach">Rate my plane</a>}</div>
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
         </div>
         <div className="pro-hero-visual">
@@ -914,20 +931,20 @@ export default function ProDashboard({
         </div>
       </section>
 
-      <section className="pro-first-flight" aria-label="Your next flight">
+      {level !== "beginner" && <section className="pro-first-flight" aria-label="Your next flight">
         <h2>One change. Another throw.</h2>
         <ol><li><a href="#plane-hangar"><b>1 · Add your plane</b><span>Choose a design or save your own.</span></a></li><li><a href="#smart-measure"><b>2 · Throw and measure</b><span>Save a baseline from the launch line.</span></a></li><li><a href="#plane-coach"><b>3 · Check one thing</b><span>Take a top photo and describe the flight.</span></a></li><li><a href="#smart-measure"><b>4 · Throw again</b><span>Try one small change and compare three throws.</span></a></li></ol>
         <p>Open Coach in the corner for help at any step.</p>
-      </section>
-      <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
+      </section>}
+      {level !== "beginner" && <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
-        <a hidden={level === "beginner"} href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
+        <a href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
         <a href="#smart-measure"><span>03</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
         <a hidden={level !== "pro"} href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
-      </section>
+      </section>}
 
       <ProPlaneHangar />
-      <ProSmartMeasure />
+      <ProSmartMeasure level={level} />
       <ProPlaneCoach level={level} />
       <div hidden={level === "beginner"}><ProVideoLab displayName={displayName} /></div>
       <div hidden={level !== "pro"}><ExperimentLab /></div>
