@@ -531,7 +531,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   return reply;
 }
 
-export default function ProCoachChat() {
+export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "beginner" | "intermediate" | "pro" }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -741,7 +741,7 @@ export default function ProCoachChat() {
           <div>{FEEDBACK_OPTIONS.map((option) => <button type="button" key={option.reason} onClick={() => rememberLesson(option.reason)}>{option.label}</button>)}</div>
           <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
         </div>}
-        <section className="coach-response-mode" aria-label="Coach response mode">
+        {interfaceLevel !== "beginner" && <section className="coach-response-mode" aria-label="Coach response mode">
           <div className="coach-model-group">
             <button type="button" aria-expanded={modelMenuOpen} aria-haspopup="menu" onClick={() => setModelMenuOpen((value) => !value)}><span>ϟ</span><b>{COACH_MODEL_GROUPS.find((group) => group.id === modelGroup)?.label}</b><i>›</i></button>
             {modelMenuOpen && <div role="menu" aria-label="Flight Lab model lists">{COACH_MODEL_GROUPS.map((group) => <button type="button" role="menuitem" className={group.id === modelGroup ? "selected" : ""} key={group.id} onClick={() => chooseModelGroup(group.id)}><b>{group.label}</b><small>{group.detail}</small></button>)}</div>}
@@ -754,7 +754,7 @@ export default function ProCoachChat() {
             <input type="range" min="0" max={coachOptions.length - 1} step="1" value={coachLevel} onChange={(event) => chooseCoachLevel(Number(event.target.value))} aria-label="Coach response mode" aria-valuetext={activeCoachOption.label} />
           </div>
           <div className="coach-horizontal-labels" style={{ gridTemplateColumns: `repeat(${coachOptions.length}, minmax(0, 1fr))` }} aria-hidden="true">{coachOptions.map((option, level) => <b key={`${option.model}-${option.mode}`} className={level === coachLevel ? "current" : ""}>{option.shortLabel}</b>)}</div>
-        </section>
+        </section>}
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Flight Lab Coach</label>
           <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything…" />

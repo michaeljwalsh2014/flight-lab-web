@@ -579,7 +579,7 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
     <div className="pro-tool-heading"><div><span className="pro-index">01</span><p>Photo-based plane intelligence</p><h2>Inspect your plane</h2></div><p>{level === "pro" ? "Choose a fast one-photo check or add six labeled angles for stronger visual evidence." : "Start with one clear top photo and describe the last flight."} Flight Lab reports only what the photos actually show.</p></div>
     <div className="pro-plane-grid">
       <div className="pro-upload-panel">
-        <label className="pro-model-field">AI version<select aria-label="AI version for photos, video and Coach" value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select><small>{COACH_MODEL_OPTIONS.find((option) => option.model === selectedModel)?.detail}</small></label>
+        {level !== "beginner" && <label className="pro-model-field">AI version<select aria-label="AI version for photos, video and Coach" value={selectedModel} disabled={analyzing} onChange={(event) => chooseModel(event.target.value as typeof selectedModel)}>{COACH_MODEL_OPTIONS.map((option) => <option key={option.model} value={option.model}>{option.label}</option>)}</select><small>{COACH_MODEL_OPTIONS.find((option) => option.model === selectedModel)?.detail}</small></label>}
         <input ref={inputRef} className="sr-only" type="file" accept="image/*" capture="environment" onChange={choosePhoto} aria-label={`Capture the ${pendingViewRef.current} view of your plane`} />
         <div className="pro-coach-plane-bar"><div><span>Analyzing</span><b>{activePlane?.name ?? "Unsaved plane"}</b></div>{planes.length ? <label>Current plane<select value={activePlaneId ?? ""} onChange={(event) => selectActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a href="#plane-hangar">＋ Add a plane first</a>}</div>
         <div hidden={level !== "pro"} className="pro-scan-mode" role="group" aria-label="Choose scan mode"><button type="button" className={scanMode === "multiview" ? "selected" : ""} onClick={() => { setScanMode("multiview"); setReport(null); }}><span>Full inspection</span><small>6 photos</small></button><button type="button" className={scanMode === "quick" ? "selected" : ""} onClick={() => { setScanMode("quick"); setReport(null); }}><span>Quick check</span><small>1 photo</small></button></div>
@@ -1022,7 +1022,7 @@ export default function ProDashboard({
       <div hidden={level === "beginner"}><ProVideoLab displayName={displayName} /></div>
       <div hidden={level !== "pro"}><ExperimentLab /></div>
       <ProBackup />
-      <ProCoachChat />
+      <ProCoachChat interfaceLevel={level} />
       <ProOnboarding level={level} onChooseLevel={chooseLevel} replay={tourReplay} deviceLayout={deviceLayout} />
 
       <footer className="pro-footer"><a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a><p>Build smarter. Track the truth. Fly farther.</p></footer>
