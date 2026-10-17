@@ -11,6 +11,8 @@ import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./mode
 import ProViewCounter from "./pro-view-counter";
 import ProBackup from "./pro-backup";
 import { evidenceLabel } from "./evidence-label";
+import { WalkingRhythmCounter } from "./walking-rhythm";
+import ProOnboarding, { interfaceOptions } from "./pro-onboarding";
 type InterfaceLevel = "beginner" | "intermediate" | "pro";
 
 type PlaneKind = "dart" | "glider" | "stunt" | "custom";
@@ -322,7 +324,7 @@ function ProPlaneHangar() {
         </div>
         <div className="pro-plane-builder">
           <label>Plane name<input value={planeName} onChange={(event) => setPlaneName(event.target.value)} maxLength={32} onKeyDown={(event) => { if (event.key === "Enter") addPlane(); }} /></label>
-          <button className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
+          <button data-tour="plane" className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
           {hangarNotice && <p className="pro-hangar-notice" role="status">{hangarNotice}</p>}
           <div className="pro-saved-planes">
             <div className="pro-saved-header"><span>{planes.length ? `${planes.length} saved on this device` : "No planes saved on this device"}</span>{planes.length ? <button type="button" onClick={clearHangar}>Clear hangar</button> : null}</div>
@@ -615,6 +617,9 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   const [stride, setStride] = useState(0);
   const [ageRange, setAgeRange] = useState<AgeRange>("not-set");
   const [measurementStride, setMeasurementStride] = useState(0);
+  const [stepLength, setStepLength] = useState("");
+  const [rhythmFound, setRhythmFound] = useState(false);
+  const [motionSeen, setMotionSeen] = useState(false);
   const [calibrationDistance, setCalibrationDistance] = useState("20");
   const [steps, setSteps] = useState(0);
   const [mode, setMode] = useState<MeasureMode>("idle");
@@ -627,14 +632,14 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [flightHistory, setFlightHistory] = useState<StoredThrow[]>([]);
   const [historyView, setHistoryView] = useState<"latest" | "all">("latest");
-  const motionArmed = useRef(true);
-  const lastStepAt = useRef(0);
+  const rhythmCounter = useRef(new WalkingRhythmCounter());
+  const motionSeenRef = useRef(false);
   const initialHeading = useRef<number | null>(null);
 
   useEffect(() => {
     const loadSavedData = () => {
       const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
-      if (saved >= 1.1 && saved <= 4) setStride(saved);
+      if (saved >= 1.1 && saved <= 4) { setStride(saved); setStepLength(String(saved)); }
       const savedAge = window.localStorage.getItem(measureAgeStorageKey);
       if (savedAge && savedAge in estimatedStrideByAge) setAgeRange(savedAge as AgeRange);
       try {
@@ -656,17 +661,16 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   }, []);
 
   useEffect(() => {
-    if (mode === "idle") return;
+    if (mode === "idle" || !sensorOn) return;
     const onMotion = (event: DeviceMotionEvent) => {
       const acceleration = event.accelerationIncludingGravity;
       if (!acceleration) return;
-      const magnitude = Math.hypot(acceleration.x ?? 0, acceleration.y ?? 0, acceleration.z ?? 0);
-      if (magnitude < 10.65) motionArmed.current = true;
-      if (motionArmed.current && magnitude > 12.15 && Date.now() - lastStepAt.current > 330) {
-        motionArmed.current = false;
-        lastStepAt.current = Date.now();
-        setSteps((current) => current + 1);
-      }
+      if (acceleration.x == null && acceleration.y == null && acceleration.z == null) return;
+      motionSeenRef.current = true;
+      setMotionSeen(true);
+      const count = rhythmCounter.current.sample(Math.hypot(acceleration.x ?? 0, acceleration.y ?? 0, acceleration.z ?? 0), event.timeStamp);
+      if (count) setSteps((current) => current + count);
+      setRhythmFound(rhythmCounter.current.walking);
     };
     const onOrientation = (event: DeviceOrientationEvent) => {
       if (event.alpha == null) return;
@@ -675,21 +679,26 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
     };
     window.addEventListener("devicemotion", onMotion);
     window.addEventListener("deviceorientation", onOrientation);
+    const missingMotion = window.setTimeout(() => {
+      if (!motionSeenRef.current) setMessage("No walking motion received yet. Use + Step to count your steps if the automatic counter stays still.");
+    }, 4000);
     return () => {
+      window.clearTimeout(missingMotion);
       window.removeEventListener("devicemotion", onMotion);
       window.removeEventListener("deviceorientation", onOrientation);
     };
-  }, [mode]);
+  }, [mode, sensorOn]);
 
   async function requestSensors() {
     try {
-      const motionEvent = window.DeviceMotionEvent as typeof DeviceMotionEvent & { requestPermission?: () => Promise<PermissionState> };
+      const motionEvent = window.DeviceMotionEvent as (typeof DeviceMotionEvent & { requestPermission?: () => Promise<PermissionState> }) | undefined;
       const orientationEvent = window.DeviceOrientationEvent as typeof DeviceOrientationEvent & { requestPermission?: () => Promise<PermissionState> };
-      const motionPermission = motionEvent.requestPermission ? await motionEvent.requestPermission() : "granted";
-      const orientationPermission = orientationEvent.requestPermission ? await orientationEvent.requestPermission() : "granted";
+      const motionPermission = !motionEvent ? "denied" : motionEvent.requestPermission ? await motionEvent.requestPermission() : "granted";
       const allowed = motionPermission === "granted";
       setSensorOn(allowed);
       if (!allowed) setMessage("Automatic step counting is off. Use the + step button while you walk.");
+      // Optional direction permission must not disable an allowed motion counter.
+      try { if (orientationEvent?.requestPermission) await orientationEvent.requestPermission(); } catch { /* Walking works without headings. */ }
     } catch {
       setSensorOn(false);
       setMessage("Automatic step counting is unavailable. Use the + step button while you walk.");
@@ -697,10 +706,14 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   }
 
   async function begin(nextMode: Exclude<MeasureMode, "idle">) {
-    const nextStride = level === "beginner" ? estimatedStrideByAge[ageRange as Exclude<AgeRange, "not-set">] : stride;
-    if (nextMode === "measuring" && (!Number.isFinite(nextStride) || nextStride <= 0)) {
-      setMessage(level === "beginner" ? "Choose your age range to start measuring." : "Calibrate your stride first.");
+    const nextStride = level === "beginner" ? estimatedStrideByAge[ageRange as Exclude<AgeRange, "not-set">] : level === "intermediate" ? Number(stepLength) : stride;
+    if (nextMode === "measuring" && (!Number.isFinite(nextStride) || nextStride < 1.1 || nextStride > 4)) {
+      setMessage(level === "beginner" ? "Choose your age range to start measuring." : level === "intermediate" ? "Enter your step length between 1.1 and 4 feet." : "Calibrate your stride first.");
       return;
+    }
+    if (level === "intermediate" && nextMode === "measuring") {
+      setStride(nextStride);
+      window.localStorage.setItem("flight-lab-pro-stride", String(nextStride));
     }
     setMeasurementStride(nextStride);
     setSteps(0);
@@ -708,7 +721,10 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
     setMessage("");
     setMaxDrift(0);
     initialHeading.current = null;
-    motionArmed.current = true;
+    rhythmCounter.current = new WalkingRhythmCounter();
+    motionSeenRef.current = false;
+    setMotionSeen(false);
+    setRhythmFound(false);
     await requestSensors();
     setMode(nextMode);
   }
@@ -725,6 +741,7 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       return;
     }
     setStride(calibratedStride);
+    setStepLength(String(calibratedStride));
     window.localStorage.setItem("flight-lab-pro-stride", String(calibratedStride));
     setMode("idle");
     setMessage(`Calibration saved: ${calibratedStride.toFixed(2)} feet per step.`);
@@ -789,23 +806,24 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   return (
     <section className="pro-tool-section pro-measure-section" id="smart-measure">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">03</span><p>{level === "beginner" ? "Easy measurement" : "Calibrated distance"}</p><h2>{level === "beginner" ? "Measure a throw" : "Smart Walk Measure"}</h2></div>
-        <p>{level === "beginner" ? "Choose your age range, tap Start, then walk to your plane and tap Finish. The distance is an estimate." : "Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks."}</p>
+        <div><span className="pro-index">03</span><p>{level === "beginner" ? "Easy measurement" : level === "intermediate" ? "Personal step length" : "Calibrated distance"}</p><h2>{level === "beginner" ? "Measure a throw" : "Smart Walk Measure"}</h2></div>
+        <p>{level === "beginner" ? "Choose your age range, tap Start, then walk to your plane and tap Finish. The distance is an estimate." : level === "intermediate" ? "Enter your normal step length once, then walk to your plane to estimate the distance." : "Teach Flight Lab your real stride once, then combine it with motion sensing and straight-line checks."}</p>
       </div>
       <div className="smart-measure-grid">
         <div className="measure-control-card">
-          {level !== "beginner" && <div className="calibration-status"><span>Personal calibration</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>}
+          {level === "pro" && <div className="calibration-status"><span>Personal step length</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>}
           {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => chooseActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
           {mode === "idle" && !result && <>
-            {level === "beginner" ? <label>Your age range<select value={ageRange} onChange={(event) => { const next = event.target.value as AgeRange; setAgeRange(next); window.localStorage.setItem(measureAgeStorageKey, next); }}><option value="not-set">Choose an age range</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select><small>Used only for an approximate step length on this device.</small></label> : <label>Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>}
-            <div className="measure-button-row">{level !== "beginner" && <button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button>}<button type="button" className="primary" onClick={() => begin("measuring")} disabled={!planes.length || (level === "beginner" ? ageRange === "not-set" : !stride)}>{level === "beginner" ? "Start measuring" : "Measure a throw"}</button></div>
-            {level !== "beginner" && <><label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label><button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button></>}
+            {level === "beginner" ? <label data-tour="measure-setup">Your age range<select value={ageRange} onChange={(event) => { const next = event.target.value as AgeRange; setAgeRange(next); window.localStorage.setItem(measureAgeStorageKey, next); }}><option value="not-set">Choose an age range</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select><small>Used only for an approximate step length on this device.</small></label> : level === "intermediate" ? <label data-tour="measure-setup">Your step length<div className="pro-unit-input"><input type="number" min="1.1" max="4" step="0.01" inputMode="decimal" value={stepLength} onChange={(event) => setStepLength(event.target.value)} placeholder="For example, 2.2" /><span>feet / step</span></div><small>One normal step, from one foot landing to the other.</small></label> : <label data-tour="measure-setup">Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>}
+            <div className="measure-button-row" data-tour="measure-start">{level === "pro" && <button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button>}<button type="button" className="primary" onClick={() => begin("measuring")} disabled={!planes.length || (level === "beginner" ? ageRange === "not-set" : level === "intermediate" ? !Number(stepLength) : !stride)}>{level === "beginner" ? "Start measuring" : "Measure a throw"}</button></div>
+            {level === "pro" && <><label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label><button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button></>}
           </>}
           {mode !== "idle" && <div className="active-measure">
             <span>{mode === "calibrating" ? `Walk exactly ${calibrationDistance} feet` : "Walk straight to the landing point"}</span>
             <b>{mode === "measuring" ? `${liveDistance.toFixed(1)} ft` : steps}</b>
-            <small>{steps} steps counted · {sensorOn ? "automatic counter on" : "use + Step if needed"}</small>
-            <div className="step-controls"><button type="button" onClick={() => setSteps((value) => Math.max(0, value - 1))}>−</button><button type="button" onClick={() => setSteps((value) => value + 1)}>＋ Step</button></div>
+            <small>{steps} steps counted · {sensorOn && motionSeen ? rhythmFound ? "walking rhythm found" : "finding your walking rhythm" : "use + Step if needed"}</small>
+            <p className="walking-rhythm-note">Walk normally and hold your device steady. The first few steps appear together once a rhythm is found. For short walks or missed steps, adjust the count below.</p>
+            <div className="step-controls"><button type="button" aria-label="Remove one step" onClick={() => { rhythmCounter.current = new WalkingRhythmCounter(); setRhythmFound(false); setSteps((value) => Math.max(0, value - 1)); }}>−</button><button type="button" onClick={() => { rhythmCounter.current = new WalkingRhythmCounter(); setRhythmFound(false); setSteps((value) => value + 1); }}>＋ Step</button></div>
             {level !== "beginner" && <div className="straight-meter"><span>Walking line</span><i><b style={{ width: `${Math.max(4, 100 - Math.min(100, maxDrift * 2))}%` }} /></i><small>{maxDrift < 12 ? "Straight" : maxDrift < 28 ? "Slight drift" : "Turn detected"}</small></div>}
             <button className="pro-command-button" type="button" onClick={mode === "calibrating" ? finishCalibration : finishMeasurement}>{mode === "calibrating" ? "Finish calibration" : level === "beginner" ? "Finish and save throw" : "At airplane · finish"}</button>
           </div>}
@@ -818,8 +836,8 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
         </div>
         {level !== "beginner" && <aside className="measure-trust-card">
           <span>Why it is better</span>
-          <ol><li><b>01</b><div><strong>Your real stride</strong><small>No generic height-based guess.</small></div></li><li><b>02</b><div><strong>Motion filtering</strong><small>Rejects quick shakes that do not look like steps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Flags a walking path that bends.</small></div></li></ol>
-          <p>For official records, confirm with a tape or laser. Walking distance is estimated from counted steps and your calibrated stride. Path checks are not a measured accuracy guarantee.</p>
+          <ol><li><b>01</b><div><strong>Your real stride</strong><small>Use your personal step length.</small></div></li><li><b>02</b><div><strong>Walking rhythm</strong><small>Waits for regular step-like movements to reduce isolated bumps.</small></div></li><li><b>03</b><div><strong>Direction check</strong><small>Flags a walking path that bends.</small></div></li></ol>
+          <p>For official records, confirm with a tape or laser. Walking distance is estimated from counted steps and your step length. Path checks are not a measured accuracy guarantee.</p>
         </aside>}
       </div>
       <div className="pro-flight-history">
@@ -890,6 +908,7 @@ export default function ProDashboard({
 }) {
   const [selectedModel] = useModelVersion();
   const [level, setLevel] = useState<InterfaceLevel>("beginner");
+  const [tourReplay, setTourReplay] = useState(0);
   useEffect(() => {
     try {
       const saved = localStorage.getItem("flight-lab-pro-interface-level");
@@ -909,9 +928,9 @@ export default function ProDashboard({
       </header>
 
       <section className="pro-interface-panel" aria-label="Choose your interface">
-        <div><p className="pro-interface-eyebrow">Your Flight Lab</p><h2>Choose how much you want to explore</h2><p>Coach is available at every level. Switch whenever you like.</p></div>
+        <div><p className="pro-interface-eyebrow">Your Flight Lab</p><h2>Choose your level</h2><p>Coach is available at every level. Switch whenever you like.</p><button type="button" className="pro-replay-tour" onClick={() => setTourReplay((value) => value + 1)}>Replay tour</button></div>
         <div className="pro-interface-options" role="group" aria-label="Interface level">
-          {([{ id: "beginner", title: "Beginner", detail: "Measure, throw, and check your plane" }, { id: "intermediate", title: "Intermediate", detail: "Add flight recording and video analysis" }, { id: "pro", title: "Pro", detail: "All tools, full scans, and experiments" }] as const).map((option) => <button key={option.id} type="button" aria-pressed={level === option.id} onClick={() => chooseLevel(option.id)}><b>{option.title}</b><small>{option.detail}</small></button>)}
+          {interfaceOptions.map((option) => <button key={option.id} type="button" aria-pressed={level === option.id} onClick={() => chooseLevel(option.id)}><b>{option.title}</b><small>{option.detail}</small></button>)}
         </div>
       </section>
       <section className="pro-dashboard-hero" id="pro-top">
@@ -950,6 +969,7 @@ export default function ProDashboard({
       <div hidden={level !== "pro"}><ExperimentLab /></div>
       <ProBackup />
       <ProCoachChat />
+      <ProOnboarding level={level} onChooseLevel={chooseLevel} replay={tourReplay} />
 
       <footer className="pro-footer"><a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a><p>Build smarter. Track the truth. Fly farther.</p></footer>
     </main>

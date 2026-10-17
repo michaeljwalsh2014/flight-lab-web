@@ -1098,5 +1098,36 @@ select {
 .pro-backup-preview button { margin: 8px 8px 0 0; }
 .pro-dashboard .pro-tool-deck { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .pro-dashboard.interface-beginner .smart-measure-grid { grid-template-columns: minmax(0, 1fr); }
+.pro-replay-tour { margin-top: 12px; padding: 12px 20px; color: #d8f7ff; border: 1px solid #53778f; background: #172c3e; }
+.walking-rhythm-note { max-width: 42rem; color: #b9cddd; font-size: 14px; line-height: 1.6; }
+.flight-onboarding { position: fixed; inset: 0; z-index: 20000; color: #f1f5f9; font-family: inherit; }
+.flight-onboarding.welcome-screen { display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(3, 12, 24, .94); overflow-y: auto; }
+.flight-welcome-card { width: min(920px, 100%); max-height: calc(100dvh - 48px); overflow-y: auto; padding: clamp(24px, 4vw, 48px); border: 1px solid #47647c; border-radius: 28px; background: #101e30; box-shadow: 0 24px 80px #0008; }
+.welcome-plane { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 18px; background: #c6e84a; color: #0d1b2b; font-size: 32px; }
+.welcome-eyebrow { margin: 16px 0 8px; color: #8ed8ec; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.flight-welcome-card h1 { margin: 0 0 14px; color: #fff; font-size: clamp(30px, 5vw, 48px); line-height: 1.1; }
+.flight-welcome-card > p, .flight-tour-card > p:not(.welcome-eyebrow) { color: #c2d2e2; line-height: 1.6; }
+.welcome-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 28px 0 16px; }
+.welcome-levels button { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 24px; border: 1px solid #4f6c82; background: #182e43; color: #fff; text-align: left; min-height: 230px; }
+.welcome-levels button:hover { border-color: #c6e84a; background: #203c4d; }
+.welcome-levels b { font-size: 24px; }
+.welcome-levels span { color: #c6d7e5; font-size: 15px; line-height: 1.6; }
+.welcome-levels small { color: #d5ef79; font-size: 14px; font-weight: 800; margin-top: auto; }
+.flight-onboarding button { cursor: pointer; font: inherit; min-height: 48px; }
+.flight-onboarding button:focus-visible, .pro-replay-tour:focus-visible { outline: 3px solid #67e8f9; outline-offset: 4px; }
+.flight-onboarding .tour-skip { padding: 10px 12px; border: 0; background: transparent; color: #bed0df; font-size: 14px; text-decoration: underline; }
+.flight-welcome-card:focus, .flight-tour-dialog:focus { outline: none; }
+.tour-spotlight { position: fixed; border: 3px solid #d5f36f; border-radius: 16px; box-shadow: 0 0 0 9999px rgba(2, 10, 20, .82); pointer-events: none; }
+.flight-tour-dialog { position: fixed; inset: 0; pointer-events: none; }
+.flight-tour-card { position: fixed; width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px; border: 1px solid #7d9f9b; border-radius: 22px; background: #122b3e; box-shadow: 0 12px 40px #0008; pointer-events: auto; }
+.flight-tour-card h2 { margin: 0 0 10px; font-size: 23px; line-height: 1.2; }
+.flight-tour-card .welcome-eyebrow { margin: 0 0 10px; }
+.tour-arrow { display: block; color: #d5f36f; font-size: 28px; font-weight: 900; line-height: 1; margin-bottom: 8px; }
+.flight-tour-card.above .tour-arrow { float: right; }
+.tour-buttons { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.tour-buttons > button { padding: 10px 14px; border: 1px solid #5a7b90; background: #1d3a50; color: #e7f3fa; }
+.tour-buttons .tour-skip { margin-right: auto; padding-left: 0; }
+.tour-buttons .tour-next { color: #14220a; background: #d5ed76; border-color: #d5ed76; font-weight: 800; }
+@media (max-width: 640px) { .flight-onboarding.welcome-screen { padding: 12px; } .flight-welcome-card { max-height: calc(100dvh - 24px); } .welcome-levels { grid-template-columns: 1fr; gap: 10px; margin-top: 20px; } .welcome-levels button { min-height: 0; padding: 18px; gap: 6px; } .welcome-levels b { font-size: 22px; } }
 .pro-interface-options button:focus-visible, .pro-first-flight a:focus-visible, .pro-backup button:focus-visible { outline: 3px solid #67e8f9; outline-offset: 4px; }
 @media (max-width: 640px) { .pro-interface-options, .pro-first-flight ol { grid-template-columns: 1fr; } .pro-interface-panel, .pro-first-flight { margin: 16px 12px; padding: 20px; } .pro-interface-options button { min-height: 84px; } .pro-first-flight a { min-height: 80px; } }
