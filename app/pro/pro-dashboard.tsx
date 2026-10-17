@@ -495,13 +495,6 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
       let deepInspection: PlaneReport["deepInspection"] = useGemini ? "unavailable" : scanMode === "quick" ? "not-applicable" : cloudVisionEnabled ? "unavailable" : "off";
       if (useGemini || (scanMode !== "quick" && cloudVisionEnabled)) {
         setProgress(68); setStage(useGemini ? "Advanced AI is inspecting your photos" : "Running deep AI inspection across all six photos");
-        const cloudInspectionStartedAt = Date.now();
-        const cloudProgressTimer = window.setInterval(() => {
-          // Cloud analysis has no useful per-token progress signal. Advance steadily
-          // through its expected wait instead of leaving the indicator frozen at 68%.
-          const elapsedSeconds = (Date.now() - cloudInspectionStartedAt) / 1000;
-          setProgress(Math.min(87, 68 + Math.floor(elapsedSeconds / .9)));
-        }, 450);
         try {
           const prepared = await Promise.all(requiredViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, useGemini ? 1280 : 760)] as const));
           const response = await fetch("/api/pro-scan", {
@@ -515,8 +508,6 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
         } catch (error) {
           if (useGemini) throw error;
           /* Older versions retain their on-device fallback. */
-        } finally {
-          window.clearInterval(cloudProgressTimer);
         }
       }
       const topScore = signals.symmetry * .55 + signals.outline * .3 + signals.foldVisibility * .15;
@@ -599,7 +590,7 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
         {error && <p className="pro-inline-error" role="alert">{error}</p>}
       </div>
       <div className="pro-result-panel">
-        {analyzing ? <AnalysisLoader progress={progress} label={stage} /> : report ? <div className="pro-plane-report" aria-live="polite">
+        {analyzing ? <AnalysisLoader progress={progress} label={stage} expectedDurationMs={scanMode === "multiview" ? (useGemini || cloudVisionEnabled ? 60000 : 6000) : useGemini ? 25000 : 2500} /> : report ? <div className="pro-plane-report" aria-live="polite">
           <div className="pro-report-photos" aria-label={`${report.viewCount} photos used in this analysis`}>{requiredViews.map((view) => scanPhotos[view.id] ? <img key={view.id} src={scanPhotos[view.id]} alt={`${view.label} view used in the analysis`} /> : null)}</div>
           <span>Analysis complete · {evidenceLabel(report.confidence)} · {report.planeName}</span><h3>{report.headline}</h3><p className="pro-report-note">Evidence quality describes the available inputs, not a measured accuracy percentage. A photo cannot confirm flight distance.</p><p><b>Try next:</b> {report.nextTest}</p>
           {report.vision?.model?.startsWith("gemini-") && <div><b>Advanced AI visual analysis</b><p>{report.vision.inspectionSummary}</p>{report.vision.uncertainties.length > 0 && <p>Uncertain: {report.vision.uncertainties.join(" ")}</p>}</div>}

@@ -1337,3 +1337,13 @@ html:has(.pro-dashboard.device-ipad), body:has(.pro-dashboard.device-ipad) { ove
   .pro-dashboard.device-ipad .pro-tool-section { padding: 36px 20px; }
   .pro-dashboard.device-ipad .pro-active-plane-bar > a { grid-column: 1 / -1; grid-row: auto; }
 }
+
+/* The moving highlight remains active during unusually long AI requests. */
+.pro-progress-track i { position: relative; overflow: hidden; }
+.pro-progress-track i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); transform: translateX(-100%); animation: progress-sweep 1.8s linear infinite; }
+@keyframes progress-sweep { to { transform: translateX(100%); } }
+.waiting-progress { width: 100%; margin: 10px 0; }
+.waiting-progress small { display: block; margin-top: 7px; }
+.waiting-progress .pro-progress-track { background: rgba(100,140,170,.2); }
+.waiting-progress .pro-progress-track i { background: linear-gradient(90deg, #268aff, #43dcff); }
+@media (prefers-reduced-motion: reduce) { .pro-progress-track i::after { animation: none; } }

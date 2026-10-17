@@ -3,6 +3,8 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { WaitingProgress } from "./pro/pro-ui";
+
 type PlanePreset = "dart" | "glider" | "custom";
 type PlaneRecord = { id: number; name: string; createdAt: string; image?: string; preset?: PlanePreset };
 type ThrowRecord = { id: number; planeId: number; distance: number; createdAt: string };
@@ -717,6 +719,7 @@ export default function FlightLabApp({
               <option value="straight">It flew mostly straight</option><option value="dives">It dives nose-first</option><option value="stalls">It climbs, then stalls</option><option value="left">It drifts or turns left</option><option value="right">It drifts or turns right</option><option value="wobbles">It wobbles side to side</option><option value="spirals">It spirals or corkscrews</option><option value="short">It glides smoothly but lands short</option><option value="flips">It flips over or flies upside down</option>
             </select>
             {!photo ? <p className="photo-requirement">Add one top-view photo before analysis. Obvious non-airplane photos will be rejected instead of scored.</p> : null}
+            {analyzing && <WaitingProgress label={analysisStage || "Analyzing the top view"} expectedDurationMs={2500} />}
             <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photo}>{analyzing ? analysisStage || "Analyzing the top view…" : "Analyze this plane"}</button>
           </div>
         </div>

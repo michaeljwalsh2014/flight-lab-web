@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
 import { useModelVersion, type CoachModelVersion } from "./model-version";
+import { WaitingProgress } from "./pro-ui";
 import { evidenceLabel } from "./evidence-label";
 
 type ChatMessage = {
@@ -732,7 +733,7 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
             <p>{message.text ? messageWithLinks(message.text) : "Thinking…"}</p>
             {message.role === "assistant" && index > 0 && <button className="coach-feedback-button" type="button" onClick={() => requestRepair(message.text, index)}>Not helpful?</button>}
           </div>)}
-          {sending && <div className="assistant thinking"><small>{thinkingStatus}</small><p><i /><i /><i /></p></div>}
+          {sending && <div className="assistant thinking"><WaitingProgress label={thinkingStatus} expectedDurationMs={thinkingMode === "hard" ? 60000 : usesAdvancedAI(coachModel) ? 25000 : 6000} /><p aria-hidden="true"><i /><i /><i /></p></div>}
           <div ref={endRef} />
         </div>
         {pendingRepair && <div className="coach-repair" role="group" aria-label="Teach the Flight Lab Coach">
