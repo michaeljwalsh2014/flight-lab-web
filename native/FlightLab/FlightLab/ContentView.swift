@@ -2,9 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: FlightStore
-    @State private var selectedTab: AppTab = .hangar
+    @State private var selectedTab: AppTab = .lab
 
     enum AppTab: Hashable {
+        case lab
         case hangar
         case measure
         case analyze
@@ -12,8 +13,12 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            FlightLabWebView()
+                .tabItem { Label("Flight Lab", systemImage: "paperplane.circle.fill") }
+                .tag(AppTab.lab)
+
             HangarView(onMeasure: { selectedTab = .measure })
-                .tabItem { Label("My Planes", systemImage: "paperplane.fill") }
+                .tabItem { Label("Offline Planes", systemImage: "paperplane.fill") }
                 .tag(AppTab.hangar)
 
             MeasureView()
@@ -21,7 +26,7 @@ struct ContentView: View {
                 .tag(AppTab.measure)
 
             PhotoAnalyzerView()
-                .tabItem { Label("Analyze", systemImage: "camera.viewfinder") }
+                .tabItem { Label("Offline Scan", systemImage: "camera.viewfinder") }
                 .tag(AppTab.analyze)
         }
         .tint(FlightTheme.blue)
@@ -37,6 +42,10 @@ struct HangarView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
+                    Text("Offline planes and AR throws are saved in this app. The Flight Lab tab keeps its own website history; Safari history is separate.")
+                        .font(.footnote)
+                        .foregroundStyle(FlightTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     HeroPanel(onMeasure: onMeasure, onAddPlane: { showingAddPlane = true })
 
                     if store.planes.isEmpty {
@@ -48,6 +57,8 @@ struct HangarView: View {
                     }
                 }
                 .padding(20)
+                .frame(maxWidth: 900)
+                .frame(maxWidth: .infinity)
             }
             .background(FlightTheme.paper)
             .navigationTitle("Flight Lab")

@@ -12,7 +12,7 @@ final class ARMeasureSession: NSObject, ObservableObject, ARSCNViewDelegate {
 
     @Published var stage: Stage = .launch
     @Published var distanceFeet: Double = 0
-    @Published var message = "Move the iPad slowly until the floor is detected."
+    @Published var message = "Move your device slowly until the floor is detected."
     @Published var canPlacePoint = false
 
     weak var sceneView: ARSCNView?
@@ -70,7 +70,7 @@ final class ARMeasureSession: NSObject, ObservableObject, ARSCNViewDelegate {
         landingPoint = nil
         distanceFeet = 0
         stage = .launch
-        message = "Move the iPad slowly until the floor is detected."
+        message = "Move your device slowly until the floor is detected."
     }
 
     private func currentFloorPoint() -> SIMD3<Float>? {

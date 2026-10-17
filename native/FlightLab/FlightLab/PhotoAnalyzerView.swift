@@ -51,7 +51,7 @@ struct PhotoAnalyzerView: View {
             .alert("Camera unavailable", isPresented: $showingCameraAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("Choose a photo from the library, or open Flight Lab on an iPad with a camera.")
+                Text("Choose a photo from the library, or open Flight Lab on an iPhone or iPad with a camera.")
             }
             .sheet(item: $photoSource) { source in
                 switch source {
