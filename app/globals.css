@@ -1255,3 +1255,85 @@ html:has(.pro-dashboard.device-iphone), body:has(.pro-dashboard.device-iphone) {
 .flight-onboarding.layout-iphone .welcome-levels button { min-height: 0; padding: 16px; gap: 6px; }
 .flight-onboarding.layout-iphone .welcome-levels b { font-size: 21px; }
 @media (max-width: 360px) { .pro-dashboard.device-iphone .pro-interface-options b { font-size: 12px; } .pro-dashboard.device-iphone .pro-nav nav a { padding-inline: 8px; } }
+
+/* Tablet workspace: stable navigation, balanced panels, and portrait-aware forms. */
+.pro-dashboard.device-ipad { overflow-x: clip; overflow-y: visible; }
+html:has(.pro-dashboard.device-ipad), body:has(.pro-dashboard.device-ipad) { overflow-x: clip; overflow-y: visible; }
+.pro-dashboard.device-ipad .pro-nav { min-height: 0; padding: 10px max(24px, calc((100% - 1232px) / 2)); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; }
+.pro-dashboard.device-ipad .pro-nav .pro-brand { white-space: nowrap; }
+.pro-dashboard.device-ipad .pro-nav-actions { grid-column: 2; grid-row: 1; }
+.pro-dashboard.device-ipad .pro-nav nav { grid-column: 1 / -1; display: flex; gap: 24px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+.pro-dashboard.device-ipad .pro-nav nav a { flex: 0 0 auto; min-height: 44px; display: flex; align-items: center; padding: 8px 0; }
+.pro-dashboard.device-ipad > section { max-width: 1280px; margin-inline: auto; }
+.pro-dashboard.device-ipad .pro-interface-panel { width: calc(100% - 48px); padding: 24px; }
+.pro-dashboard.device-ipad .pro-interface-options { gap: 12px; }
+.pro-dashboard.device-ipad .pro-interface-options button { min-height: 108px; padding: 16px; }
+.pro-dashboard.device-ipad .pro-interface-options b { font-size: 19px; }
+.pro-dashboard.device-ipad .pro-interface-options small { font-size: 13px; }
+.pro-dashboard.device-ipad .pro-dashboard-hero { min-height: 0; padding: 36px 24px; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 28px; }
+.pro-dashboard.device-ipad .pro-hero-copy h1 { font-size: clamp(42px, 5.2vw, 68px); line-height: .98; letter-spacing: -.05em; }
+.pro-dashboard.device-ipad .pro-hero-lede { margin: 20px 0 24px; font-size: 16px; line-height: 1.6; }
+.pro-dashboard.device-ipad .pro-hero-actions { display: flex; gap: 12px; }
+.pro-dashboard.device-ipad .pro-hero-actions a { min-height: 52px; padding: 12px 18px; font-size: 13px; }
+.pro-dashboard.device-ipad .pro-hero-visual { min-height: 0; gap: 12px; align-content: center; }
+.pro-dashboard.device-ipad .pro-hero-visual::before, .pro-dashboard.device-ipad .visual-axis { display: none; }
+.pro-dashboard.device-ipad .pro-hero-plane-photo { max-width: 360px; transform: none; }
+.pro-dashboard.device-ipad .pro-visual-readout { position: static; width: 100%; max-width: 360px; padding: 12px 16px; }
+.pro-dashboard.device-ipad .pro-first-flight { width: calc(100% - 48px); padding: 24px; }
+.pro-dashboard.device-ipad .pro-first-flight ol { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pro-dashboard.device-ipad .pro-first-flight a { min-height: 92px; }
+.pro-dashboard.device-ipad .pro-tool-deck { width: calc(100% - 48px); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.pro-dashboard.device-ipad .pro-tool-deck a { padding: 18px 14px; min-height: 116px; }
+.pro-dashboard.device-ipad .pro-tool-deck b { font-size: 16px; }
+.pro-dashboard.device-ipad .pro-tool-section { padding: 48px 24px; scroll-margin-top: 124px; }
+.pro-dashboard.device-ipad .pro-tool-heading { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr); gap: 24px; margin-bottom: 26px; align-items: start; }
+.pro-dashboard.device-ipad .pro-tool-heading h2 { font-size: clamp(32px, 3.8vw, 48px); line-height: 1.05; }
+.pro-dashboard.device-ipad .pro-tool-heading > p { font-size: 15px; }
+.pro-dashboard.device-ipad :is(.pro-hangar-grid, .pro-plane-grid, .pro-video-grid, .smart-measure-grid, .experiment-grid) { gap: 20px; }
+.pro-dashboard.device-ipad :is(.pro-plane-grid, .pro-video-grid, .smart-measure-grid) { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+.pro-dashboard.device-ipad.interface-beginner .smart-measure-grid { grid-template-columns: minmax(0, 1fr); }
+.pro-dashboard.device-ipad .pro-hangar-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.pro-dashboard.device-ipad :is(.pro-upload-panel, .pro-result-panel, .pro-video-input, .pro-video-guide, .measure-control-card, .measure-trust-card, .pro-plane-builder) { min-height: 0; padding: 22px; }
+.pro-dashboard.device-ipad .pro-preset-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pro-dashboard.device-ipad .pro-preset-picker b { font-size: 19px; }
+.pro-dashboard.device-ipad .pro-preset-picker small { font-size: 12px; }
+.pro-dashboard.device-ipad .pro-coach-plane-bar { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
+.pro-dashboard.device-ipad .pro-scan-mode { grid-template-columns: 1fr; gap: 10px; }
+.pro-dashboard.device-ipad .pro-scan-mode button { min-height: 56px; padding: 12px 16px; }
+.pro-dashboard.device-ipad .pro-form-grid { grid-template-columns: 1fr; gap: 16px; }
+.pro-dashboard.device-ipad label.span-two { grid-column: auto; }
+.pro-dashboard.device-ipad .pro-video-source-picker { min-height: 0; padding: 18px; grid-template-columns: 1fr; }
+.pro-dashboard.device-ipad .pro-video-source-picker > button { min-height: 112px; padding: 16px; }
+.pro-dashboard.device-ipad .pro-video-source-picker > div b { font-size: 24px; }
+.pro-dashboard.device-ipad .pro-history-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pro-dashboard.device-ipad .measure-button-row { margin-bottom: 16px; }
+.pro-dashboard.device-ipad .pro-active-plane-bar { grid-template-columns: 68px minmax(0, 1fr) auto; gap: 14px; }
+.pro-dashboard.device-ipad .pro-active-plane-bar > img { width: 68px; height: 64px; }
+.pro-dashboard.device-ipad .pro-active-plane-bar dl { grid-column: 2 / -1; flex-wrap: wrap; }
+.pro-dashboard.device-ipad .pro-active-plane-bar > a { grid-column: 3; grid-row: 1; }
+@media (min-width: 1200px) {
+  .pro-dashboard.device-ipad .pro-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pro-dashboard.device-ipad label.span-two { grid-column: 1 / -1; }
+  .pro-dashboard.device-ipad .pro-first-flight ol { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .pro-dashboard.device-ipad :is(.pro-plane-grid, .pro-video-grid, .smart-measure-grid, .pro-hangar-grid, .experiment-grid) { grid-template-columns: minmax(0, 1fr); }
+  .pro-dashboard.device-ipad .pro-tool-heading { grid-template-columns: 1fr; gap: 12px; }
+  .pro-dashboard.device-ipad .pro-tool-deck { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pro-dashboard.device-ipad .pro-preset-picker img { max-height: 200px; }
+  .pro-dashboard.device-ipad .pro-scan-mode { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pro-dashboard.device-ipad .pro-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pro-dashboard.device-ipad label.span-two { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .pro-dashboard.device-ipad .pro-nav { padding-inline: 16px; gap: 6px 12px; }
+  .pro-dashboard.device-ipad .pro-nav nav { gap: 18px; }
+  .pro-dashboard.device-ipad .pro-nav .pro-brand b { font-size: 14px; }
+  .pro-dashboard.device-ipad .pro-dashboard-hero { grid-template-columns: 1fr; padding: 28px 20px; }
+  .pro-dashboard.device-ipad .pro-hero-visual { max-width: 280px; margin-inline: auto; }
+  .pro-dashboard.device-ipad .pro-interface-options { grid-template-columns: 1fr; }
+  .pro-dashboard.device-ipad :is(.pro-form-grid, .pro-scan-mode) { grid-template-columns: 1fr; }
+  .pro-dashboard.device-ipad label.span-two { grid-column: auto; }
+  .pro-dashboard.device-ipad .pro-tool-section { padding: 36px 20px; }
+  .pro-dashboard.device-ipad .pro-active-plane-bar > a { grid-column: 1 / -1; grid-row: auto; }
+}
