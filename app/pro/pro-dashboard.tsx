@@ -208,6 +208,7 @@ function ProPlaneHangar() {
   const [presetId, setPresetId] = useState<"dart" | "glider">("dart");
   const [planeName, setPlaneName] = useState("Dart");
   const [hangarNotice, setHangarNotice] = useState("");
+  const [editingPlanes, setEditingPlanes] = useState(false);
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
   const activeAverage = activeThrows.length ? activeThrows.reduce((sum, item) => sum + item.distance, 0) / activeThrows.length : 0;
@@ -284,6 +285,7 @@ function ProPlaneHangar() {
   }
 
   function clearHangar() {
+    if (!editingPlanes) return;
     if (!window.confirm("Remove every saved plane, flight, scan report, and coach test from this device? This cannot be undone.")) return;
     saveHangar([], [], null);
     window.localStorage.removeItem(planeReportsStorageKey);
@@ -292,6 +294,7 @@ function ProPlaneHangar() {
   }
 
   function deletePlane(plane: StoredPlane) {
+    if (!editingPlanes) return;
     const flightCount = throws.filter((item) => item.planeId === plane.id).length;
     const historyNote = flightCount === 1 ? " and its 1 saved flight" : flightCount > 1 ? ` and its ${flightCount} saved flights` : "";
     if (!window.confirm(`Delete ${plane.name}${historyNote}? This cannot be undone.`)) return;
@@ -327,14 +330,15 @@ function ProPlaneHangar() {
           <button data-tour="plane" className="pro-command-button" type="button" onClick={addPlane}>＋ Add {presetId === "dart" ? "Dart" : "Glider"}</button>
           {hangarNotice && <p className="pro-hangar-notice" role="status">{hangarNotice}</p>}
           <div className="pro-saved-planes">
-            <div className="pro-saved-header"><span>{planes.length ? `${planes.length} saved on this device` : "No planes saved on this device"}</span>{planes.length ? <button type="button" onClick={clearHangar}>Clear hangar</button> : null}</div>
+            <div className="pro-saved-header"><span>{planes.length ? `${planes.length} saved on this device` : "No planes saved on this device"}</span>{(planes.length > 0 || editingPlanes) && <button className="pro-edit-toggle" type="button" aria-pressed={editingPlanes} onClick={() => setEditingPlanes((value) => !value)}>{editingPlanes ? "Done" : "Edit planes"}</button>}</div>
+            {editingPlanes && <div className="pro-edit-notice"><span>Choose a plane to delete. Its saved throws will also be removed.</span><button type="button" onClick={clearHangar}>Clear hangar</button></div>}
             {planes.map((plane) => (
               <div className={`pro-saved-plane ${activePlaneId === plane.id ? "selected" : ""}`} key={plane.id}>
                 <button type="button" className="pro-plane-select" onClick={() => selectPlane(plane.id)} aria-pressed={activePlaneId === plane.id}>
                   {plane.image ? <img src={plane.image} alt="" /> : null}
                   <span><b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws · {activePlaneId === plane.id ? "Current plane" : "Select this plane"}</small></span>
                 </button>
-                <button type="button" className="pro-plane-delete" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`}>Delete</button>
+                {editingPlanes && <button type="button" className="pro-plane-delete" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`}>Delete</button>}
               </div>
             ))}
           </div>
@@ -632,6 +636,8 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [flightHistory, setFlightHistory] = useState<StoredThrow[]>([]);
   const [historyView, setHistoryView] = useState<"latest" | "all">("latest");
+  const [editingFlights, setEditingFlights] = useState(false);
+  const [removedFlight, setRemovedFlight] = useState<StoredThrow | null>(null);
   const rhythmCounter = useRef(new WalkingRhythmCounter());
   const motionSeenRef = useRef(false);
   const initialHeading = useRef<number | null>(null);
@@ -792,6 +798,36 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: planes }));
   }
 
+  function deleteFlight(flight: StoredThrow) {
+    if (!editingFlights) return;
+    try {
+      // Read the latest records so editing never overwrites a newly saved throw.
+      const latest = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+      const nextHistory = latest.filter((item) => item.id !== flight.id);
+      window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
+      setFlightHistory(nextHistory);
+      setRemovedFlight(flight);
+      window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+    } catch { setMessage("That throw could not be removed. Please try again."); }
+  }
+
+  function undoDeleteFlight() {
+    if (!removedFlight) return;
+    try {
+      const latestPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+      if (!latestPlanes.some((plane) => plane.id === removedFlight.planeId)) {
+        setMessage("This throw belongs to a plane that was deleted. Restore the plane from a backup before restoring its throws.");
+        return;
+      }
+      const latest = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+      const nextHistory = latest.some((item) => item.id === removedFlight.id) ? latest : [...latest, removedFlight].sort((a, b) => b.id - a.id);
+      window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
+      setFlightHistory(nextHistory);
+      setRemovedFlight(null);
+      window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+    } catch { setMessage("That throw could not be restored. Please try again."); }
+  }
+
   const liveDistance = steps * measurementStride;
   const activeFlightHistory = flightHistory.filter((flight) => flight.planeId === activePlaneId);
   const averageDistance = activeFlightHistory.length
@@ -800,7 +836,7 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   const bestDistance = activeFlightHistory.length
     ? Math.max(...activeFlightHistory.map((flight) => flight.distance))
     : 0;
-  const visibleFlights = level === "beginner" || historyView === "latest" ? activeFlightHistory.slice(0, 5) : activeFlightHistory;
+  const visibleFlights = editingFlights ? activeFlightHistory : level === "beginner" || historyView === "latest" ? activeFlightHistory.slice(0, 5) : activeFlightHistory;
   const planeNames = new Map(planes.map((plane) => [plane.id, plane.name]));
 
   return (
@@ -843,11 +879,14 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       <div className="pro-flight-history">
         <div className="pro-history-heading">
           <div><span>Saved performance</span><h3>Your flights</h3></div>
+          {(activeFlightHistory.length > 0 || editingFlights) && <button className="pro-edit-toggle" type="button" aria-pressed={editingFlights} onClick={() => setEditingFlights((value) => !value)}>{editingFlights ? "Done" : "Edit throws"}</button>}
           <div className="pro-history-tabs" aria-label="Choose how many flights to show" hidden={level === "beginner"}>
             <button type="button" className={historyView === "latest" ? "active" : ""} onClick={() => setHistoryView("latest")}>Newest 5</button>
             <button type="button" className={historyView === "all" ? "active" : ""} onClick={() => setHistoryView("all")}>Show all flights</button>
           </div>
         </div>
+        {editingFlights && <p className="pro-edit-notice">All throws for this plane are shown. Delete an incorrect throw, then tap Done.</p>}
+        {removedFlight && <div className="pro-edit-notice" role="status"><span>Removed {removedFlight.distance.toFixed(1)} ft throw from {planeNames.get(removedFlight.planeId) ?? "your plane"}.</span><button type="button" onClick={undoDeleteFlight}>Undo last deletion</button></div>}
         <div className="pro-history-stats">
           <article><span>Average distance</span><b>{averageDistance.toFixed(1)} <small>ft</small></b></article>
           <article><span>Best throw</span><b>{bestDistance.toFixed(1)} <small>ft</small></b></article>
@@ -856,10 +895,11 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
         {visibleFlights.length ? (
           <ol className="pro-history-list">
             {visibleFlights.map((flight, index) => (
-              <li key={flight.id}>
+              <li key={flight.id} className={editingFlights ? "editing-flight" : undefined}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div><b>{flight.distance.toFixed(1)} ft</b><small>{planeNames.get(flight.planeId) ?? "Paper airplane"} · {flight.createdAt}</small></div>
                 <i><b style={{ width: `${Math.max(8, flight.distance / Math.max(1, bestDistance) * 100)}%` }} /></i>
+                {editingFlights && <button type="button" className="pro-plane-delete" aria-label={`Delete throw ${index + 1}, ${flight.distance.toFixed(1)} feet`} onClick={() => deleteFlight(flight)}>Delete</button>}
               </li>
             ))}
           </ol>

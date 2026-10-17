@@ -1099,6 +1099,13 @@ select {
 .pro-dashboard .pro-tool-deck { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .pro-dashboard.interface-beginner .smart-measure-grid { grid-template-columns: minmax(0, 1fr); }
 .pro-replay-tour { margin-top: 12px; padding: 12px 20px; color: #d8f7ff; border: 1px solid #53778f; background: #172c3e; }
+.pro-dashboard .pro-edit-toggle { min-height: 48px; padding: 12px 18px; color: #e6f4ff; border: 1px solid #53778f; background: #172c3e; white-space: nowrap; font-size: 14px; }
+.pro-dashboard .pro-edit-toggle[aria-pressed="true"] { color: #11220b; border-color: var(--lime); background: var(--lime); }
+.pro-edit-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px; color: #c4d5e4; background: #13273c; border-radius: 16px; font-size: 14px; line-height: 1.5; }
+.pro-edit-notice button { min-height: 48px; padding: 10px 16px; color: #e9f2fa; background: #223d53; border: 1px solid #5c798d; }
+.pro-history-list li.editing-flight { grid-template-columns: 38px minmax(130px, 190px) 1fr auto; }
+.pro-history-heading { flex-wrap: wrap; gap: 14px; }
+@media (max-width: 640px) { .pro-history-list li.editing-flight { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; } .pro-history-list li.editing-flight > i { grid-row: 2; grid-column: 2 / -1; } .pro-history-list li.editing-flight > button { grid-column: 3; grid-row: 1; } }
 .walking-rhythm-note { max-width: 42rem; color: #b9cddd; font-size: 14px; line-height: 1.6; }
 .flight-onboarding { position: fixed; inset: 0; z-index: 20000; color: #f1f5f9; font-family: inherit; }
 .flight-onboarding.welcome-screen { display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(3, 12, 24, .94); overflow-y: auto; }
