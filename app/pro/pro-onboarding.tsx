@@ -11,7 +11,7 @@ export const interfaceOptions = [
   { id: "pro" as const, title: "Pro", detail: "Calibrate your walking distance and explore every tool." },
 ];
 
-export default function ProOnboarding({ level, onChooseLevel, replay }: { level: Level; onChooseLevel: (level: Level) => void; replay: number }) {
+export default function ProOnboarding({ level, onChooseLevel, replay, deviceLayout }: { level: Level; onChooseLevel: (level: Level) => void; replay: number; deviceLayout: "iphone" | "ipad" }) {
   const [screen, setScreen] = useState<"closed" | "welcome" | "tour">("closed");
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
@@ -85,11 +85,11 @@ export default function ProOnboarding({ level, onChooseLevel, replay }: { level:
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", update); window.removeEventListener("scroll", update, true); };
-  }, [screen, step, level]);
+  }, [screen, step, level, deviceLayout]);
 
   if (screen === "closed") return null;
   return createPortal(
-    <div className={`flight-onboarding ${screen === "welcome" ? "welcome-screen" : "tour-screen"}`}>
+    <div className={`flight-onboarding layout-${deviceLayout} ${screen === "welcome" ? "welcome-screen" : "tour-screen"}`}>
       {screen === "tour" && rect && <div className="tour-spotlight" style={rect} aria-hidden="true" />}
       <div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="flight-welcome-title" aria-describedby="flight-welcome-description" className={screen === "welcome" ? "flight-welcome-card" : "flight-tour-dialog"}>
         {screen === "welcome" ? <>

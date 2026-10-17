@@ -949,21 +949,35 @@ export default function ProDashboard({
   const [selectedModel] = useModelVersion();
   const [level, setLevel] = useState<InterfaceLevel>("beginner");
   const [tourReplay, setTourReplay] = useState(0);
+  const [deviceLayout, setDeviceLayout] = useState<"iphone" | "ipad">("iphone");
   useEffect(() => {
     try {
       const saved = localStorage.getItem("flight-lab-pro-interface-level");
       if (saved === "beginner" || saved === "intermediate" || saved === "pro") setLevel(saved);
+      const savedLayout = localStorage.getItem("flight-lab-pro-device-layout");
+      if (savedLayout === "iphone" || savedLayout === "ipad") setDeviceLayout(savedLayout);
     } catch { /* The interface works without storage. */ }
   }, []);
   function chooseLevel(next: InterfaceLevel) {
     setLevel(next);
     try { localStorage.setItem("flight-lab-pro-interface-level", next); } catch { /* Keep this session usable. */ }
   }
+  function chooseDeviceLayout(next: "iphone" | "ipad") {
+    setDeviceLayout(next);
+    try { localStorage.setItem("flight-lab-pro-device-layout", next); } catch { /* Keep this session usable. */ }
+  }
   return (
-    <main className={`pro-dashboard interface-${level}`}>
+    <main className={`pro-dashboard interface-${level} device-${deviceLayout}`}>
+      <div className="pro-device-bar">
+        <span>Layout</span>
+        <div className="pro-device-switch" role="group" aria-label="Device layout">
+          <button type="button" aria-pressed={deviceLayout === "iphone"} onClick={() => chooseDeviceLayout("iphone")}>iPhone</button>
+          <button type="button" aria-pressed={deviceLayout === "ipad"} onClick={() => chooseDeviceLayout("ipad")}>iPad</button>
+        </div>
+      </div>
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
-        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach">Plane AI</a><a hidden={level === "beginner"} href="#video-lab">Flight path</a><a href="#smart-measure">Smart Measure</a><a hidden={level !== "pro"} href="#experiment-lab">Experiments</a></nav>
+        <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach"><span className="pro-tablet-label">Plane AI</span><span className="pro-phone-label">Inspect</span></a><a hidden={level === "beginner"} href="#video-lab"><span className="pro-tablet-label">Flight path</span><span className="pro-phone-label">Video</span></a><a href="#smart-measure"><span className="pro-tablet-label">Smart Measure</span><span className="pro-phone-label">Measure</span></a><a hidden={level !== "pro"} href="#experiment-lab"><span className="pro-tablet-label">Experiments</span><span className="pro-phone-label">Tests</span></a></nav>
         <div className="pro-nav-actions">{level !== "beginner" && <a className="pro-measure-shortcut" href="#smart-measure">Measure</a>}<a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
@@ -978,7 +992,7 @@ export default function ProDashboard({
           <div className="pro-access-pill"><i /><span>{sharedPass ? "Pro Pass active" : "Lifetime Pro active"} · {COACH_MODEL_NUMBER[selectedModel]}</span></div>
           {!sharedPass && <ProViewCounter />}
           <p>Flight intelligence for paper aircraft</p>
-          <h1>See what your<br />plane is <em>really doing.</em></h1>
+          <h1>See what your<br /> plane is <em>really doing.</em></h1>
           <p className="pro-hero-lede">{level === "beginner" ? "Add your plane, make a throw, and measure where it lands. Coach can help you choose one small improvement." : level === "intermediate" ? "Measure your throws and record a flight to explore what the camera shows. Ask Coach what to try next." : "Explore all Flight Lab tools: full photo inspections, flight videos, and controlled experiments."}</p>
           <div className="pro-hero-actions"><a href="#smart-measure">Measure a throw</a>{level !== "beginner" && <a href="#plane-coach">Rate my plane</a>}</div>
           <small>{displayName} · Core analysis stays on your device. Cloud AI runs only when you choose it.</small>
@@ -1009,7 +1023,7 @@ export default function ProDashboard({
       <div hidden={level !== "pro"}><ExperimentLab /></div>
       <ProBackup />
       <ProCoachChat />
-      <ProOnboarding level={level} onChooseLevel={chooseLevel} replay={tourReplay} />
+      <ProOnboarding level={level} onChooseLevel={chooseLevel} replay={tourReplay} deviceLayout={deviceLayout} />
 
       <footer className="pro-footer"><a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a><p>Build smarter. Track the truth. Fly farther.</p></footer>
     </main>

@@ -1138,3 +1138,120 @@ select {
 @media (max-width: 640px) { .flight-onboarding.welcome-screen { padding: 12px; } .flight-welcome-card { max-height: calc(100dvh - 24px); } .welcome-levels { grid-template-columns: 1fr; gap: 10px; margin-top: 20px; } .welcome-levels button { min-height: 0; padding: 18px; gap: 6px; } .welcome-levels b { font-size: 22px; } }
 .pro-interface-options button:focus-visible, .pro-first-flight a:focus-visible, .pro-backup button:focus-visible { outline: 3px solid #67e8f9; outline-offset: 4px; }
 @media (max-width: 640px) { .pro-interface-options, .pro-first-flight ol { grid-template-columns: 1fr; } .pro-interface-panel, .pro-first-flight { margin: 16px 12px; padding: 20px; } .pro-interface-options button { min-height: 84px; } .pro-first-flight a { min-height: 80px; } }
+
+/* Device choice is independent of Easy / Intermediate / Pro. iPad retains the existing layout. */
+.pro-device-bar { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--pro-line); background: #071624; }
+.pro-device-bar > span { color: #a9bfd3; font-size: 12px; }
+.pro-device-switch { display: flex; padding: 3px; gap: 4px; border: 1px solid #3d566c; border-radius: 18px; }
+.pro-device-switch button { min-width: 88px; min-height: 44px; padding: 8px 16px; border: 0; color: #bdcfdf; background: transparent; font-size: 14px; }
+.pro-device-switch button[aria-pressed="true"] { color: #10200b; background: var(--lime); font-weight: 800; }
+.pro-device-switch button:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.pro-phone-label { display: none; }
+.pro-dashboard.device-iphone .pro-phone-label { display: inline; }
+.pro-dashboard.device-iphone .pro-tablet-label { display: none; }
+
+.pro-dashboard.device-iphone { overflow-x: clip; overflow-y: visible; }
+html:has(.pro-dashboard.device-iphone), body:has(.pro-dashboard.device-iphone) { overflow-x: clip; overflow-y: visible; }
+.pro-dashboard.device-iphone > section { max-width: 680px; margin-inline: auto; }
+.pro-dashboard.device-iphone .pro-nav { min-height: 0; padding: 8px max(16px, calc((100% - 648px) / 2)); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+.pro-dashboard.device-iphone .pro-nav nav { grid-column: 1 / -1; display: flex; gap: 4px; overflow-x: auto; white-space: nowrap; font-size: 12px; letter-spacing: 0; text-transform: none; scrollbar-width: thin; }
+.pro-dashboard.device-iphone .pro-nav nav a { flex: 0 0 auto; min-height: 44px; display: flex; align-items: center; padding: 8px 10px; }
+.pro-dashboard.device-iphone .pro-nav .pro-brand > span { width: 28px; height: 28px; }
+.pro-dashboard.device-iphone .pro-nav .pro-brand b { font-size: 15px; }
+.pro-dashboard.device-iphone .pro-nav .back-to-lab { display: inline-flex; align-items: center; min-height: 44px; padding: 8px; font-size: 10px; }
+.pro-dashboard.device-iphone .pro-nav .pro-measure-shortcut { display: none; }
+.pro-dashboard.device-iphone .pro-nav-actions { grid-column: 2; grid-row: 1; }
+.pro-dashboard.device-iphone :is(button, select, input, textarea) { border-radius: 12px !important; }
+.pro-dashboard.device-iphone button { min-height: 44px; }
+.pro-dashboard.device-iphone :is(select, input:not(.sr-only):not([type="range"]):not([type="file"]):not([type="checkbox"]):not([type="radio"])) { height: 48px; min-height: 48px; padding-inline: 12px; font-size: 16px; }
+.pro-dashboard.device-iphone select { padding-right: 40px !important; }
+.pro-dashboard.device-iphone :is(.pro-command-button, .pro-video-actions button, .pro-test-feedback button, .pro-history-tabs button, .measure-button-row button) { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+.pro-dashboard.device-iphone label { gap: 6px; font-size: 13px; }
+.pro-dashboard.device-iphone label > small { font-size: 12px; }
+.pro-dashboard.device-iphone .pro-interface-panel { width: calc(100% - 32px); margin-block: 16px; padding: 16px; border-radius: 18px; }
+.pro-dashboard.device-iphone .pro-interface-panel h2 { font-size: 21px; margin: 6px 0; }
+.pro-dashboard.device-iphone .pro-interface-panel > div:first-child { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.pro-dashboard.device-iphone .pro-interface-panel p { display: none; }
+.pro-dashboard.device-iphone .pro-interface-options { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.pro-dashboard.device-iphone .pro-interface-options button { min-height: 48px; padding: 8px 4px; align-items: center; justify-content: center; }
+.pro-dashboard.device-iphone .pro-interface-options b { font-size: 13px; }
+.pro-dashboard.device-iphone .pro-interface-options small { display: none; }
+.pro-dashboard.device-iphone .pro-replay-tour { margin-top: 4px; padding: 8px 12px; font-size: 13px; }
+.pro-dashboard.device-iphone .pro-dashboard-hero { min-height: 0; grid-template-columns: 1fr; padding: 14px 16px 24px; }
+.pro-dashboard.device-iphone .pro-hero-copy h1 { font-size: 26px; line-height: 1.08; letter-spacing: -.04em; margin-block: 12px; }
+.pro-dashboard.device-iphone .pro-hero-copy h1 br { display: none; }
+.pro-dashboard.device-iphone .pro-hero-copy > p:not(.pro-hero-lede) { display: none; }
+.pro-dashboard.device-iphone .pro-hero-lede { font-size: 14px; line-height: 1.5; margin: 12px 0 16px; }
+.pro-dashboard.device-iphone .pro-hero-actions { display: flex; gap: 8px; margin-bottom: 14px; }
+.pro-dashboard.device-iphone .pro-hero-actions a { min-height: 44px; padding: 10px 14px; font-size: 12px; border-radius: 12px; box-shadow: none; }
+.pro-dashboard.device-iphone .pro-access-pill { margin-bottom: 12px; padding: 7px 10px; font-size: 9px; }
+.pro-dashboard.device-iphone .pro-view-counter { margin: 0 0 12px; padding: 8px 12px; }
+.pro-dashboard.device-iphone .pro-view-counter b { font-size: 22px; }
+.pro-dashboard.device-iphone :is(.pro-hero-visual, .pro-first-flight, .pro-tool-deck) { display: none; }
+.pro-dashboard.device-iphone .pro-tool-section { padding: 28px 16px; scroll-margin-top: 112px; }
+.pro-dashboard.device-iphone .pro-tool-heading { grid-template-columns: 1fr; gap: 8px; margin-bottom: 18px; }
+.pro-dashboard.device-iphone .pro-tool-heading h2 { font-size: 28px; line-height: 1.1; }
+.pro-dashboard.device-iphone .pro-tool-heading p { font-size: 13px; line-height: 1.5; }
+.pro-dashboard.device-iphone :is(.pro-hangar-grid, .smart-measure-grid, .pro-plane-grid, .pro-video-grid, .experiment-grid) { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.pro-dashboard.device-iphone .pro-preset-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pro-dashboard.device-iphone .pro-preset-picker button { padding: 8px; }
+.pro-dashboard.device-iphone .pro-preset-picker img { max-height: 120px; }
+.pro-dashboard.device-iphone .pro-preset-picker span { padding: 8px 2px 2px; }
+.pro-dashboard.device-iphone .pro-preset-picker b { font-size: 17px; }
+.pro-dashboard.device-iphone .pro-preset-picker small { font-size: 11px; }
+.pro-dashboard.device-iphone :is(.pro-plane-builder, .measure-control-card, .measure-trust-card, .pro-flight-history, .pro-upload-panel, .pro-result-panel, .pro-video-input, .pro-video-guide, .experiment-controls, .experiment-plan) { padding: 16px; min-height: 0; border-radius: 16px; }
+.pro-dashboard.device-iphone .pro-active-plane-bar { grid-template-columns: 48px minmax(0, 1fr); padding: 12px; gap: 10px; }
+.pro-dashboard.device-iphone .pro-active-plane-bar > img { width: 48px; height: 48px; }
+.pro-dashboard.device-iphone .pro-active-plane-bar > a { grid-column: 1 / -1; grid-row: auto; min-height: 44px; }
+.pro-dashboard.device-iphone .pro-active-plane-bar dl { grid-column: 1 / -1; }
+.pro-dashboard.device-iphone .pro-coach-plane-bar { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+.pro-dashboard.device-iphone .pro-coach-plane-bar select { min-height: 48px !important; height: 48px !important; padding-inline: 12px 40px; }
+.pro-dashboard.device-iphone .pro-model-field { margin-bottom: 14px; }
+.pro-dashboard.device-iphone .pro-form-grid { grid-template-columns: 1fr; gap: 12px; }
+.pro-dashboard.device-iphone .pro-scan-mode { grid-template-columns: 1fr; gap: 8px; }
+.pro-dashboard.device-iphone .pro-scan-mode button { min-height: 48px; padding: 10px 12px; gap: 8px; font-size: 14px; }
+.pro-dashboard.device-iphone .pro-scan-view-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pro-dashboard.device-iphone .pro-scan-view-grid button { min-height: 124px; padding: 10px; gap: 5px; }
+.pro-dashboard.device-iphone .pro-scan-capture.quick .pro-scan-view-grid { grid-template-columns: 1fr; }
+.pro-dashboard.device-iphone .pro-scan-capture.quick .pro-scan-view-grid button { min-height: 140px; }
+.pro-dashboard.device-iphone .pro-scan-capture.quick .pro-scan-view-grid button > span { width: 44px; height: 36px; font-size: 12px; }
+.pro-dashboard.device-iphone :is(.pro-video-source-picker, .pro-video-picker) { min-height: 180px; padding: 16px; gap: 10px; }
+.pro-dashboard.device-iphone .pro-video-source-picker { grid-template-columns: 1fr; }
+.pro-dashboard.device-iphone .pro-video-source-picker button { min-height: 72px; padding: 12px; }
+.pro-dashboard.device-iphone .pro-video-source-picker > div { justify-items: start; text-align: left; margin-bottom: 4px; }
+.pro-dashboard.device-iphone .pro-video-source-picker > div b { font-size: 20px; }
+.pro-dashboard.device-iphone .pro-video-source-picker > button { grid-template-columns: 36px minmax(0, 1fr); justify-items: start; text-align: left; gap: 4px 10px; }
+.pro-dashboard.device-iphone .pro-video-source-picker > button > span { grid-column: 1; grid-row: 1 / 3; width: 32px; height: 32px; margin: 0; font-size: 9px; align-self: center; }
+.pro-dashboard.device-iphone .pro-video-source-picker > button :is(b, small) { grid-column: 2; }
+.pro-dashboard.device-iphone .pro-video-actions { gap: 8px; }
+.pro-dashboard.device-iphone .pro-history-heading { flex-direction: row; align-items: center; gap: 10px; }
+.pro-dashboard.device-iphone .pro-history-heading h3 { font-size: 24px; }
+.pro-dashboard.device-iphone .pro-history-tabs { width: 100%; }
+.pro-dashboard.device-iphone .pro-history-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 14px 0; }
+.pro-dashboard.device-iphone .pro-history-stats article { padding: 10px; min-height: 82px; }
+.pro-dashboard.device-iphone .pro-history-stats span { font-size: 9px; line-height: 1.4; }
+.pro-dashboard.device-iphone .pro-history-stats b { font-size: 24px; }
+.pro-dashboard.device-iphone .pro-edit-toggle { min-height: 44px; padding: 8px 12px; font-size: 12px; }
+.pro-dashboard.device-iphone .measure-button-row { grid-template-columns: 1fr; margin-top: 12px; }
+.pro-dashboard.device-iphone .step-controls { grid-template-columns: 54px minmax(0, 1fr); }
+.pro-dashboard.device-iphone .step-controls button { min-height: 48px; padding: 10px 14px; }
+.pro-dashboard.device-iphone .active-measure > b { font-size: 56px; }
+.pro-dashboard.device-iphone .measure-result { min-height: 220px; }
+.pro-dashboard.device-iphone .measure-result > b { font-size: 58px; }
+.pro-dashboard.device-iphone .walking-rhythm-note { font-size: 12px; margin: 4px 0; }
+.pro-dashboard.device-iphone .calibration-status { margin-bottom: 14px; padding: 10px; }
+.pro-dashboard.device-iphone .pro-backup-actions { gap: 8px; }
+.pro-dashboard.device-iphone .pro-backup button { padding: 10px 14px; min-height: 44px; font-size: 13px; }
+.pro-dashboard.device-iphone .pro-footer { padding: 20px 16px 90px; min-height: 0; gap: 14px; }
+.pro-dashboard.device-iphone .pro-coach { right: max(10px, env(safe-area-inset-right)); bottom: max(10px, env(safe-area-inset-bottom)); }
+.pro-dashboard.device-iphone .pro-coach-launcher { min-width: 0; min-height: 44px; padding: 6px 12px 6px 6px; gap: 8px; font-size: 12px; box-shadow: 0 6px 20px #0007; }
+.pro-dashboard.device-iphone .pro-coach-launcher span { width: 30px; height: 30px; font-size: 10px; }
+.pro-dashboard.device-iphone .pro-coach-panel { width: min(410px, calc(100vw - 20px)); height: min(620px, calc(100dvh - 76px)); max-height: calc(100dvh - 76px); }
+.pro-dashboard.device-iphone .pro-coach-panel > header { min-height: 56px; padding: 8px 12px; }
+.pro-dashboard.device-iphone .pro-coach-panel > header button { min-width: 44px; width: 44px; height: 44px; }
+.pro-dashboard.device-iphone .pro-coach-panel textarea { font-size: 16px; }
+.flight-onboarding.layout-iphone .flight-welcome-card { max-width: 520px; padding: 24px; }
+.flight-onboarding.layout-iphone .welcome-levels { grid-template-columns: 1fr; gap: 10px; margin-top: 18px; }
+.flight-onboarding.layout-iphone .welcome-levels button { min-height: 0; padding: 16px; gap: 6px; }
+.flight-onboarding.layout-iphone .welcome-levels b { font-size: 21px; }
+@media (max-width: 360px) { .pro-dashboard.device-iphone .pro-interface-options b { font-size: 12px; } .pro-dashboard.device-iphone .pro-nav nav a { padding-inline: 8px; } }
