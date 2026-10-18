@@ -163,7 +163,7 @@ test("Coach Auto lets Gemini choose thinking dynamically", async () => {
 test("Coach Fast uses the low-latency model with short minimal-thinking replies", async () => {
   const { coach } = loadRoutes({ fetch: async (url, init) => {
     const body = JSON.parse(init.body);
-    assert.match(url, /gemini-3\.5-flash-lite:/);
+    assert.match(url, /gemini-3\.6-flash:/);
     assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "minimal");
     assert.equal(body.generationConfig.maxOutputTokens, 768);
     assert.match(body.systemInstruction.parts[0].text, /no more than four concise sentences/);
@@ -171,7 +171,7 @@ test("Coach Fast uses the low-latency model with short minimal-thinking replies"
   } });
   const response = await coach.POST(request({ coachId: "coach-test-fast", message: "Explain lift", thinkingMode: "fast" }));
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash-lite");
+  assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.6-flash");
   assert.equal(await response.text(), "A quick answer.");
 });
 
@@ -201,7 +201,7 @@ test("Flight Lab 4.0 and 4.6 use advanced AI while 3.8 and 3.9 retain their exis
   }
 });
 
-test("Flight Lab 4.6 uses Gemini 3.8 Flash while its Fast mode stays on Flash-Lite", async () => {
+test("Flight Lab 4.6 uses Gemini 3.8 Flash while its Fast mode uses Gemini 3.6 Flash", async () => {
   const calls = [];
   const { coach } = loadRoutes({ fetch: async (url, init) => {
     calls.push({ url, body: JSON.parse(init.body) });
@@ -214,8 +214,8 @@ test("Flight Lab 4.6 uses Gemini 3.8 Flash while its Fast mode stays on Flash-Li
   assert.match(calls[0].url, /gemini-3\.8-flash:/);
   assert.equal(calls[0].body.generationConfig.thinkingConfig.thinkingLevel, "high");
   const fast = await coach.POST(request({ modelVersion: "v46", coachId: "coach-v46-fast", message: "Answer quickly", thinkingMode: "fast" }));
-  assert.equal(fast.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash-lite");
-  assert.match(calls[1].url, /gemini-3\.5-flash-lite:/);
+  assert.equal(fast.headers.get("X-Flight-Lab-Model"), "gemini-3.6-flash");
+  assert.match(calls[1].url, /gemini-3\.6-flash:/);
   assert.equal(calls[1].body.generationConfig.thinkingConfig.thinkingLevel, "minimal");
 });
 
@@ -262,4 +262,17 @@ test("v40 live search stays on Gemini and includes grounded source links", async
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.5-flash");
   assert.match(await response.text(), /https:\/\/example.com\/record/);
+});
+
+test("Fast mode falls back to Flash-Lite when Gemini 3.6 is unavailable", async () => {
+  const calls = [];
+  const { gemini } = loadRoutes({ fetch: async (url) => {
+    calls.push(url);
+    return calls.length === 1 ? new Response("busy", { status: 503 }) : completion("Backup answer.");
+  } });
+  const result = await gemini.generateGeminiResult({ instructions: "Answer", contents: [], preferFastModel: true });
+  assert.equal(result.model, "gemini-3.5-flash-lite");
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /gemini-3\.6-flash:/);
+  assert.match(calls[1], /gemini-3\.5-flash-lite:/);
 });

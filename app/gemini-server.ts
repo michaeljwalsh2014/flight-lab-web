@@ -1,7 +1,8 @@
 // Server-only: import this module from API routes, never from client components.
 export const GEMINI_MODEL = "gemini-3.5-flash";
 export const GEMINI_ADVANCED_MODEL = "gemini-3.8-flash";
-export const GEMINI_FAST_MODEL = "gemini-3.5-flash-lite";
+export const GEMINI_FAST_MODEL = "gemini-3.6-flash";
+const GEMINI_LITE_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
 export class AIError extends Error {
@@ -60,8 +61,8 @@ export async function generateGeminiResult(options: GeminiOptions) {
   if (!key) throw new AIError("not_configured", 503);
   const primaryModel = options.preferAdvancedModel ? GEMINI_ADVANCED_MODEL : GEMINI_MODEL;
   const models = options.preferFastModel
-    ? [GEMINI_FAST_MODEL, primaryModel, GEMINI_FALLBACK_MODEL]
-    : [primaryModel, GEMINI_FAST_MODEL, GEMINI_FALLBACK_MODEL];
+    ? [GEMINI_FAST_MODEL, GEMINI_LITE_MODEL, GEMINI_FALLBACK_MODEL]
+    : [primaryModel, GEMINI_LITE_MODEL, GEMINI_FALLBACK_MODEL];
   for (const [attempt, model] of models.entries()) {
     try {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
