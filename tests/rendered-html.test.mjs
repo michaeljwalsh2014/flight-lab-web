@@ -190,6 +190,7 @@ test("counts anonymous site visits and shows only the owner a live total", async
 test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
   const coach = await readFile(new URL("../app/pro/pro-coach-chat.tsx", import.meta.url), "utf8");
+  const tutorials = await readFile(new URL("../app/pro/plane-tutorials.ts", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
   const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /ProCoachChat/);
@@ -211,17 +212,17 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Tell me more about that/);
   assert.match(coach, /arithmeticReply/);
   assert.match(coach, /one: 1/);
-  assert.match(coach, /youtubeSearchUrl/);
+  assert.match(tutorials, /youtubeSearchUrl/);
   assert.match(coach, /const trustedLinkReply/);
-  assert.match(coach, /usesAdvancedAI\(coachModel\) \? null/);
-  assert.match(coach, /Foldable Flight’s official Arrowhead tutorial/);
-  assert.match(coach, /pairedPlaneRecommendation/);
-  assert.match(coach, /youtube\.com\/@walshwonders\/videos/);
-  assert.match(coach, /C-13 Cobra/);
-  assert.match(coach, /Platinum X/);
-  assert.match(coach, /Flapping wing paper airplane/);
-  assert.match(coach, /Amazing paper airplane dart/);
-  assert.match(coach, /one plane from each creator/);
+  assert.match(coach, /findPlaneTutorialReply\(question, previous\)/);
+  assert.match(tutorials, /Foldable Flight’s official Arrowhead tutorial/);
+  assert.match(tutorials, /pairedPlaneRecommendation/);
+  assert.match(tutorials, /youtube\.com\/@walshwonders\/videos/);
+  assert.match(tutorials, /C-13 Cobra/);
+  assert.match(tutorials, /Platinum X/);
+  assert.match(tutorials, /Flapping wing paper airplane/);
+  assert.match(tutorials, /Amazing paper airplane dart/);
+  assert.match(tutorials, /one plane from each creator/);
   assert.match(coach, /noopener noreferrer/);
   assert.match(coach, /How’s it going/);
   assert.match(coach, /no upload required/i);
@@ -273,9 +274,9 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(coach, /Recommended choices/);
   assert.match(coach, /More advanced intelligence/);
   assert.match(coach, /aria-haspopup="menu"/);
-  assert.match(coach, /contextualPlaneRecommendation/);
-  assert.match(coach, /recentCoachText/);
-  assert.match(coach, /Try this one instead/);
+  assert.match(tutorials, /contextualPlaneRecommendation/);
+  assert.match(tutorials, /recentCoachText/);
+  assert.match(tutorials, /Try this one instead/);
   assert.match(coach, /selectedModel/);
   assert.doesNotMatch(coach, /Show more|Show less/);
   assert.match(coach, /questionWithoutMode/);
@@ -316,6 +317,7 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
 
 test("offers honest one-photo and six-photo inspections and remembers experiment outcomes", async () => {
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
+  const tutorials = await readFile(new URL("../app/pro/plane-tutorials.ts", import.meta.url), "utf8");
   const context = await readFile(new URL("../app/pro/pro-ai-context.ts", import.meta.url), "utf8");
   const scanRoute = await readFile(new URL("../app/api/pro-scan/route.ts", import.meta.url), "utf8");
   assert.match(dashboard, /Full inspection/);

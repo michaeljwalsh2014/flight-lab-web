@@ -150,10 +150,10 @@ test("text Coach uses Gemini, passes conversation history and evidence, and omit
   assert.equal(await response.text(), "Try one small adjustment.");
 });
 
-test("Coach Auto lets Gemini choose thinking dynamically", async () => {
+test("Coach Auto uses low thinking for responsive replies", async () => {
   const { coach } = loadRoutes({ fetch: async (_url, init) => {
     const body = JSON.parse(init.body);
-    assert.equal(body.generationConfig.thinkingConfig, undefined);
+    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "low");
     return completion("Automatic answer.");
   } });
   const response = await coach.POST(request({ coachId: "coach-test-auto", message: "Explain lift", thinkingMode: "auto" }));
@@ -275,4 +275,84 @@ test("Fast mode falls back to Flash-Lite when Gemini 3.6 is unavailable", async 
   assert.equal(calls.length, 2);
   assert.match(calls[0], /gemini-3\.6-flash:/);
   assert.match(calls[1], /gemini-3\.5-flash-lite:/);
+});
+
+
+test("the recorded tutorial request answers immediately for every model without cloud access", async () => {
+  const { coach } = loadRoutes({ env: {}, fetch: async () => { throw new Error("Tutorials must not call the provider"); } });
+  for (const modelVersion of ["v38", "v39", "v40", "v46"]) {
+    const response = await coach.POST(request({ modelVersion, coachId: `tutorial-${modelVersion}`, message: "Suggest a link of some paper airplanes I could build" }));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("X-Flight-Lab-Source"), "links");
+    const text = await response.text();
+    assert.match(text, /Walsh Wonders/);
+    assert.match(text, /Foldable Flight/);
+    assert.match(text, /https:\/\/www.youtube.com\/watch\?v=/);
+  }
+});
+
+test("channel-specific requests and follow-ups keep the requested creator and vary designs", async () => {
+  const { coach } = loadRoutes({ env: {} });
+  const first = await coach.POST(request({ coachId: "channel-test-01", message: "Suggest a glider from my channel" }));
+  const text = await first.text();
+  assert.match(text, /Walsh Wonders/);
+  assert.doesNotMatch(text, /Foldable Flight/);
+  const second = await coach.POST(request({ coachId: "channel-test-01", message: "Suggest another glider from my channel", history: [{ role: "assistant", text }] }));
+  assert.notEqual(await second.text(), text);
+});
+
+test("explicit search for tutorials reaches live grounding rather than the saved catalog", async () => {
+  let called = false;
+  const { coach } = loadRoutes({ fetch: async (_url, init) => {
+    called = true;
+    assert.deepEqual(JSON.parse(init.body).tools, [{ google_search: {} }]);
+    return Response.json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: "A live tutorial." }] }, groundingMetadata: { groundingChunks: [{ web: { uri: "https://www.foldableflight.com/the-planes", title: "Planes" } }] } }] });
+  } });
+  const response = await coach.POST(request({ coachId: "tutorial-search-01", message: "Find paper airplane tutorials", searchMode: "search" }));
+  assert.equal(called, true);
+  assert.equal(response.headers.get("X-Flight-Lab-Source"), "web");
+});
+
+test("Coach stops after one backup instead of trying a third model", async () => {
+  let calls = 0;
+  const { coach } = loadRoutes({ fetch: async () => { calls++; return new Response("busy", { status: 503 }); } });
+  const response = await coach.POST(request({ coachId: "bounded-retry-01", message: "Explain lift" }));
+  assert.equal(response.status, 502);
+  assert.equal(calls, 2);
+});
+
+test("total deadline covers both attempts and a stalled response body", async () => {
+  let calls = 0;
+  const { gemini } = loadRoutes({ fetch: async (_url, init) => {
+    calls++;
+    return { ok: true, json: () => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+    }) };
+  } });
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    await assert.rejects(gemini.generateGeminiResult({ instructions: "Answer", contents: [], timeoutMs: 40, attemptTimeoutMs: 25, maxAttempts: 2 }), (error) => error.code === "timeout");
+    assert.ok(calls <= 2);
+  } finally { clearInterval(keepAlive); }
+});
+
+test("a disconnected Coach request never calls the provider", async () => {
+  let calls = 0;
+  const { coach } = loadRoutes({ fetch: async () => { calls++; return completion("unused"); } });
+  const controller = new AbortController();
+  controller.abort();
+  const response = await coach.POST(new Request("https://flightlab.test/api", { method: "POST", signal: controller.signal, body: JSON.stringify({ modelVersion: "v40", coachId: "disconnect-01", message: "Explain lift" }) }));
+  assert.equal(response.status, 504);
+  assert.equal(calls, 0);
+});
+
+
+test("requests for adjustments and another test still reach the conversational AI", async () => {
+  let calls = 0;
+  const { coach } = loadRoutes({ fetch: async () => { calls++; return completion("Try a small adjustment."); } });
+  for (const message of ["Suggest one change to my plane", "How do I fold the wing to fix turning?", "Suggest another flight test"]) {
+    const response = await coach.POST(request({ coachId: "adjustment-test", message, history: [{ role: "assistant", text: "Arrowhead https://www.foldableflight.com/the-planes" }] }));
+    assert.equal(response.headers.get("X-Flight-Lab-Source"), "cloud");
+  }
+  assert.equal(calls, 3);
 });

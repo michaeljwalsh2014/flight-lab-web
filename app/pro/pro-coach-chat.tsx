@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
 import { useModelVersion, type CoachModelVersion } from "./model-version";
+import { findPlaneTutorialReply } from "./plane-tutorials";
 import { WaitingProgress } from "./pro-ui";
 import { evidenceLabel } from "./evidence-label";
 
@@ -66,68 +67,6 @@ const FEEDBACK_OPTIONS: Array<{ reason: FeedbackReason; label: string }> = [
   { reason: "too-plane-focused", label: "Too much plane talk" },
 ];
 
-const TRUSTED_PLANE_LINKS = {
-  arrowhead: {
-    page: "https://www.foldableflight.com/arrowhead-paper-airplane",
-    video: "https://www.youtube.com/watch?v=3-IyNvisOcc",
-  },
-  marauder: {
-    page: "https://www.foldableflight.com/marauder-paper-airplane",
-  },
-  designYourOwn: {
-    guide: "https://www.foldableflight.com/post/how-to-design-your-own-paper-airplane",
-    video: "https://www.youtube.com/watch?v=ctvbtzJU9j8",
-  },
-  library: "https://www.foldableflight.com/the-planes",
-  walshWonders: {
-    channel: "https://www.youtube.com/@walshwonders/videos",
-    cobra: "https://www.youtube.com/watch?v=JTKSXclJboM",
-    platinumX: "https://www.youtube.com/watch?v=rQwIQ3wBm8k",
-    flappingWing: "https://www.youtube.com/watch?v=4JIk7im3XHM",
-    dart: "https://www.youtube.com/watch?v=GjGayirpzB0",
-    shockedMe: "https://www.youtube.com/watch?v=fCU6eZP07xw",
-  },
-};
-
-const PLANE_CATALOG = [
-  { name: "Platinum X", focus: "a smooth, easy-to-fold glider", tags: ["glider", "easy", "distance"], url: TRUSTED_PLANE_LINKS.walshWonders.platinumX },
-  { name: "Arrowhead", focus: "a locked dart for speed and distance", tags: ["dart", "easy", "fast", "distance"], url: TRUSTED_PLANE_LINKS.arrowhead.video },
-  { name: "C-13 Cobra", focus: "a glider built for long, smooth flights", tags: ["glider", "airtime", "smooth"], url: TRUSTED_PLANE_LINKS.walshWonders.cobra },
-  { name: "Marauder", focus: "a fast dart with a sharper challenge", tags: ["dart", "fast", "speed"], url: TRUSTED_PLANE_LINKS.marauder.page },
-  { name: "Flapping Wing", focus: "an unusual plane whose wings flap in flight", tags: ["unusual", "trick", "cool"], url: TRUSTED_PLANE_LINKS.walshWonders.flappingWing },
-  { name: "Walsh Wonders Dart", focus: "a straightforward speed-focused dart", tags: ["dart", "fast", "easy"], url: TRUSTED_PLANE_LINKS.walshWonders.dart },
-];
-
-function contextualPlaneRecommendation(message: string, conversation: ChatMessage[]) {
-  const question = message.toLowerCase();
-  const asksForPlane = /recommend|suggest|pick|choose|find|another|different|else|what.*(?:plane|airplane).*fold|plane.*(?:make|try|build)|favorite.*(?:plane|airplane)/.test(question);
-  if (!asksForPlane || !/(plane|airplane|fold|another|different|one)/.test(question)) return null;
-
-  const recentCoachText = conversation.filter((item) => item.role === "assistant").slice(-10).map((item) => item.text.toLowerCase()).join(" ");
-  const unused = PLANE_CATALOG.filter((plane) => !recentCoachText.includes(plane.name.toLowerCase()));
-  const requestedTags = ["glider", "airtime", "smooth", "dart", "fast", "speed", "distance", "easy", "unusual", "trick", "cool"].filter((tag) => question.includes(tag));
-  const matching = unused.filter((plane) => !requestedTags.length || requestedTags.some((tag) => plane.tags.includes(tag)));
-  const plane = matching[0] ?? unused[0] ?? PLANE_CATALOG.find((candidate) => !question.includes(candidate.name.toLowerCase())) ?? PLANE_CATALOG[0];
-  const followUp = /another|different|else|not that|new one/.test(question);
-  return `${followUp ? "Try this one instead" : "Try this one"}: ${plane.name} — ${plane.focus}. ${plane.url}\n\nAfter you fold it, log three throws and I can help compare it with your last plane.`;
-}
-
-function pairedPlaneRecommendation(message: string) {
-  const question = message.toLowerCase();
-  if (!/recommend|suggest|pick|choose|find me|what.*(plane|airplane).*fold|plane.*(make|try|build)|favorite.*(plane|airplane)/.test(question)) return null;
-
-  if (/flap|bird|unusual|weird|unique|cool-looking|trick/.test(question)) {
-    return `Here are two different planes to try:\n\nWalsh Wonders: “Flapping wing paper airplane!!!” — an unusual design whose wings flap in flight. ${TRUSTED_PLANE_LINKS.walshWonders.flappingWing}\n\nFoldable Flight: Arrowhead — an easy, locked dart built for fast, long flights. ${TRUSTED_PLANE_LINKS.arrowhead.video}\n\nWant another pair for distance, gliding, or easy folding?`;
-  }
-  if (/dart|fast|speed/.test(question)) {
-    return `Here are two fast-plane choices:\n\nWalsh Wonders: “Amazing paper airplane dart.” ${TRUSTED_PLANE_LINKS.walshWonders.dart}\n\nFoldable Flight: Marauder — one of the fastest darts in its official library. ${TRUSTED_PLANE_LINKS.marauder.page}\n\nTry both with the same paper and compare three throws each.`;
-  }
-  if (/glid|airtime|slow|smooth/.test(question)) {
-    return `Here are two gliders to compare:\n\nWalsh Wonders: C-13 Cobra — described on the channel as one of its best gliders. ${TRUSTED_PLANE_LINKS.walshWonders.cobra}\n\nFoldable Flight: browse its verified glider collection and choose one at your preferred difficulty. ${TRUSTED_PLANE_LINKS.library}\n\nMeasure three flights from each before choosing a winner.`;
-  }
-  return `I’d try one plane from each creator:\n\nWalsh Wonders: Platinum X — an easy-to-fold glider that the channel describes as one of its best. ${TRUSTED_PLANE_LINKS.walshWonders.platinumX}\n\nFoldable Flight: Arrowhead — an easy dart with a strong locking fold and an official step-by-step tutorial. ${TRUSTED_PLANE_LINKS.arrowhead.video}\n\nThey make a good comparison: Platinum X for gliding, Arrowhead for speed and distance. More Walsh Wonders planes: ${TRUSTED_PLANE_LINKS.walshWonders.channel}`;
-}
-
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
   ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
@@ -160,38 +99,6 @@ function arithmeticReply(message: string) {
   return `${left} ${operator} ${right} = ${Number.isInteger(result) ? result : Number(result.toFixed(6))}.`;
 }
 
-function youtubeSearchUrl(query: string) {
-  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${query} paper airplane tutorial`)}`;
-}
-
-function planeDiscoveryReply(message: string) {
-  const question = message.toLowerCase();
-  const paired = pairedPlaneRecommendation(message);
-  if (paired) return paired;
-  if (/walsh wonders|your (youtube )?channel|michael'?s plane/.test(question)) {
-    return `Walsh Wonders has several verified plane videos. Try C-13 Cobra for gliding: ${TRUSTED_PLANE_LINKS.walshWonders.cobra}\nOr the flapping-wing paper airplane for something unusual: ${TRUSTED_PLANE_LINKS.walshWonders.flappingWing}\nChannel: ${TRUSTED_PLANE_LINKS.walshWonders.channel}`;
-  }
-  if (/favorite.*(paper )?(plane|airplane)|which (paper )?(plane|airplane) do you (like|love)/.test(question)) {
-    return `Arrowhead is one of my favorites from Foldable Flight. It is easy to fold, has a strong locking fold, and is built for fast, long flights. Official tutorial: ${TRUSTED_PLANE_LINKS.arrowhead.video}\nDesign page: ${TRUSTED_PLANE_LINKS.arrowhead.page}`;
-  }
-  if (/design (my|your|a|an|own)|make my own|invent.*(plane|airplane)|how.*design/.test(question)) {
-    return `Start with Foldable Flight’s guide to designing your own paper airplane. It explains how lift, drag, thrust, wing size, and strong leading edges work together. Guide: ${TRUSTED_PLANE_LINKS.designYourOwn.guide}\nVideo: ${TRUSTED_PLANE_LINKS.designYourOwn.video}`;
-  }
-  if (/arrowhead/.test(question)) {
-    return `Here is Foldable Flight’s official Arrowhead tutorial: ${TRUSTED_PLANE_LINKS.arrowhead.video}\nPlane details: ${TRUSTED_PLANE_LINKS.arrowhead.page}`;
-  }
-  if (/marauder/.test(question)) {
-    return `Marauder is a very fast Foldable Flight dart. Start with its official design page: ${TRUSTED_PLANE_LINKS.marauder.page}\nYouTube results: ${youtubeSearchUrl("Foldable Flight Marauder")}`;
-  }
-  if (/bandit/.test(question)) {
-    return `I couldn’t verify a Foldable Flight design named Bandit in my trusted saved catalog, so I won’t invent details. Here is a live YouTube search you can check: ${youtubeSearchUrl("Foldable Flight Bandit")}`;
-  }
-  if (/find|search|youtube|video|tutorial|fold|plane design|paper airplane to make|recommend.*(plane|airplane)/.test(question)) {
-    const usefulQuery = message.replace(/\b(find|search|show|give|tell|youtube|video|tutorial|please|me|for)\b/gi, " ").replace(/\s+/g, " ").trim() || "Foldable Flight easy";
-    return `I can help you look for a design without a paid AI account. Browse Walsh Wonders: ${TRUSTED_PLANE_LINKS.walshWonders.channel}\nBrowse Foldable Flight’s verified plane library: ${TRUSTED_PLANE_LINKS.library}\nLive YouTube search for “${usefulQuery}”: ${youtubeSearchUrl(usefulQuery)}`;
-  }
-  return null;
-}
 
 function messageWithLinks(text: string) {
   const pieces = text.split(/(https?:\/\/[^\s]+)/g);
@@ -204,7 +111,7 @@ function shouldLookUpKnowledge(message: string) {
   const question = message.trim().toLowerCase();
   const explicitlyRequestsLookup = /\b(look (?:it |this |that )?up|search (?:for|the (?:browser|web|internet)|online)|browse(?: the (?:browser|web|internet))?|google|find (?:a )?source|cite (?:a |your )?source|give me (?:a )?source|verify online|check online|check the (?:browser|web|internet))\b/.test(question);
   if (explicitlyRequestsLookup) return true;
-  if (arithmeticReply(message) || planeDiscoveryReply(message)) return false;
+  if (arithmeticReply(message) || findPlaneTutorialReply(message)) return false;
   const clearlyNeedsFreshInformation = /\b(latest|right now|currently|current (?:record|holder|president|leader|champion|score|price|weather)|today(?:'s)?|tonight(?:'s)?|this (?:week|month|year)|live (?:score|result|weather)|weather (?:today|tomorrow|in)|score (?:today|tonight|of))\b/.test(question);
   const shouldVerifyFacts = /\b(world record|record holder|highest|lowest|longest|shortest|fastest|largest|smallest|oldest|youngest|how many|statistics?|study|research|evidence|according to|source|compare|comparison|versus|vs|when did|who (?:is|was|holds|won)|what (?:is|are|caused)|where (?:is|was)|history of)\b/.test(question);
   return clearlyNeedsFreshInformation || shouldVerifyFacts;
@@ -229,6 +136,7 @@ async function lookUpKnowledge(question: string): Promise<KnowledgeAnswer | null
   try {
     const response = await fetch("/api/knowledge", {
       method: "POST",
+      signal: AbortSignal.timeout(5_000),
       headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
       body: JSON.stringify({ question }),
     });
@@ -263,6 +171,7 @@ async function askCloudCoach(message: string, history: ChatMessage[], context: C
   try {
     const response = await fetch("/api/pro-coach", {
       method: "POST",
+      signal: AbortSignal.timeout(thinkingMode === "hard" ? 48_000 : 24_000),
       headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
       body: JSON.stringify({ message, history: history.filter((item) => item.source !== "error"), context, searchMode, modelVersion, thinkingMode, coachId: getCoachClientId() }),
     });
@@ -273,9 +182,10 @@ async function askCloudCoach(message: string, history: ChatMessage[], context: C
     }
     const reply = (await response.text()).trim();
     const replySource = response.headers.get("X-Flight-Lab-Source");
-    return reply ? { text: reply, source: replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : usesAdvancedAI(modelVersion) ? { text: "The AI returned an empty response. Please try again.", source: "error", retryable: true } : null;
-  } catch {
-    return usesAdvancedAI(modelVersion) ? { text: "The connection was interrupted. Check your internet connection and try again.", source: "error", retryable: true } : null;
+    return reply ? { text: reply, source: replySource === "links" ? "links" as const : replySource === "web" ? "web" as const : replySource === "built-in" ? "built-in" as const : "cloud" as const } : usesAdvancedAI(modelVersion) ? { text: "The AI returned an empty response. Please try again.", source: "error", retryable: true } : null;
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    return { text: timedOut ? "The Coach took too long to respond. Please try again, or choose Fast mode." : "The connection was interrupted. Check your internet connection and try again.", source: "error", retryable: true };
   }
 }
 function loadFlightHistory(): FlightHistoryContext {
@@ -328,7 +238,7 @@ function isFrustrated(message: string) {
 
 function thinkingLabel(message: string, hasEvidence: boolean) {
   if (isFrustrated(message)) return "Reviewing what I missed";
-  if (planeDiscoveryReply(message)) return "Understanding what you want to build";
+  if (findPlaneTutorialReply(message)) return "Understanding what you want to build";
   if (arithmeticReply(message)) return "Checking the calculation";
   if (shouldLookUpKnowledge(message)) return "Checking the question";
   if (hasEvidence) return "Checking your plane history";
@@ -337,7 +247,7 @@ function thinkingLabel(message: string, hasEvidence: boolean) {
 }
 
 function thinkingSteps(message: string, hasEvidence: boolean) {
-  if (planeDiscoveryReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
+  if (findPlaneTutorialReply(message)) return ["Understanding what you want to build", "Checking trusted plane sources", "Preparing useful links"];
   if (arithmeticReply(message)) return ["Reading the calculation", "Checking the operation", "Verifying the result"];
   if (shouldLookUpKnowledge(message)) return ["Understanding the question", "Checking a live knowledge source", "Verifying the answer and link"];
   if (hasEvidence) return ["Checking your plane history", "Comparing the flight clues", "Choosing one careful next test"];
@@ -361,7 +271,7 @@ function deviceReply(message: string, context: ProAiContext, history: FlightHist
   const arithmetic = arithmeticReply(message);
   if (arithmetic) return arithmetic;
 
-  const discovery = contextualPlaneRecommendation(message, conversation) ?? planeDiscoveryReply(message);
+  const discovery = findPlaneTutorialReply(message, conversation);
   if (discovery) return discovery;
 
   if (isFrustrated(message)) {
@@ -625,46 +535,52 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
     setInput("");
     setSending(true);
     setRetryQuestion(null);
-    const steps = thinkingSteps(clean, hasAnalysis);
-    setThinkingStatus(steps[0]);
-    const history = loadFlightHistory();
-    const searchMode = coachSearchMode(clean);
-    const question = questionWithoutMode(clean, searchMode);
-    // Flight Lab 4.x goes through advanced cloud AI. Local answers remain available in earlier versions.
-    const trustedLinkReply = usesAdvancedAI(coachModel) ? null : contextualPlaneRecommendation(question, previous) ?? planeDiscoveryReply(question);
-    const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, coachModel);
-    const cloudContext: CloudCoachContext = {
-      ...context,
-      flightHistory: history,
-      preferences: {
-        recentFeedback: lessons.slice(-12).map(({ reason, cue }) => ({ reason, cue })),
-      },
-    };
-    const needsLookup = searchMode === "search";
-    const knowledgeQuestion = questionWithKnowledgeContext(question, previous);
-    setThinkingStatus(needsLookup ? "Searching with Advanced AI" : usesAdvancedAI(coachModel) ? "Asking Advanced AI" : "Checking built-in knowledge");
-    if (isFrustrated(clean)) {
-      const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
-      const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
-      setPendingRepair({ cue, reply: lastReply });
+    try {
+      const steps = thinkingSteps(clean, hasAnalysis);
+      setThinkingStatus(steps[0]);
+      const history = loadFlightHistory();
+      const searchMode = coachSearchMode(clean);
+      const question = questionWithoutMode(clean, searchMode);
+      // Saved tutorial requests are immediate in every model; explicit search still uses live sources.
+      const trustedLinkReply = searchMode === "search" ? null : findPlaneTutorialReply(question, previous);
+      const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, coachModel);
+      const cloudContext: CloudCoachContext = {
+        ...context,
+        flightHistory: history,
+        preferences: {
+          recentFeedback: lessons.slice(-12).map(({ reason, cue }) => ({ reason, cue })),
+        },
+      };
+      const needsLookup = searchMode === "search";
+      const knowledgeQuestion = questionWithKnowledgeContext(question, previous);
+      setThinkingStatus(needsLookup ? "Searching with Advanced AI" : usesAdvancedAI(coachModel) ? "Asking Advanced AI" : "Checking built-in knowledge");
+      if (isFrustrated(clean)) {
+        const cue = [...previous].reverse().find((item) => item.role === "user")?.text ?? clean;
+        const lastReply = [...previous].reverse().find((item) => item.role === "assistant")?.text ?? "";
+        setPendingRepair({ cue, reply: lastReply });
+      }
+      const knowledge = !trustedLinkReply && coachModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
+      if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
+      const cloudReply = !trustedLinkReply && !knowledge && (usesAdvancedAI(coachModel) || cloudAvailable !== false)
+        ? await askCloudCoach(question, previous, cloudContext, searchMode, coachModel, thinkingMode)
+        : null;
+      const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
+      const resolvedKnowledge = knowledge ?? searchedKnowledge;
+      const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
+        ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
+        : "";
+      const finalReply = trustedLinkReply ?? cloudReply?.text ?? (usesAdvancedAI(coachModel)
+        ? "Advanced AI could not answer this request. Please try again, or switch to 3.9 Knowledge for built-in help."
+        : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
+      const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (!usesAdvancedAI(coachModel) && resolvedKnowledge ? "built-in" : "device");
+      if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
+      setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
+    } catch {
+      setRetryQuestion(clean);
+      setMessages((current) => [...current, { role: "assistant", source: "error", text: "The Coach could not finish that request. Please try again." }]);
+    } finally {
+      setSending(false);
     }
-    const knowledge = !trustedLinkReply && coachModel === "v39" && !needsLookup ? await lookUpKnowledge(knowledgeQuestion) : null;
-    if (!knowledge) setThinkingStatus(hasAnalysis ? "Checking the flight clues" : "Thinking about your question");
-    const cloudReply = !trustedLinkReply && !knowledge && (usesAdvancedAI(coachModel) || cloudAvailable !== false)
-      ? await askCloudCoach(question, previous, cloudContext, searchMode, coachModel, thinkingMode)
-      : null;
-    const searchedKnowledge = needsLookup && !cloudReply ? await lookUpKnowledge(knowledgeQuestion) : null;
-    const resolvedKnowledge = knowledge ?? searchedKnowledge;
-    const searchNote = needsLookup && cloudAvailable === false && !resolvedKnowledge
-      ? "\n\nLive multi-source search is not connected, so this answer comes from the coach’s built-in knowledge and may not reflect a recent change."
-      : "";
-    const finalReply = trustedLinkReply ?? cloudReply?.text ?? (usesAdvancedAI(coachModel)
-      ? "Advanced AI could not answer this request. Please try again, or switch to 3.9 Knowledge for built-in help."
-      : resolvedKnowledge ? `${resolvedKnowledge.answer}\n\nBuilt-in source: ${resolvedKnowledge.sourceName}\n${resolvedKnowledge.source}${resolvedKnowledge.verifiedOn ? `\nVerified: ${resolvedKnowledge.verifiedOn}` : ""}` : `${fallbackReply}${searchNote}`);
-    const source: ChatMessage["source"] = trustedLinkReply ? "links" : cloudReply?.source ?? (!usesAdvancedAI(coachModel) && resolvedKnowledge ? "built-in" : "device");
-    if (cloudReply?.source === "error" && cloudReply.retryable) setRetryQuestion(clean);
-    setMessages((current) => [...current, { id: globalThis.crypto?.randomUUID?.(), role: "assistant", source, text: finalReply }]);
-    setSending(false);
   }
 
   function requestRepair(reply: string, index: number) {

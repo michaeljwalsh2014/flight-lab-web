@@ -54,6 +54,10 @@ type GeminiOptions = {
   preferFastModel?: boolean;
   preferAdvancedModel?: boolean;
   maxOutputTokens?: number;
+  timeoutMs?: number;
+  attemptTimeoutMs?: number;
+  maxAttempts?: number;
+  signal?: AbortSignal;
 };
 
 export async function generateGeminiResult(options: GeminiOptions) {
@@ -63,19 +67,21 @@ export async function generateGeminiResult(options: GeminiOptions) {
   const models = options.preferFastModel
     ? [GEMINI_FAST_MODEL, GEMINI_LITE_MODEL, GEMINI_FALLBACK_MODEL]
     : [primaryModel, GEMINI_LITE_MODEL, GEMINI_FALLBACK_MODEL];
-  for (const [attempt, model] of models.entries()) {
+  const deadline = options.timeoutMs ? Date.now() + options.timeoutMs : Infinity;
+  for (const [attempt, model] of models.slice(0, options.maxAttempts ?? models.length).entries()) {
+    if (options.signal?.aborted || Date.now() >= deadline) throw new AIError("timeout", 504, true);
     try {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.any([AbortSignal.timeout(Math.max(1, Math.min(options.attemptTimeoutMs ?? 25_000, deadline - Date.now()))), ...(options.signal ? [options.signal] : [])]),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: options.instructions }] },
       contents: options.contents,
       ...(options.search ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         maxOutputTokens: options.maxOutputTokens ?? 4096,
-        ...(options.thinkingLevel === null ? {} : { thinkingConfig: { thinkingLevel: options.thinkingLevel ?? (model === GEMINI_ADVANCED_MODEL ? "medium" : model === GEMINI_MODEL ? "low" : "minimal") } }),
+        ...(options.thinkingLevel === null ? {} : { thinkingConfig: { thinkingLevel: model === GEMINI_ADVANCED_MODEL && options.thinkingLevel === "minimal" ? "low" : options.thinkingLevel ?? (model === GEMINI_ADVANCED_MODEL ? "medium" : model === GEMINI_MODEL ? "low" : "minimal") } }),
         ...(options.schema ? { responseMimeType: "application/json", responseJsonSchema: options.schema } : {}),
       },
     }),
@@ -102,7 +108,7 @@ export async function generateGeminiResult(options: GeminiOptions) {
     } catch (error) {
       const failure = error instanceof AIError ? error : new AIError(error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError") ? "timeout" : "unavailable", 502, true);
       console.warn("flight_lab_ai_failure", { code: failure.code, status: failure.status, model, attempt: attempt + 1, search: Boolean(options.search) });
-      if (!failure.retryable || attempt === models.length - 1) throw failure;
+      if (!failure.retryable || options.signal?.aborted || Date.now() >= deadline || attempt === Math.min(options.maxAttempts ?? models.length, models.length) - 1) throw failure;
     }
   }
   throw new AIError("unavailable", 502, true);
