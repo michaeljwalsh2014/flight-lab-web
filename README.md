@@ -1,98 +1,23 @@
-# vinext-starter
+# Flight Lab
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Paper-airplane hangar, throw measurement, photo inspections, flight-path illustration and conversational Coach. The web app uses React, Vinext and Cloudflare Workers; the optional iOS project is in `native/FlightLab`.
 
-## Prerequisites
+## Development and validation
 
-- Node.js `>=22.13.0`
+Use Node 22.13 or newer. Install dependencies with `pnpm install`, run `pnpm dev`, and run `pnpm test` before release. The test command builds the app and runs every test file, including saving/recovery, backups, scan races, report reopening, feedback and AI routes. Run `pnpm exec tsc --noEmit --incremental false` for type checking.
 
-## Quick Start
+## Configuration
 
-```bash
-npm install
-npm run dev
-npm run build
-```
+Keep local configuration in ignored `.env.local` and production secrets in Sites settings. `FLIGHT_LAB_OWNER_EMAIL` identifies the owner; `FLIGHT_LAB_PRO_SHARE_TOKEN` enables the shared Pro pass. Provider configuration lives in `app/gemini-server.ts`; optional OpenAI fallback uses `OPENAI_API_KEY`. Never commit credentials. `.openai/hosting.json` declares the existing Site identity and D1 `DB` binding.
 
-This starter does not use `wrangler.jsonc`.
+AI budgets are stored atomically in D1, shared across server instances. Each account or shared pass has a ten-minute budget per feature: ten Coach requests, five scans, five video reviews. All holders of one shared pass share its budget; changing a browser client ID cannot reset it. Unavailable storage prevents paid calls. The limiter creates its dedicated table on first use, without altering user records.
 
-## Included Shape
+## Saved data
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+Planes, throws, reports, feedback and preferences remain in browser local storage under their existing keys. Active AI evidence uses session storage. Download a backup before moving browsers or devices. Version-1 backups merge new records while retaining local conflicts, and include measurement setup and layout preferences. Original unfinished photo/video files are not included. Saved reports reopen as historical analysis; estimates and illustrated paths do not establish physical accuracy.
 
-## Workspace Auth Headers
+## Releases and rollback
 
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
+Follow `AGENTS.md`: validate, commit and push the exact source, package that exact build, save a new Sites version, and deploy only that newly saved version. Record the Git commit and Sites version together. Preserve all existing saved versions, including at least the previous four releases, with the previous production version available for immediate rollback. Never overwrite a release. Report the saved-version number and rollback availability after publishing.
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Preserve model choices 3.8, 3.9 and 4.0 and the Coach Show more/Show less control. A saved v37 selection migrates to v38. Storage keys must not be cleared or renamed without migration and explicit approval.

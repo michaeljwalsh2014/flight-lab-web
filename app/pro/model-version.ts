@@ -1,5 +1,6 @@
 "use client";
 
+import { readValue, saveValue } from "@/app/storage-safety";
 import { useEffect, useState } from "react";
 
 export type CoachModelVersion = "v38" | "v39" | "v40" | "v46";
@@ -27,10 +28,10 @@ export function useModelVersion() {
   const [model, setModel] = useState<CoachModelVersion>("v40");
   useEffect(() => {
     const sync = () => {
-      const saved = window.localStorage.getItem(storageKey);
+      const saved = readValue(storageKey);
       const next = normalizeModelVersion(saved);
       setModel(next);
-      if (saved === "v37") window.localStorage.setItem(storageKey, next);
+      if (saved === "v37") saveValue(storageKey, next);
     };
     sync();
     window.addEventListener(changedEvent, sync);
@@ -38,7 +39,7 @@ export function useModelVersion() {
     return () => { window.removeEventListener(changedEvent, sync); window.removeEventListener("storage", sync); };
   }, []);
   const chooseModel = (next: CoachModelVersion) => {
-    window.localStorage.setItem(storageKey, next);
+    if (!saveValue(storageKey, next)) return;
     setModel(next);
     window.dispatchEvent(new Event(changedEvent));
   };

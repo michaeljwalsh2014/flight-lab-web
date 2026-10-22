@@ -1,5 +1,6 @@
 "use client";
 
+import { saveValue, readValue, reportSaveError } from "../storage-safety";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PRO_AI_CONTEXT_EVENT, readProAiContext, type ProAiContext } from "./pro-ai-context";
 import { useModelVersion, type CoachModelVersion } from "./model-version";
@@ -159,10 +160,10 @@ type CloudCoachContext = ProAiContext & {
 
 function getCoachClientId() {
   const key = "flight-lab-pro-coach-id";
-  let value = window.localStorage.getItem(key);
+  let value = readValue(key);
   if (!value) {
     value = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    window.localStorage.setItem(key, value);
+    saveValue(key, value);
   }
   return value;
 }
@@ -190,9 +191,9 @@ async function askCloudCoach(message: string, history: ChatMessage[], context: C
 }
 function loadFlightHistory(): FlightHistoryContext {
   try {
-    const planeId = Number(window.localStorage.getItem("flight-lab-v2-active-plane-id")) || null;
-    const planes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as Array<{ id?: number; name?: string }>;
-    const throws = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as Array<{ planeId?: number; distance?: number }>;
+    const planeId = Number(readValue("flight-lab-v2-active-plane-id")) || null;
+    const planes = JSON.parse(readValue("flight-lab-v2-planes") ?? "[]") as Array<{ id?: number; name?: string }>;
+    const throws = JSON.parse(readValue("flight-lab-v2-throws") ?? "[]") as Array<{ planeId?: number; distance?: number }>;
     const distances = throws.filter((item) => item.planeId === planeId).map((item) => Number(item.distance)).filter((value) => Number.isFinite(value) && value > 0);
     return {
       planeId,
@@ -220,9 +221,9 @@ function questionWithKnowledgeContext(question: string, conversation: ChatMessag
 
 function nextDeviceVariant() {
   const key = "flight-lab-pro-coach-variation";
-  const current = Number(window.localStorage.getItem(key)) || 0;
+  const current = Number(readValue(key)) || 0;
   const next = (current + 1) % 997;
-  window.localStorage.setItem(key, String(next));
+  saveValue(key, String(next));
   return next;
 }
 
@@ -451,6 +452,7 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
   const [thinkingMode, setThinkingMode] = useState<CoachThinkingMode>("auto");
   const [modelGroup, setModelGroup] = useState<CoachModelGroup>("default");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [controlsExpanded, setControlsExpanded] = useState(interfaceLevel !== "beginner");
   const [selectedModel, chooseModel] = useModelVersion();
   const coachModel: CoachModelVersion = selectedModel;
   const coachOptions = COACH_LEVEL_OPTIONS[modelGroup];
@@ -467,9 +469,9 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
   const messagesReadyRef = useRef(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("flight-lab-coach-thinking-mode");
+    const saved = readValue("flight-lab-coach-thinking-mode");
     if (saved === "auto" || saved === "fast" || saved === "normal" || saved === "hard") setThinkingMode(saved);
-    const savedGroup = window.localStorage.getItem("flight-lab-coach-model-group");
+    const savedGroup = readValue("flight-lab-coach-model-group");
     if (savedGroup === "default" || savedGroup === "v38" || savedGroup === "v39" || savedGroup === "v40" || savedGroup === "v46") setModelGroup(savedGroup);
   }, []);
 
@@ -477,15 +479,17 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
     const selectedIsVisible = COACH_LEVEL_OPTIONS[modelGroup].some((option) => option.model === selectedModel && option.mode === thinkingMode);
     if (!selectedIsVisible) {
       setModelGroup(selectedModel);
-      window.localStorage.setItem("flight-lab-coach-model-group", selectedModel);
+      saveValue("flight-lab-coach-model-group", selectedModel);
     }
   }, [modelGroup, selectedModel, thinkingMode]);
 
   useEffect(() => {
     setContext(readProAiContext());
-    const receiveContext = (event: Event) => setContext((event as CustomEvent<ProAiContext>).detail);
+    const receiveContext = () => setContext(readProAiContext());
+    window.addEventListener("flight-lab-planes-updated", receiveContext);
+    window.addEventListener("storage", receiveContext);
     window.addEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
-    return () => window.removeEventListener(PRO_AI_CONTEXT_EVENT, receiveContext);
+    return () => { window.removeEventListener(PRO_AI_CONTEXT_EVENT, receiveContext); window.removeEventListener("flight-lab-planes-updated", receiveContext); window.removeEventListener("storage", receiveContext); };
   }, []);
 
   useEffect(() => {
@@ -506,13 +510,13 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
       const storedLessons = JSON.parse(window.localStorage.getItem("flight-lab-coach-lessons") ?? "[]") as CoachLesson[];
       const safeLessons = storedLessons.filter((item) => item && FEEDBACK_OPTIONS.some((option) => option.reason === item.reason) && typeof item.cue === "string").slice(-30);
       if (safeLessons.length) setLessons(safeLessons);
-    } catch { /* Start a fresh conversation. */ }
+    } catch { reportSaveError("Saved Coach history could not be read. It has been preserved; new messages will not overwrite it."); return; }
     queueMicrotask(() => { messagesReadyRef.current = true; });
   }, []);
 
   useEffect(() => {
     if (!messagesReadyRef.current) return;
-    window.localStorage.setItem("flight-lab-coach-conversation", JSON.stringify(messages.slice(-20)));
+    saveValue("flight-lab-coach-conversation", JSON.stringify(messages.slice(-20)));
   }, [messages]);
 
   useEffect(() => {
@@ -543,9 +547,10 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
       const question = questionWithoutMode(clean, searchMode);
       // Saved tutorial requests are immediate in every model; explicit search still uses live sources.
       const trustedLinkReply = searchMode === "search" ? null : findPlaneTutorialReply(question, previous);
-      const fallbackReply = trustedLinkReply ?? deviceReply(question, context, history, previous, lessons, coachModel);
+      const currentContext = readProAiContext();
+      const fallbackReply = trustedLinkReply ?? deviceReply(question, currentContext, history, previous, lessons, coachModel);
       const cloudContext: CloudCoachContext = {
-        ...context,
+        ...currentContext,
         flightHistory: history,
         preferences: {
           recentFeedback: lessons.slice(-12).map(({ reason, cue }) => ({ reason, cue })),
@@ -591,11 +596,10 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
   function rememberLesson(reason: FeedbackReason) {
     if (!pendingRepair) return;
     const lesson: CoachLesson = { reason, cue: pendingRepair.cue.slice(0, 180), createdAt: Date.now() };
-    setLessons((current) => {
-      const next = [...current, lesson].slice(-30);
-      window.localStorage.setItem("flight-lab-coach-lessons", JSON.stringify(next));
-      return next;
-    });
+    if (!messagesReadyRef.current) { reportSaveError("Saved Coach feedback could not be loaded. It has been preserved."); return; }
+    const next = [...lessons, lesson].slice(-30);
+    if (!saveValue("flight-lab-coach-lessons", JSON.stringify(next))) return;
+    setLessons(next);
     const acknowledgement = {
       wrong: "Got it. I’ll be more careful about claiming an answer is correct when I don’t have enough evidence.",
       unrelated: "Got it. I’ll focus on the exact question and ask for clarification when I’m unsure.",
@@ -612,8 +616,8 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
   }
 
   function chooseThinkingMode(mode: CoachThinkingMode) {
+    if (!saveValue("flight-lab-coach-thinking-mode", mode)) return;
     setThinkingMode(mode);
-    window.localStorage.setItem("flight-lab-coach-thinking-mode", mode);
   }
 
   function chooseCoachLevel(level: number) {
@@ -623,9 +627,9 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
   }
 
   function chooseModelGroup(next: CoachModelGroup) {
+    if (!saveValue("flight-lab-coach-model-group", next)) return;
     setModelGroup(next);
     setModelMenuOpen(false);
-    window.localStorage.setItem("flight-lab-coach-model-group", next);
     const options = COACH_LEVEL_OPTIONS[next];
     if (!options.some((option) => option.model === selectedModel && option.mode === thinkingMode)) {
       const closest = options.find((option) => option.model === selectedModel && option.mode === "auto") ?? options.find((option) => option.mode === "auto") ?? options[0];
@@ -658,7 +662,8 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
           <div>{FEEDBACK_OPTIONS.map((option) => <button type="button" key={option.reason} onClick={() => rememberLesson(option.reason)}>{option.label}</button>)}</div>
           <button className="coach-repair-cancel" type="button" onClick={() => setPendingRepair(null)}>Never mind</button>
         </div>}
-        {interfaceLevel !== "beginner" && <section className="coach-response-mode" aria-label="Coach response mode">
+        <button type="button" className="coach-controls-toggle" aria-expanded={controlsExpanded} aria-controls="coach-extra-controls" onClick={() => { setControlsExpanded(value => !value); setModelMenuOpen(false); }}>{controlsExpanded ? "Show less" : "Show more"}</button>
+        {controlsExpanded && <section id="coach-extra-controls" className="coach-response-mode" aria-label="Coach response mode">
           <div className="coach-model-group">
             <button type="button" aria-expanded={modelMenuOpen} aria-haspopup="menu" onClick={() => setModelMenuOpen((value) => !value)}><span>ϟ</span><b>{COACH_MODEL_GROUPS.find((group) => group.id === modelGroup)?.label}</b><i>›</i></button>
             {modelMenuOpen && <div role="menu" aria-label="Flight Lab model lists">{COACH_MODEL_GROUPS.map((group) => <button type="button" role="menuitem" className={group.id === modelGroup ? "selected" : ""} key={group.id} onClick={() => chooseModelGroup(group.id)}><b>{group.label}</b><small>{group.detail}</small></button>)}</div>}

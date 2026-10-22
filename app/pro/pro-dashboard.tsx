@@ -1,15 +1,17 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { readRecords, writeAtomically, saveValue } from "../storage-safety";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { detectObjects, inspectPlanePhoto, type ImageSignals } from "@/app/flight-lab-app";
 import ProCoachChat from "./pro-coach-chat";
-import { publishProAiContext, readProAiContext, type CoachTestMemory } from "./pro-ai-context";
+import { publishProAiContext, readProAiContext, currentPlaneId, type CoachTestMemory } from "./pro-ai-context";
 import ProVideoLab from "./pro-video-lab";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 import ProViewCounter from "./pro-view-counter";
 import ProBackup from "./pro-backup";
+import { readableReport, validReportCollection, validCoachTest } from "./analysis-data";
 import { evidenceLabel } from "./evidence-label";
 import { WalkingRhythmCounter } from "./walking-rhythm";
 import ProOnboarding, { interfaceOptions } from "./pro-onboarding";
@@ -36,6 +38,11 @@ type VisionScanReport = {
   inspectionSummary: string;
 };
 type PlaneReport = {
+  savedAt?: string;
+  modelVersion?: string;
+  baselineFeet?: number | null;
+  baselineSource?: "saved" | "entered" | "none";
+  history?: { count: number; best: number; average: number };
   planeId: number | null;
   planeName: string;
   score: number;
@@ -178,10 +185,13 @@ const testOptions: Record<FlightBehavior, string[]> = {
 
 const nextTests = Object.fromEntries(Object.entries(testOptions).map(([key, options]) => [key, options[0]])) as Record<FlightBehavior, string>;
 
-function readCoachMemory(): CoachTestMemory[] {
+function readCoachMemory(strict = false): CoachTestMemory[] {
   try {
-    return JSON.parse(window.localStorage.getItem(coachMemoryStorageKey) ?? "[]") as CoachTestMemory[];
+    const items: unknown = JSON.parse(window.localStorage.getItem(coachMemoryStorageKey) ?? "[]");
+    if (!Array.isArray(items) || !items.every(validCoachTest)) throw new Error("Saved experiment feedback could not be read. It has been preserved.");
+    return items as CoachTestMemory[];
   } catch {
+    if (strict) throw new Error("Saved experiment feedback could not be read. It has been preserved.");
     return [];
   }
 }
@@ -217,8 +227,8 @@ function ProPlaneHangar() {
   useEffect(() => {
     const loadSavedData = () => {
       try {
-        const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
-        const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const savedPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
+        const savedThrows = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
         const cleanedPlanes = savedPlanes;
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(cleanedPlanes);
@@ -227,32 +237,42 @@ function ProPlaneHangar() {
         setActivePlaneId(nextActivePlaneId);
 
       } catch {
-        setPlanes([]);
-        setThrows([]);
-        setActivePlaneId(null);
+        setHangarNotice("Saved records could not be loaded. They are preserved; restore a backup before editing.");
       }
     };
     loadSavedData();
     window.addEventListener(planesUpdatedEvent, loadSavedData);
-    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
+    window.addEventListener("storage", loadSavedData);
+    return () => { window.removeEventListener(planesUpdatedEvent, loadSavedData); window.removeEventListener("storage", loadSavedData); };
   }, []);
 
   function saveHangar(nextPlanes: StoredPlane[], nextThrows: StoredThrow[], nextActivePlaneId: number | null) {
-    setPlanes(nextPlanes);
-    setThrows(nextThrows);
-    setActivePlaneId(nextActivePlaneId);
-    window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(nextPlanes));
-    window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextThrows));
-    if (nextActivePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
-    else window.localStorage.setItem(activePlaneStorageKey, String(nextActivePlaneId));
-    window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: nextPlanes }));
+    try {
+      const latestPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
+      const latestThrows = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
+      if (JSON.stringify(latestPlanes) !== JSON.stringify(planes) || JSON.stringify(latestThrows) !== JSON.stringify(throws)) {
+        window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+        throw new Error("Your saved records changed. Review the refreshed hangar and try again.");
+      }
+      writeAtomically(window.localStorage, {
+        "flight-lab-v2-planes": JSON.stringify(nextPlanes),
+        "flight-lab-v2-throws": JSON.stringify(nextThrows),
+        [activePlaneStorageKey]: nextActivePlaneId === null ? "" : String(nextActivePlaneId),
+      });
+      setPlanes(nextPlanes); setThrows(nextThrows); setActivePlaneId(nextActivePlaneId);
+      window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+      return true;
+    } catch (error) {
+      setHangarNotice(error instanceof Error ? error.message : "Changes could not be saved.");
+      return false;
+    }
   }
 
   function selectPlane(planeId: number) {
     // Selecting a plane must never write the Hangar's cached throws back to
     // storage. Smart Measure can save a throw between Hangar renders.
+    if (!saveValue(activePlaneStorageKey, String(planeId))) return;
     setActivePlaneId(planeId);
-    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
   }
 
@@ -279,7 +299,7 @@ function ProPlaneHangar() {
       preset: preset.id,
     };
     const nextPlanes = [plane, ...planes];
-    saveHangar(nextPlanes, throws, plane.id);
+    if (!saveHangar(nextPlanes, throws, plane.id)) return;
     setPlaneName(preset.name);
     setHangarNotice(`${plane.name} was saved on this device.`);
   }
@@ -287,7 +307,7 @@ function ProPlaneHangar() {
   function clearHangar() {
     if (!editingPlanes) return;
     if (!window.confirm("Remove every saved plane, flight, scan report, and coach test from this device? This cannot be undone.")) return;
-    saveHangar([], [], null);
+    if (!saveHangar([], [], null)) return;
     window.localStorage.removeItem(planeReportsStorageKey);
     window.localStorage.removeItem(coachMemoryStorageKey);
     setHangarNotice("The hangar is empty. Nothing from another visitor was stored here.");
@@ -359,6 +379,10 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
   const useGemini = selectedModel === "v40" || selectedModel === "v46";
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingViewRef = useRef<ScanView>("top");
+  const scanGeneration = useRef(0);
+  const reportGeneration = useRef(-1);
+  const scanAbort = useRef<AbortController | null>(null);
+  const photoUrls = useRef(new Set<string>());
   const [preferredScanMode, setScanMode] = useState<ScanMode>("quick");
   const scanMode = level === "pro" ? preferredScanMode : "quick";
   const [scanPhotos, setScanPhotos] = useState<Partial<Record<ScanView, string>>>({});
@@ -369,25 +393,36 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
   const [ageRange, setAgeRange] = useState<AgeRange>("not-set");
   const [strength, setStrength] = useState<ThrowStrength>("normal");
   const [behavior, setBehavior] = useState<FlightBehavior>("straight");
-  const [knownBest, setKnownBest] = useState("");
+  const [bestOverride, setBestOverride] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
   const [report, setReport] = useState<PlaneReport | null>(null);
+  const [openedReport, setOpenedReport] = useState<PlaneReport | null>(null);
   const [testOutcome, setTestOutcome] = useState<CoachTestMemory["result"] | null>(null);
   const [cloudVisionEnabled, setCloudVisionEnabled] = useState(true);
   const [error, setError] = useState("");
   const activePlane = planes.find((plane) => plane.id === activePlaneId) ?? null;
   const activeThrows = throws.filter((item) => item.planeId === activePlaneId);
+  const savedBest = activeThrows.length ? Math.max(...activeThrows.map(item => item.distance)) : 0;
+  const knownBest = bestOverride ?? (savedBest > 0 ? savedBest.toFixed(1) : "");
+  const displayedReport = report ?? openedReport;
   const capturedViews = scanViews.filter((view) => scanPhotos[view.id]);
   const requiredViews = scanMode === "quick" ? scanViews.slice(0, 1) : scanViews;
 
-  useEffect(() => { setReport(null); setTestOutcome(null); setError(""); }, [selectedModel]);
+  useEffect(() => {
+    scanGeneration.current++;
+    scanAbort.current?.abort();
+    setReport(null); setOpenedReport(null); setTestOutcome(null); setError(""); setProgress(0); setStage("");
+    publishProAiContext({ plane: undefined });
+    return () => { scanGeneration.current++; scanAbort.current?.abort(); };
+  }, [selectedModel, activePlaneId, scanMode, scanPhotos, planeKind, ageRange, strength, behavior, knownBest, cloudVisionEnabled]);
+  useEffect(() => () => { for (const url of photoUrls.current) URL.revokeObjectURL(url); }, []);
 
   useEffect(() => {
     const loadSavedData = () => {
       try {
-        const nextPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
-        const nextThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+        const nextPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
+        const nextThrows = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
         const savedId = Number(window.localStorage.getItem(activePlaneStorageKey));
         const nextId = nextPlanes.some((plane) => plane.id === savedId) ? savedId : nextPlanes[0]?.id ?? null;
         setPlanes(nextPlanes);
@@ -399,23 +434,28 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
     };
     loadSavedData();
     window.addEventListener(planesUpdatedEvent, loadSavedData);
-    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
+    window.addEventListener("storage", loadSavedData);
+    return () => { window.removeEventListener(planesUpdatedEvent, loadSavedData); window.removeEventListener("storage", loadSavedData); };
   }, []);
 
+  const activePreset = activePlane?.preset;
   useEffect(() => {
-    if (!activePlane) { setKnownBest(""); return; }
-    const distances = throws.filter((item) => item.planeId === activePlane.id).map((item) => item.distance);
-    setKnownBest(distances.length ? Math.max(...distances).toFixed(1) : "");
-    setPlaneKind(activePlane.preset === "dart" || activePlane.preset === "glider" ? activePlane.preset : "custom");
-    setScanPhotos({}); setReport(null); setTestOutcome(null);
-  }, [activePlaneId, planes, throws]);
+    setPlaneKind(activePreset === "dart" || activePreset === "glider" ? activePreset : "custom");
+  }, [activePlaneId, activePreset]);
+  useEffect(() => {
+    for (const url of photoUrls.current) URL.revokeObjectURL(url);
+    photoUrls.current.clear();
+    setBestOverride(null);
+    setScanPhotos({}); setReport(null); setOpenedReport(null); setTestOutcome(null);
+    publishProAiContext({ plane: undefined, coachMemory: [] });
+  }, [activePlaneId]);
 
   useEffect(() => {
-    if (!report) return;
+    if (!report || report.planeId !== activePlaneId || reportGeneration.current !== scanGeneration.current) return;
     const memory = readCoachMemory().filter((item) => item.planeId === report.planeId).slice(-8);
     publishProAiContext({
       plane: {
-        planeId: report.planeId, planeName: report.planeName, score: report.score, range: report.range,
+        planeId: report.planeId, planeName: report.planeName, score: report.score, range: `${report.baselineFeet ? "Rough estimate based on a measured baseline" : "Uncalibrated illustration"}: ${report.range}; not a measured distance or accuracy guarantee`,
         confidence: report.confidence, headline: report.headline, nextTest: report.nextTest,
         recommendationId: report.recommendationId, evidence: report.evidence,
         symmetry: report.signals.symmetry, outline: report.signals.outline, planeStyle: planeKind, ageRange, throwStrength: strength,
@@ -431,11 +471,11 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
       },
       coachMemory: memory,
     });
-  }, [ageRange, behavior, planeKind, report, strength]);
+  }, [activePlaneId, ageRange, behavior, planeKind, report, strength]);
 
   function selectActivePlane(planeId: number) {
+    if (!saveValue(activePlaneStorageKey, String(planeId))) return;
     setActivePlaneId(planeId);
-    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
   }
 
@@ -450,36 +490,68 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
     if (!file.type.startsWith("image/")) { setError("Choose a photo of one paper airplane."); return; }
     const view = pendingViewRef.current;
     const previous = scanPhotos[view];
-    if (previous) URL.revokeObjectURL(previous);
-    setScanPhotos((current) => ({ ...current, [view]: URL.createObjectURL(file) }));
+    if (previous) { URL.revokeObjectURL(previous); photoUrls.current.delete(previous); }
+    const url = URL.createObjectURL(file); photoUrls.current.add(url);
+    scanGeneration.current++; scanAbort.current?.abort();
+    setScanPhotos((current) => ({ ...current, [view]: url }));
     setReport(null); setTestOutcome(null); setError("");
     event.target.value = "";
   }
 
+  function openSavedReport() {
+    try {
+      const profiles: unknown = JSON.parse(window.localStorage.getItem(planeReportsStorageKey) ?? "{}");
+      if (!validReportCollection(profiles)) throw new Error("Saved reports could not be read. They have been preserved; keep a backup before trying recovery.");
+      const saved = profiles[String(activePlaneId ?? "custom")];
+      if (!saved) throw new Error("No saved report for this plane yet. Run an inspection first.");
+      if (!readableReport(saved) || saved.planeId !== activePlaneId) throw new Error("This older report cannot be displayed safely. It remains in your backup; run a new inspection for this plane.");
+      setReport(null); setProgress(0); setOpenedReport(saved as unknown as PlaneReport); setError("");
+      publishProAiContext({ plane: undefined });
+      const previous = readCoachMemory().filter(item => item.recommendationId === saved.recommendationId && item.planeId === activePlaneId).at(-1);
+      setTestOutcome(previous?.result ?? null);
+    } catch (error) { setError(error instanceof SyntaxError ? "Saved reports could not be read. They have been preserved; keep a backup before trying recovery." : error instanceof Error ? error.message : "Saved report could not be opened."); }
+  }
+
   function recordOutcome(result: CoachTestMemory["result"]) {
-    if (!report) return;
-    const item: CoachTestMemory = { planeId: report.planeId, recommendationId: report.recommendationId, action: report.nextTest, result, createdAt: new Date().toISOString() };
-    const next = [...readCoachMemory(), item].slice(-40);
-    window.localStorage.setItem(coachMemoryStorageKey, JSON.stringify(next));
-    setTestOutcome(result);
-    publishProAiContext({ coachMemory: next.filter((entry) => entry.planeId === report.planeId).slice(-8) });
+    if (!displayedReport || displayedReport.planeId !== currentPlaneId()) return;
+    try {
+      const memory = readCoachMemory(true);
+      const previous = memory.filter(entry => entry.recommendationId === displayedReport.recommendationId && entry.planeId === displayedReport.planeId).at(-1);
+      if (previous?.result === result) { setTestOutcome(result); return; }
+      const item: CoachTestMemory = { planeId: displayedReport.planeId, recommendationId: displayedReport.recommendationId, action: displayedReport.nextTest, result, createdAt: new Date().toISOString() };
+      const next = [...memory, item];
+      if (!saveValue(coachMemoryStorageKey, JSON.stringify(next))) { setError("Your test result could not be saved. Please try again."); return; }
+      setTestOutcome(result); setError("");
+      publishProAiContext({ coachMemory: next.filter(entry => entry.planeId === displayedReport.planeId).slice(-8) });
+    } catch (error) { setError(error instanceof Error ? error.message : "Your test result could not be saved."); }
   }
 
   async function analyzePlane() {
+    if (knownBest.trim() && (!Number.isFinite(Number(knownBest)) || Number(knownBest) < .1 || Number(knownBest) > 1000)) {
+      setError("Enter a measured best between 0.1 and 1,000 feet, or leave it blank for an uncalibrated estimate."); return;
+    }
     const topPhoto = scanPhotos.top;
     if (!topPhoto) { requestView("top"); return; }
     const missing = requiredViews.filter((view) => !scanPhotos[view.id]);
     if (missing.length) { setError(`Finish the guided scan: add ${missing.map((view) => view.label.toLowerCase()).join(", ")}.`); return; }
-    setError(""); setReport(null); setTestOutcome(null); setProgress(6); setStage("Verifying the airplane");
+    const generation = ++scanGeneration.current;
+    scanAbort.current?.abort();
+    const controller = new AbortController(); scanAbort.current = controller;
+    const isCurrent = () => generation === scanGeneration.current && currentPlaneId() === activePlaneId && !controller.signal.aborted;
+    const checkCurrent = () => { if (!isCurrent()) throw new Error("Scan selection changed"); };
+    publishProAiContext({ plane: undefined });
+    setError(""); setReport(null); setOpenedReport(null); setTestOutcome(null); setProgress(6); setStage("Verifying the airplane");
     try {
       let detections: Awaited<ReturnType<typeof detectObjects>> = [];
       if (!useGemini) {
         try { detections = await detectObjects(topPhoto); } catch { /* Local shape analysis remains available. */ }
       }
+      checkCurrent();
       const unrelated = detections.find((item) => unrelatedClasses.has(item.class) && item.score >= .58);
       if (unrelated && !useGemini) throw new Error(`The top view appears to contain a ${unrelated.class}. Use a plain surface with only the airplane in frame.`);
       setProgress(34); setStage("Measuring wing symmetry and fold geometry");
       const signals = await inspectPlanePhoto(topPhoto);
+      checkCurrent();
       if (!signals.recognizable && !useGemini) throw new Error(signals.reason);
       setProgress(52); setStage(scanMode === "multiview" ? "Comparing visible details across six photos" : "Finishing the top-view measurements");
       const localViewSignals = scanMode === "multiview"
@@ -490,6 +562,7 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
             } catch { return null; }
           }))).filter((item): item is ImageSignals => Boolean(item))
         : [signals];
+      checkCurrent();
       const localViewsAnalyzed = localViewSignals.length;
       let vision: VisionScanReport | null = null;
       let deepInspection: PlaneReport["deepInspection"] = useGemini ? "unavailable" : scanMode === "quick" ? "not-applicable" : cloudVisionEnabled ? "unavailable" : "off";
@@ -497,12 +570,15 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
         setProgress(68); setStage(useGemini ? "Advanced AI is inspecting your photos" : "Running deep AI inspection across all six photos");
         try {
           const prepared = await Promise.all(requiredViews.map(async (view) => [view.id, await photoToDataUrl(scanPhotos[view.id]!, useGemini ? 1280 : 760)] as const));
+          checkCurrent();
           const response = await fetch("/api/pro-scan", {
+            signal: controller.signal,
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Flight-Lab-Pro-Path": window.location.pathname },
             body: JSON.stringify({ images: Object.fromEntries(prepared), coachId: getScanClientId(), modelVersion: selectedModel, scanMode, planeStyle: planeKind, ageRange, throwStrength: strength, lastFlight: behavior, measuredBest: Number(knownBest) || null }),
           });
           const payload = await response.json() as { analysis?: VisionScanReport; model?: string; message?: string };
+          checkCurrent();
           if (response.ok && payload.analysis?.recognizable) { vision = { ...payload.analysis, model: payload.model }; deepInspection = "used"; }
           else if (useGemini) throw new Error(response.ok ? payload.analysis?.inspectionSummary || "Advanced AI could not identify a paper airplane in these photos." : payload.message || "Advanced AI could not analyze these photos. Please try again.");
         } catch (error) {
@@ -510,13 +586,14 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
           /* Older versions retain their on-device fallback. */
         }
       }
+      checkCurrent();
       const topScore = signals.symmetry * .55 + signals.outline * .3 + signals.foldVisibility * .15;
       const crossViewScore = localViewSignals.reduce((sum, item) => sum + item.symmetry * .45 + item.outline * .35 + item.foldVisibility * .2, 0) / Math.max(1, localViewsAnalyzed);
       const localScore = scanMode === "multiview" ? topScore * .68 + crossViewScore * .32 : topScore;
       const score = Math.round(Math.max(0, Math.min(100, vision ? localScore * .7 + vision.symmetryScore * .3 : localScore)));
-      const measuredBest = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : Number(knownBest);
+      const measuredBest = Number(knownBest) || 0;
       const videoReview = selectedModel === "v40" || selectedModel === "v46" ? readProAiContext().videoInspection : null;
-      const videoStrength = videoReview && videoReview.releaseStrength !== "uncertain" && videoReview.releaseConfidence >= 55 ? videoReview.releaseStrength : null;
+      const videoStrength = videoReview?.planeId === activePlaneId && videoReview.canReview && videoReview.releaseStrength !== "uncertain" && videoReview.releaseConfidence >= 55 ? videoReview.releaseStrength : null;
       const selectedStrengthFactor = strengthFactorsByPlane[planeKind][strength];
       const videoStrengthFactor = videoStrength ? strengthFactorsByPlane[planeKind][videoStrength] : selectedStrengthFactor;
       const releaseFactor = videoStrength ? selectedStrengthFactor * .65 + videoStrengthFactor * .35 : selectedStrengthFactor;
@@ -538,11 +615,12 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
       const recommendationId = `${activePlaneId ?? "custom"}-${behavior}-${Date.now()}`;
       const planeName = activePlane?.name ?? "Unsaved plane";
       const evidence = [
-        `Top-view wing symmetry measured ${signals.symmetry}%.`,
+        `Top-view symmetry check scored ${signals.symmetry}/100; this is a photo heuristic, not a physical measurement.`,
         scanMode === "multiview" ? `On-device checks found usable paper-airplane geometry in ${localViewsAnalyzed} of 6 photos and combined those checks with the top-view measurements.` : "This quick check measured only the visible top-view outline, wing balance, and fold contrast.",
         ...(vision?.observations ?? []),
         deepInspection === "used" ? `${useGemini ? "Advanced AI" : "Deep Visual Inspection"} inspected ${requiredViews.length === 1 ? "the top photo; hidden and underside folds were not visible" : "nose alignment, both wing angles, underside folds, and tail edges across all six photos"}.` : deepInspection === "unavailable" ? "Deep Visual Inspection could not connect, so no cloud findings were added; the report clearly falls back to on-device photo checks." : scanMode === "multiview" ? "Deep Visual Inspection was off; the photos stayed on this device." : "Hidden and underside folds were not inspected in Quick Check.",
-        activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${measuredBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
+        activeThrows.length ? `${planeName} has ${activeThrows.length} saved throws with a ${savedBest.toFixed(1)} ft best.` : `${planeName} has no measured baseline yet.`,
+        measuredBest > 0 ? `The estimate used a ${measuredBest.toFixed(1)} ft ${bestOverride === null ? "saved" : "user-entered"} baseline. Saved throw history was not changed.` : "Uncalibrated illustration: no measured baseline was used; measure three comparable throws before relying on a distance estimate.",
         `The last reported flight behavior was ${behavior}.`,
         `The estimate uses the ${ageRange === "not-set" ? "unspecified" : ageRange} age range and a ${strength} release for this ${planeKind} design.`,
         ...(visibleBuildRisk >= 80 ? ["Clearly visible build defects reduced this estimate; repair the folds, then measure a real throw to replace the prediction with evidence."] : []),
@@ -552,15 +630,22 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
       const detail = `${scanMode === "multiview" ? `Flight Lab compared six labeled photos of ${planeName}` : `Flight Lab measured the top photo of ${planeName}`} and matched the visible build evidence with ${activeThrows.length || "no"} saved ${activeThrows.length === 1 ? "throw" : "throws"}. ${vision ? useGemini ? "Advanced AI inspected the uploaded images and added its findings for the report and Coach." : "Deep Visual Inspection added structured cross-view findings for the report and coach." : "No 3D model or hidden geometry was invented."}`;
       setProgress(89); setStage("Matching this plane with its saved flights");
       await new Promise((resolve) => window.setTimeout(resolve, 180));
+      checkCurrent();
       setProgress(99); setStage("Finishing the evidence report");
       await new Promise((resolve) => window.setTimeout(resolve, 350));
-      const nextReport: PlaneReport = { planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals, localViewsAnalyzed, deepInspection, vision };
+      checkCurrent();
+      const nextReport: PlaneReport = { savedAt: new Date().toISOString(), modelVersion: selectedModel,
+        baselineFeet: measuredBest > 0 ? measuredBest : null, baselineSource: measuredBest > 0 ? bestOverride === null ? "saved" : "entered" : "none",
+        history: { count: activeThrows.length, best: savedBest, average: activeThrows.length ? activeThrows.reduce((sum, item) => sum + item.distance, 0) / activeThrows.length : 0 }, planeId: activePlaneId, planeName, score, range: `${low}–${high} ft`, confidence, headline, detail, nextTest, recommendationId, evidence, scanMode, viewCount: capturedViews.length, signals, localViewsAnalyzed, deepInspection, vision };
+      reportGeneration.current = generation;
       setReport(nextReport); setProgress(100); setStage("Evidence report ready");
       try {
-        const profiles = JSON.parse(window.localStorage.getItem(planeReportsStorageKey) ?? "{}") as Record<string, PlaneReport>;
+        const profiles: unknown = JSON.parse(window.localStorage.getItem(planeReportsStorageKey) ?? "{}");
+        if (!validReportCollection(profiles)) throw new Error("Unreadable saved reports");
         window.localStorage.setItem(planeReportsStorageKey, JSON.stringify({ ...profiles, [String(activePlaneId ?? "custom")]: nextReport }));
-      } catch { /* The current report still works if storage is unavailable. */ }
+      } catch { setError("This report is ready, but could not be saved. Keep this page open and download a backup before retrying."); }
     } catch (analysisError) {
+      if (!isCurrent()) return;
       setError(analysisError instanceof Error ? analysisError.message : "The plane could not be analyzed."); setProgress(0); setStage("");
     }
   }
@@ -584,17 +669,22 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
           <label>Last flight<select value={behavior} onChange={(event) => { setBehavior(event.target.value as FlightBehavior); setReport(null); }}><option value="straight">Mostly straight</option><option value="dives">Dived</option><option value="stalls">Stalled</option><option value="turns">Turned left or right</option><option value="wobbles">Wobbled</option><option value="spirals">Spiraled</option></select></label>
           <label hidden={level === "beginner"}>Age range · optional<select value={ageRange} onChange={(event) => setAgeRange(event.target.value as AgeRange)}><option value="not-set">Skip this</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select></label>
           <label hidden={level === "beginner"}>Throw strength<select value={strength} onChange={(event) => setStrength(event.target.value as ThrowStrength)}><option value="gentle">Gentle</option><option value="normal">Normal</option><option value="strong">Strong</option></select><small>{planeKind === "glider" ? "Gliders usually travel farther with a smooth, gentle release; a hard throw is penalized." : planeKind === "dart" ? "Darts usually gain distance from a firm, level throw." : "Flight Lab adjusts the same strength differently for each plane style."}</small></label>
-          <label hidden={level === "beginner"} className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0" inputMode="decimal" value={knownBest} onChange={(event) => setKnownBest(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; you can correct it here.</small></label>
+          <label hidden={level === "beginner"} className="span-two">This plane&apos;s measured best<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={knownBest} onChange={(event) => setBestOverride(event.target.value)} placeholder="No measured throws yet" /><span>feet</span></div><small>Automatically filtered to the selected plane; corrections apply to this estimate only and do not change saved throws.</small>{bestOverride !== null && <button type="button" onClick={() => setBestOverride(null)}>Use saved best</button>}</label>
         </div>
         <button className="pro-command-button" type="button" onClick={analyzePlane} disabled={analyzing}>{analyzing ? "Analyzing your plane…" : useGemini ? "Analyze photos with Advanced AI" : scanMode !== "quick" ? cloudVisionEnabled ? "Run deep six-photo inspection" : "Analyze six photos on device" : "Run quick one-photo check"}</button>
+        <button type="button" className="pro-saved-report-button" disabled={analyzing} onClick={openSavedReport}>View last saved report</button>
         {error && <p className="pro-inline-error" role="alert">{error}</p>}
       </div>
       <div className="pro-result-panel">
-        {analyzing ? <AnalysisLoader progress={progress} label={stage} expectedDurationMs={scanMode === "multiview" ? (useGemini || cloudVisionEnabled ? 60000 : 6000) : useGemini ? 25000 : 2500} /> : report ? <div className="pro-plane-report" aria-live="polite">
-          <div className="pro-report-photos" aria-label={`${report.viewCount} photos used in this analysis`}>{requiredViews.map((view) => scanPhotos[view.id] ? <img key={view.id} src={scanPhotos[view.id]} alt={`${view.label} view used in the analysis`} /> : null)}</div>
-          <span>Analysis complete · {evidenceLabel(report.confidence)} · {report.planeName}</span><h3>{report.headline}</h3><p className="pro-report-note">Evidence quality describes the available inputs, not a measured accuracy percentage. A photo cannot confirm flight distance.</p><p><b>Try next:</b> {report.nextTest}</p>
-          {report.vision?.model?.startsWith("gemini-") && <div><b>Advanced AI visual analysis</b><p>{report.vision.inspectionSummary}</p>{report.vision.uncertainties.length > 0 && <p>Uncertain: {report.vision.uncertainties.join(" ")}</p>}</div>}
-          <div className="pro-range"><small>Estimated next flight · verify with a real throw</small><b>{report.range}</b></div><p>{report.detail}</p>
+        {analyzing ? <AnalysisLoader progress={progress} label={stage} expectedDurationMs={scanMode === "multiview" ? (useGemini || cloudVisionEnabled ? 60000 : 6000) : useGemini ? 25000 : 2500} /> : displayedReport ? <div className="pro-plane-report" aria-live="polite">
+          {!openedReport && <div className="pro-report-photos" aria-label={`${displayedReport.viewCount} photos used in this analysis`}>{requiredViews.map((view) => scanPhotos[view.id] ? <img key={view.id} src={scanPhotos[view.id]} alt={`${view.label} view used in the analysis`} /> : null)}</div>}
+          {openedReport && <p className="pro-report-note"><b>Saved report</b> · {displayedReport.savedAt ? new Date(displayedReport.savedAt).toLocaleString() : "Date not recorded in this older report"}. This is historical analysis. Original scan photos are not stored with reports.</p>}
+          <span>Analysis complete · {evidenceLabel(displayedReport.confidence)} · {displayedReport.planeName}</span><h3>{displayedReport.headline}</h3><p className="pro-report-note">Evidence quality describes the available inputs, not a measured accuracy percentage. A photo cannot confirm flight distance.</p><p><b>Try next:</b> {displayedReport.nextTest}</p>
+          {displayedReport.vision?.model?.startsWith("gemini-") && <div><b>Advanced AI visual analysis</b><p>{displayedReport.vision.inspectionSummary}</p>{(displayedReport.vision.uncertainties?.length ?? 0) > 0 && <p>Uncertain: {displayedReport.vision.uncertainties.join(" ")}</p>}</div>}
+          {displayedReport.history && <p><b>Recorded flights at scan time:</b> {displayedReport.history.count} throws · {displayedReport.history.average.toFixed(1)} ft average · {displayedReport.history.best.toFixed(1)} ft best.</p>}
+          <div className="pro-range"><small>{displayedReport.baselineFeet ? "Rough estimate · measured baseline" : displayedReport.baselineSource === "none" ? "Uncalibrated illustration · measure first" : "Older estimate · baseline not recorded"}</small><b>{displayedReport.range}</b></div>
+          <p className="pro-report-note">{displayedReport.baselineFeet ? `Uses a ${displayedReport.baselineFeet.toFixed(1)} ft ${displayedReport.baselineSource === "entered" ? "user-entered" : "saved"} baseline. ` : "No verified baseline is available for this estimate. "}This range comes from preset factors and photo checks; its prediction accuracy has not been established. Compare three measured throws before changing the plane.</p>
+          <div className="pro-experiment-feedback" role="group" aria-label="Record the result of this test"><b>After trying the suggested change, how did it fly?</b><p>Compare similar launches and conditions.</p><div>{(["better", "same", "worse"] as const).map(outcome => <button type="button" key={outcome} aria-pressed={testOutcome === outcome} onClick={() => recordOutcome(outcome)}>{outcome === "better" ? "Better" : outcome === "same" ? "About the same" : "Worse"}</button>)}</div>{testOutcome && <p role="status">Saved: {testOutcome === "same" ? "about the same" : testOutcome}. Coach can use this result for this plane.</p>}</div><p>{displayedReport.detail}</p>
         </div> : <div className="pro-empty-result"><div className="pro-photo-analysis-placeholder"><span>{scanMode === "multiview" ? "6" : "1"}</span><b>{scanMode === "multiview" ? "Six-angle evidence" : "Top-view evidence"}</b></div><span>Photo analysis</span><h3>{scanMode === "multiview" ? "Add six clear photos for the strongest inspection." : "Start with one clear top view."}</h3><p>{scanMode === "multiview" ? "Deep Visual Inspection can compare visible folds and alignment across every angle." : "Quick Check measures top-view outline, balance, and fold contrast."}</p></div>}
       </div>
     </div>
@@ -635,13 +725,14 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
 
   useEffect(() => {
     const loadSavedData = () => {
+      try {
       const saved = Number(window.localStorage.getItem("flight-lab-pro-stride"));
       if (saved >= 1.1 && saved <= 4) { setStride(saved); setStepLength(String(saved)); }
       const savedAge = window.localStorage.getItem(measureAgeStorageKey);
       if (savedAge && savedAge in estimatedStrideByAge) setAgeRange(savedAge as AgeRange);
-      try {
-        const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
-        const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+
+        const savedPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
+        const savedThrows = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(savedPlanes);
         setActivePlaneId(savedPlanes.some((plane) => plane.id === savedActivePlaneId) ? savedActivePlaneId : savedPlanes[0]?.id ?? null);
@@ -650,11 +741,13 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
         setPlanes([]);
         setActivePlaneId(null);
         setFlightHistory([]);
+        setMessage("Saved records could not be loaded. They are preserved; restore a backup before editing.");
       }
     };
     loadSavedData();
     window.addEventListener(planesUpdatedEvent, loadSavedData);
-    return () => window.removeEventListener(planesUpdatedEvent, loadSavedData);
+    window.addEventListener("storage", loadSavedData);
+    return () => { window.removeEventListener(planesUpdatedEvent, loadSavedData); window.removeEventListener("storage", loadSavedData); };
   }, []);
 
   useEffect(() => {
@@ -709,8 +802,8 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       return;
     }
     if (level === "intermediate" && nextMode === "measuring") {
+      if (!saveValue("flight-lab-pro-stride", String(nextStride))) { setMessage("Step length was not saved. Please try again."); return; }
       setStride(nextStride);
-      window.localStorage.setItem("flight-lab-pro-stride", String(nextStride));
     }
     setMeasurementStride(nextStride);
     setSteps(0);
@@ -737,9 +830,9 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       setMessage("That stride result looks unusual. Check the distance and step count, then try again.");
       return;
     }
+    if (!saveValue("flight-lab-pro-stride", String(calibratedStride))) { setMessage("Calibration was not saved. Please try again."); return; }
     setStride(calibratedStride);
     setStepLength(String(calibratedStride));
-    window.localStorage.setItem("flight-lab-pro-stride", String(calibratedStride));
     setMode("idle");
     setMessage(`Calibration saved: ${calibratedStride.toFixed(2)} feet per step.`);
   }
@@ -753,7 +846,7 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
     const driftPenalty = Math.min(28, maxDrift * .7);
     const confidence = Math.round(Math.max(55, Math.min(96, 94 - driftPenalty - (steps < 6 ? 8 : 0))));
     setResult({ distance, confidence, drift: maxDrift, estimated: level === "beginner" });
-    saveFlight(distance);
+    if (!saveFlight(distance)) return;
     setMode("idle");
     setMessage("");
   }
@@ -765,11 +858,19 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       distance,
       createdAt: "Just now",
     };
-    const nextHistory = [savedFlight, ...flightHistory];
-    setFlightHistory(nextHistory);
-    window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
-    // Keep the Hangar and plane Coach in sync before the user can switch planes.
-    window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+    try {
+      const latestPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
+      if (!latestPlanes.some(plane => plane.id === savedFlight.planeId)) throw new Error("Select a saved plane before saving this throw.");
+      const nextHistory = [savedFlight, ...readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws")];
+      window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
+      // Keep the Hangar and plane Coach in sync before the user can switch planes.
+      setFlightHistory(nextHistory);
+      window.dispatchEvent(new CustomEvent(planesUpdatedEvent));
+      return true;
+    } catch (error) {
+      setMessage(error instanceof Error ? `Throw not saved: ${error.message}` : "Throw not saved. Please try again.");
+      return false;
+    }
   }
 
   function saveTypedThrow() {
@@ -778,14 +879,14 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
       setMessage("Enter a distance between 0.1 and 1,000 feet.");
       return;
     }
-    saveFlight(Math.round(distance * 10) / 10);
+    if (!saveFlight(Math.round(distance * 10) / 10)) return;
     setTypedDistance("");
     setMessage("Throw saved to the current plane.");
   }
 
   function chooseActivePlane(planeId: number) {
+    if (!saveValue(activePlaneStorageKey, String(planeId))) return;
     setActivePlaneId(planeId);
-    window.localStorage.setItem(activePlaneStorageKey, String(planeId));
     window.dispatchEvent(new CustomEvent(planesUpdatedEvent, { detail: planes }));
   }
 
@@ -793,7 +894,7 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
     if (!editingFlights) return;
     try {
       // Read the latest records so editing never overwrites a newly saved throw.
-      const latest = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+      const latest = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
       const nextHistory = latest.filter((item) => item.id !== flight.id);
       window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
       setFlightHistory(nextHistory);
@@ -805,12 +906,12 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
   function undoDeleteFlight() {
     if (!removedFlight) return;
     try {
-      const latestPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as StoredPlane[];
+      const latestPlanes = readRecords<StoredPlane>(window.localStorage, "flight-lab-v2-planes");
       if (!latestPlanes.some((plane) => plane.id === removedFlight.planeId)) {
         setMessage("This throw belongs to a plane that was deleted. Restore the plane from a backup before restoring its throws.");
         return;
       }
-      const latest = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as StoredThrow[];
+      const latest = readRecords<StoredThrow>(window.localStorage, "flight-lab-v2-throws");
       const nextHistory = latest.some((item) => item.id === removedFlight.id) ? latest : [...latest, removedFlight].sort((a, b) => b.id - a.id);
       window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(nextHistory));
       setFlightHistory(nextHistory);
@@ -841,7 +942,7 @@ function ProSmartMeasure({ level }: { level: InterfaceLevel }) {
           {level === "pro" && <div className="calibration-status"><span>Personal step length</span><b>{stride ? `${stride.toFixed(2)} ft / step` : "Not calibrated"}</b><i className={stride ? "ready" : ""} /></div>}
           {planes.length ? <label>Plane<select value={activePlaneId ?? ""} onChange={(event) => chooseActivePlane(Number(event.target.value))}>{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select></label> : <a className="pro-add-plane-callout" href="#plane-hangar">＋ Add a Dart or Glider before measuring</a>}
           {mode === "idle" && !result && <>
-            {level === "beginner" ? <label data-tour="measure-setup">Your age range<select value={ageRange} onChange={(event) => { const next = event.target.value as AgeRange; setAgeRange(next); window.localStorage.setItem(measureAgeStorageKey, next); }}><option value="not-set">Choose an age range</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select><small>Used only for an approximate step length on this device.</small></label> : level === "intermediate" ? <label data-tour="measure-setup">Your step length<div className="pro-unit-input"><input type="number" min="1.1" max="4" step="0.01" inputMode="decimal" value={stepLength} onChange={(event) => setStepLength(event.target.value)} placeholder="For example, 2.2" /><span>feet / step</span></div><small>One normal step, from one foot landing to the other.</small></label> : <label data-tour="measure-setup">Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>}
+            {level === "beginner" ? <label data-tour="measure-setup">Your age range<select value={ageRange} onChange={(event) => { const next = event.target.value as AgeRange; if (saveValue(measureAgeStorageKey, next)) setAgeRange(next); }}><option value="not-set">Choose an age range</option><option value="under-8">7 or younger</option><option value="8-10">8–10</option><option value="11-13">11–13</option><option value="14-17">14–17</option><option value="adult">18+</option></select><small>Used only for an approximate step length on this device.</small></label> : level === "intermediate" ? <label data-tour="measure-setup">Your step length<div className="pro-unit-input"><input type="number" min="1.1" max="4" step="0.01" inputMode="decimal" value={stepLength} onChange={(event) => setStepLength(event.target.value)} placeholder="For example, 2.2" /><span>feet / step</span></div><small>One normal step, from one foot landing to the other.</small></label> : <label data-tour="measure-setup">Known calibration distance<div className="pro-unit-input"><input type="number" min="6" inputMode="decimal" value={calibrationDistance} onChange={(event) => setCalibrationDistance(event.target.value)} /><span>feet</span></div></label>}
             <div className="measure-button-row" data-tour="measure-start">{level === "pro" && <button type="button" onClick={() => begin("calibrating")}>Calibrate stride</button>}<button type="button" className="primary" onClick={() => begin("measuring")} disabled={!planes.length || (level === "beginner" ? ageRange === "not-set" : level === "intermediate" ? !Number(stepLength) : !stride)}>{level === "beginner" ? "Start measuring" : "Measure a throw"}</button></div>
             {level === "pro" && <><label>Or type a throw distance<div className="pro-unit-input"><input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={typedDistance} onChange={(event) => setTypedDistance(event.target.value)} placeholder="For example, 47" /><span>feet</span></div></label><button type="button" className="pro-command-button" disabled={!planes.length} onClick={saveTypedThrow}>Log typed throw</button></>}
           </>}
@@ -1002,7 +1103,7 @@ export default function ProDashboard({
       </section>}
       {level !== "beginner" && <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
-        <a href="#video-lab"><span>02</span><b>3D Flight Tracker</b><small>Movable path analysis</small></a>
+        <a href="#video-lab"><span>02</span><b>Flight Path Viewer</b><small>Illustrative 3D path</small></a>
         <a href="#smart-measure"><span>03</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
         <a hidden={level !== "pro"} href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>}

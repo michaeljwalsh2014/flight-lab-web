@@ -1,8 +1,10 @@
+import { validReportCollection, validContext, validCoachTest } from "./analysis-data";
 export const BACKUP_KEYS = [
   "flight-lab-v2-planes", "flight-lab-v2-throws", "flight-lab-v2-active-plane-id",
   "flight-lab-v3-height", "flight-lab-pro-stride", "flight-lab-pro-plane-reports-v1",
   "flight-lab-pro-coach-tests-v1", "flight-lab-pro-ai-context-v3",
   "flight-lab-coach-conversation", "flight-lab-coach-lessons", "flight-lab-coach-model",
+  "flight-lab-pro-measure-age-range", "flight-lab-pro-device-layout", "flight-lab-pro-welcome-v1",
   "flight-lab-coach-model-group", "flight-lab-coach-thinking-mode", "flight-lab-pro-interface-level",
 ] as const;
 export type Backup = { format: "flight-lab-backup"; version: 1; createdAt: string; data: Record<string, string> };
@@ -10,7 +12,7 @@ const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v ===
 const safeId = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v > 0;
 export function parseBackup(text: string): Backup {
   const value: unknown = JSON.parse(text);
-  if (!record(value) || value.format !== "flight-lab-backup" || value.version !== 1 || typeof value.createdAt !== "string" || !record(value.data)) throw new Error("Choose a Flight Lab backup file.");
+  if (!record(value) || value.format !== "flight-lab-backup" || value.version !== 1 || typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt)) || !record(value.data)) throw new Error("Choose a Flight Lab backup file.");
   const data: Record<string, string> = {};
   for (const [key, raw] of Object.entries(value.data)) {
     if (!BACKUP_KEYS.includes(key as typeof BACKUP_KEYS[number]) || typeof raw !== "string") throw new Error("This backup contains an unsupported record.");
@@ -23,11 +25,17 @@ export function parseBackup(text: string): Backup {
     if (["flight-lab-pro-coach-tests-v1", "flight-lab-coach-conversation", "flight-lab-coach-lessons"].includes(key)) {
       const items: unknown = JSON.parse(raw);
       if (!Array.isArray(items) || items.some((item) => !record(item))) throw new Error("Invalid saved Coach records.");
-      if (key.endsWith("tests-v1") && items.some((item) => typeof item.action !== "string" || typeof item.recommendationId !== "string" || !["better", "same", "worse"].includes(String(item.result)))) throw new Error("Invalid saved test results.");
+      if (key.endsWith("tests-v1") && items.some((item) => !validCoachTest(item))) throw new Error("Invalid saved test results.");
       if (key.endsWith("conversation") && items.some((item) => typeof item.text !== "string" || !["user", "assistant"].includes(String(item.role)))) throw new Error("Invalid Coach conversation.");
       if (key.endsWith("lessons") && items.some((item) => typeof item.reason !== "string" || typeof item.cue !== "string" || typeof item.createdAt !== "number")) throw new Error("Invalid Coach feedback.");
     }
-    if (["flight-lab-pro-plane-reports-v1", "flight-lab-pro-ai-context-v3"].includes(key) && !record(JSON.parse(raw))) throw new Error("Invalid saved analysis records.");
+    if (key === "flight-lab-pro-plane-reports-v1" && !validReportCollection(JSON.parse(raw))) throw new Error("Invalid saved scan report. Nothing was restored.");
+    if (key === "flight-lab-pro-ai-context-v3" && !validContext(JSON.parse(raw))) throw new Error("Invalid saved Coach analysis. Nothing was restored.");
+    const preferences: Record<string, string[]> = {
+      "flight-lab-pro-measure-age-range": ["not-set", "under-8", "8-10", "11-13", "14-17", "adult"],
+      "flight-lab-pro-device-layout": ["iphone", "ipad"], "flight-lab-pro-welcome-v1": ["done"],
+    };
+    if (preferences[key] && !preferences[key].includes(raw)) throw new Error("Invalid saved preference. Nothing was restored.");
     data[key] = raw;
   }
   return { format: "flight-lab-backup", version: 1, createdAt: value.createdAt, data };

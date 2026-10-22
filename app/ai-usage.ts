@@ -1,0 +1,20 @@
+import { getProAccess } from "./pro-access";
+/** D1 atomically budgets each account or shared pass across Worker instances. */
+export async function allowAIUsage(kind: string, limit: number): Promise<boolean> {
+  try {
+    const { user, isOwner } = await getProAccess();
+    const identity = user && isOwner ? `owner:${user.email.toLowerCase()}` : `pass:${process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? ""}`;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
+    const key = `${kind}:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
+    const { env } = await import("cloudflare:workers");
+    const db = (env as unknown as { DB?: D1Database }).DB;
+    if (!db) return false;
+    await db.prepare("CREATE TABLE IF NOT EXISTS ai_usage (identity TEXT PRIMARY KEY, window INTEGER NOT NULL, requests INTEGER NOT NULL)").run();
+    const window = Math.floor(Date.now() / 600_000);
+    const row = await db.prepare(`INSERT INTO ai_usage (identity, window, requests) VALUES (?, ?, 1)
+      ON CONFLICT(identity) DO UPDATE SET window = excluded.window,
+      requests = CASE WHEN ai_usage.window = excluded.window THEN ai_usage.requests + 1 ELSE 1 END
+      WHERE ai_usage.window != excluded.window OR ai_usage.requests < ? RETURNING requests`).bind(key, window, limit).first();
+    return Boolean(row);
+  } catch { return false; }
+}

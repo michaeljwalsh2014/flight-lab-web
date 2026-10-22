@@ -1,3 +1,4 @@
+import { allowAIUsage } from "@/app/ai-usage";
 import { NextResponse } from "next/server";
 import { findBuiltInAnswer } from "@/app/knowledge-base";
 import { getProAccess } from "@/app/pro-access";
@@ -18,7 +19,7 @@ type RequestBody = {
   thinkingMode?: unknown;
 };
 
-const requestWindows = new Map<string, number[]>();
+
 const MODEL = "gpt-5.6-terra";
 const COACH_INSTRUCTIONS = `You are Flight Lab Pro Coach: a warm, natural conversational AI with deep paper-airplane coaching expertise.
 Always identify yourself simply as Flight Lab Coach. If asked who made you, what powers you, which model or provider you use, or any similar identity question, say you are Flight Lab Coach built for the Flight Lab app. Do not name or discuss any underlying AI company, provider, service, API, or model.
@@ -106,15 +107,7 @@ async function safetyIdentifier(value: string) {
   return `flight-lab-${Array.from(new Uint8Array(digest)).slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function withinRateLimit(identifier: string) {
-  const now = Date.now();
-  const cutoff = now - 10 * 60 * 1000;
-  const recent = (requestWindows.get(identifier) ?? []).filter((time) => time > cutoff);
-  if (recent.length >= 10) return false;
-  requestWindows.set(identifier, [...recent, now]);
-  if (requestWindows.size > 2500) requestWindows.clear();
-  return true;
-}
+
 
 async function hasProAccess(request: Request) {
   const { user, isOwner } = await getProAccess();
@@ -143,7 +136,7 @@ export async function POST(request: Request) {
   const coachId = typeof body.coachId === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(body.coachId) ? body.coachId : "";
   if (!message || !coachId) return json({ error: "invalid_request" }, 400);
   const identifier = await safetyIdentifier(coachId);
-  if (!withinRateLimit(identifier)) return json({ error: "rate_limited", message: "Take a short break, then ask again." }, 429);
+  if (!await allowAIUsage("coach", 10)) return json({ error: "rate_limited", message: "Take a short break, then ask again." }, 429);
 
   const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
   const modelVersion = body.modelVersion === "v46" || body.modelVersion === "v40" || body.modelVersion === "v38" ? body.modelVersion : "v39";

@@ -60,8 +60,9 @@ test("uses on-device shape analysis, plane pictures, and a labeled distance esti
   assert.match(page, /on-device silhouette and fold analyzer/i);
   assert.match(page, /Running on-device shape checks/);
   assert.match(page, /Analyze this plane/);
-  assert.match(page, /Estimated next flight/);
-  assert.match(page, /Estimate—not a measurement/);
+  assert.match(page, /Rough next-flight estimate/);
+  assert.match(page, /Uncalibrated illustration/);
+  assert.match(page, /Prediction accuracy has not been established/);
   assert.match(page, /name: "Dart"/);
   assert.match(page, /name: "Glider"/);
   assert.doesNotMatch(page, /Nakamura Lock/);
@@ -196,7 +197,8 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(dashboard, /ProCoachChat/);
   assert.match(coach, /Talk to Coach/);
   assert.doesNotMatch(coach, /Start voice|SpeechRecognition|webkitSpeechRecognition|speechSynthesis/);
-  assert.doesNotMatch(coach, /controlsExpanded|Show more|Show less|coach-extra-controls/);
+  assert.match(coach, /controlsExpanded/);
+  assert.match(coach, /aria-controls="coach-extra-controls"/);
   assert.doesNotMatch(coach, /coach-settings-button|coach-settings-menu|settingsOpen/);
   assert.match(coach, /coach-response-mode/);
   assert.match(coach, /coach-horizontal-rail/);
@@ -278,7 +280,8 @@ test("adds a conversational, evidence-aware zero-cost Flight Lab Coach", async (
   assert.match(tutorials, /recentCoachText/);
   assert.match(tutorials, /Try this one instead/);
   assert.match(coach, /selectedModel/);
-  assert.doesNotMatch(coach, /Show more|Show less/);
+  assert.match(coach, /Show more/);
+  assert.match(coach, /Show less/);
   assert.match(coach, /questionWithoutMode/);
   assert.match(coach, /Built-in knowledge/);
   const knowledge = await readFile(new URL("../app/api/knowledge/route.ts", import.meta.url), "utf8");

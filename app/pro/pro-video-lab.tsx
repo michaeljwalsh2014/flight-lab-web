@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, PointerEvent as ReactPointerEvent, WheelEvent, useEffect, useMemo, useRef, useState } from "react";
-import { publishProAiContext, type ProAiContext } from "./pro-ai-context";
+import { publishProAiContext, currentPlaneId, type ProAiContext } from "./pro-ai-context";
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
@@ -639,22 +639,35 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [inspection, setInspection] = useState<VideoInspection | null>(null);
   const reviewGeneration = useRef(0);
+  const reportGeneration = useRef(-1);
+  const [planeId, setPlaneId] = useState<number | null>(null);
+  useEffect(() => {
+    const sync = () => setPlaneId(currentPlaneId());
+    sync();
+    window.addEventListener("flight-lab-planes-updated", sync);
+    window.addEventListener("storage", sync);
+    return () => { window.removeEventListener("flight-lab-planes-updated", sync); window.removeEventListener("storage", sync); };
+  }, []);
+  useEffect(() => {
+    setVideoUrl(null); setVideoName(""); setReport(null); setProgress(0); setStage("");
+  }, [planeId]);
 
   useEffect(() => {
     reviewGeneration.current++;
-    setInspection(null);
-    publishProAiContext({ videoInspection: null });
+    setInspection(null); setReport(null); setAnalyzing(false);
+    publishProAiContext({ videoInspection: null, flight: undefined });
     return () => { reviewGeneration.current++; };
-  }, [videoUrl, selectedModel]);
+  }, [videoUrl, selectedModel, planeId]);
 
   useEffect(() => () => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
   }, [videoUrl]);
 
   useEffect(() => {
-    if (!report) return;
+    if (!report || reportGeneration.current !== reviewGeneration.current) return;
     publishProAiContext({
       flight: {
+        planeId,
         engine: "flight-lab-local-v2",
         airtime: Number(report.airtime.toFixed(2)),
         curve: report.curve,
@@ -700,9 +713,11 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   async function runAnalysis() {
     if (!videoUrl || analyzing) return;
     const generation = reviewGeneration.current;
+    const reviewPlaneId = planeId;
+    const isCurrent = () => generation === reviewGeneration.current && currentPlaneId() === reviewPlaneId;
     setAnalyzing(true);
     setInspection(null);
-    publishProAiContext({ videoInspection: null });
+    publishProAiContext({ videoInspection: null, flight: undefined });
     setError("");
     setReport(null);
     setProgress(1);
@@ -711,21 +726,22 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
       let localError = "";
       try {
         const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
-          if (generation !== reviewGeneration.current) return;
+          if (!isCurrent()) return;
           setProgress(selectedModel === "v40" || selectedModel === "v46" ? Math.round(nextProgress * .6) : nextProgress);
           setStage(nextStage);
         });
-        if (generation !== reviewGeneration.current) return;
+        if (!isCurrent()) return;
+        reportGeneration.current = generation;
         setReport(nextReport);
       } catch (failure) {
         if (selectedModel !== "v40" && selectedModel !== "v46") throw failure;
         localError = failure instanceof Error ? failure.message : "Local tracking was unavailable.";
       }
       if (selectedModel === "v40" || selectedModel === "v46") {
-        if (generation !== reviewGeneration.current) return;
+        if (!isCurrent()) return;
         setProgress(65); setStage("Preparing frames for advanced review");
         const sampled = await sampleVideoForReview(videoUrl);
-        if (generation !== reviewGeneration.current) return;
+        if (!isCurrent()) return;
         setProgress(80); setStage("Reviewing the visible flight with AI");
         const storageKey = "flight-lab-pro-coach-id";
         let coachId = window.localStorage.getItem(storageKey);
@@ -735,20 +751,21 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
           body: JSON.stringify({ ...sampled, coachId, modelVersion: selectedModel }),
         });
         const payload = await response.json() as { analysis?: Omit<VideoInspection, "sampledFrames">; sampledFrames?: number; message?: string };
-        if (generation !== reviewGeneration.current) return;
+        if (!isCurrent()) return;
         if (!response.ok || !payload.analysis) throw new Error(payload.message || "The video review could not connect. Please try again.");
-        const reviewed = { ...payload.analysis, sampledFrames: payload.sampledFrames ?? sampled.frames.length };
+        const reviewed = { ...payload.analysis, planeId: reviewPlaneId, sampledFrames: payload.sampledFrames ?? sampled.frames.length };
         setInspection(reviewed);
         publishProAiContext({ videoInspection: reviewed });
       }
       if (localError) setError(`Motion tracking: ${localError} The AI review is shown separately below.`);
       setProgress(100); setStage("Review complete");
     } catch (analysisError) {
+      if (!isCurrent()) return;
       setError(analysisError instanceof Error ? analysisError.message : "The video could not be analyzed.");
       setProgress(0);
       setStage("");
     } finally {
-      setAnalyzing(false);
+      if (isCurrent()) setAnalyzing(false);
     }
   }
 
@@ -757,8 +774,8 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   return (
     <section className="pro-tool-section pro-video-lab" id="video-lab">
       <div className="pro-tool-heading">
-        <div><span className="pro-index">02</span><p>Airplane-specific motion tracking</p><h2>3D Flight Tracker</h2></div>
-        <p>Higher frame sampling, motion-component tracking, shake rejection, and a path you can move with your fingers.</p>
+        <div><span className="pro-index">02</span><p>Airplane-specific motion tracking</p><h2>Flight Path Viewer</h2></div>
+        <p>Tracks motion across the video image. The movable 3D view is an illustration, not a measured 3D flight path or real-world distance.</p>
       </div>
 
       <div className="pro-video-grid">

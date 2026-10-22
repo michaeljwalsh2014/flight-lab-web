@@ -1,3 +1,4 @@
+import { allowAIUsage } from "@/app/ai-usage";
 import { NextResponse } from "next/server";
 import { getProAccess } from "@/app/pro-access";
 import { geminiAvailable, generateGeminiResult, publicAIError, type GeminiPart } from "@/app/gemini-server";
@@ -12,7 +13,7 @@ type RequestBody = {
 
 const MODEL = "gpt-5.6-terra";
 const viewOrder: ScanView[] = ["top", "nose", "left", "right", "underside", "tail"];
-const requestWindows = new Map<string, number[]>();
+
 const scanSchema = {
   type: "object",
   properties: {
@@ -64,14 +65,7 @@ async function safetyIdentifier(value: string) {
   return `flight-lab-scan-${Array.from(new Uint8Array(digest)).slice(0, 12).map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function withinRateLimit(identifier: string) {
-  const now = Date.now(); const cutoff = now - 10 * 60 * 1000;
-  const recent = (requestWindows.get(identifier) ?? []).filter((time) => time > cutoff);
-  if (recent.length >= 5) return false;
-  requestWindows.set(identifier, [...recent, now]);
-  if (requestWindows.size > 2000) requestWindows.clear();
-  return true;
-}
+
 
 function extractOutput(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
@@ -99,7 +93,7 @@ export async function POST(request: Request) {
   const images = safeImages(body.images, requestedViews);
   if (!coachId || !images) return json({ error: "invalid_scan" }, 400);
   const identifier = await safetyIdentifier(coachId);
-  if (!withinRateLimit(identifier)) return json({ error: "rate_limited", message: "Wait a few minutes before running another cloud scan." }, 429);
+  if (!await allowAIUsage("scan", 5)) return json({ error: "rate_limited", message: "Wait a few minutes before running another cloud scan." }, 429);
   if (useGemini) {
     if (!geminiAvailable()) return json({ error: "vision_unavailable" }, 503);
     try {

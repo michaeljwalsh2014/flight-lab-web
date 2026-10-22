@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import PageViewTracker from "./page-view-tracker";
 import "./globals.css";
+import StorageNotice from "./storage-notice";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -49,7 +50,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body><PageViewTracker />{children}</body>
+      <body><StorageNotice /><PageViewTracker />{children}</body>
     </html>
   );
 }

@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
-const exports = {};
-new Function("exports", ts.transpileModule(readFileSync(new URL("../app/pro/backup-data.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(exports);
+function load(name) {
+  const exports = {};
+  const source = ts.transpileModule(readFileSync(new URL(`../app/pro/${name}.ts`, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  new Function("exports", "require", source)(exports, dependency => load(dependency.replace("./", "")));
+  return exports;
+}
+const exports = load("backup-data");
 const { createBackup, parseBackup, planRestore } = exports;
 const planesKey = "flight-lab-v2-planes", throwsKey = "flight-lab-v2-throws";
 const storage = (values = {}) => ({ getItem: (key) => values[key] ?? null });
@@ -55,4 +60,27 @@ test("storage quota failure rolls back partial writes", () => {
   const saved = backup({ [planesKey]: JSON.stringify([plane, { id: 3, name: "Glider" }]), [throwsKey]: JSON.stringify([flight]) });
   assert.throws(() => exports.applyRestore(saved, store), /previous records were kept/);
   assert.deepEqual(values, before);
+});
+
+test("backup includes measurement, device layout and onboarding preferences without changing v1 format", () => {
+  const values = { "flight-lab-pro-measure-age-range": "adult", "flight-lab-pro-device-layout": "ipad", "flight-lab-pro-welcome-v1": "done" };
+  const saved = parseBackup(JSON.stringify(createBackup(storage(values))));
+  assert.equal(saved.version, 1);
+  assert.deepEqual(saved.data, values);
+  assert.deepEqual(planRestore(saved, storage()), values);
+  assert.deepEqual(planRestore(saved, storage(values)), {});
+  assert.equal(planRestore(saved, storage({ "flight-lab-pro-device-layout": "iphone" }))["flight-lab-pro-device-layout"], undefined);
+});
+test("nested malformed reports and Coach evidence fail validation before restore", () => {
+  for (const report of [null, [], { confidence: "high" }, { evidence: [17] }, { signals: { symmetry: -1 } }, { vision: { uncertainties: {} } }, { history: { count: 1, average: "12", best: 12 } }, { planeId: 2 }]) {
+    assert.throws(() => backup({ "flight-lab-pro-plane-reports-v1": JSON.stringify({ 1: report }) }), /scan report/);
+  }
+  for (const context of [{ flight: [] }, { plane: { score: 101 } }, { videoInspection: { releaseStrength: "extreme" } }, { coachMemory: [{}] }]) {
+    assert.throws(() => backup({ "flight-lab-pro-ai-context-v3": JSON.stringify(context) }), /Coach analysis/);
+  }
+  assert.throws(() => backup({ "flight-lab-pro-device-layout": "desktop" }), /preference/);
+});
+test("legacy reports and unknown report metadata survive validation unchanged", () => {
+  const data = { "flight-lab-pro-plane-reports-v1": JSON.stringify({ 1: { headline: "Old report", extraMetadata: { keep: true } } }), "flight-lab-coach-model": "v37" };
+  assert.deepEqual(backup(data).data, data);
 });

@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
+import { readRecords, writeAtomically, saveValue, reportSaveError } from "./storage-safety";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { WaitingProgress } from "./pro/pro-ui";
@@ -28,7 +29,7 @@ export type ImageSignals = {
 };
 type PhotoReport =
   | { kind: "rejected"; headline: string; detail: string; steps: string[] }
-  | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[]; estimatedRange: string; aiNote: string };
+  | { kind: "analysis"; score: number; headline: string; detail: string; observations: string[]; steps: string[]; estimatedRange: string; measuredBaseline: number | null; measuredCount: number; aiNote: string };
 
 type DetectedObject = { class: string; score: number; bbox: [number, number, number, number] };
 
@@ -254,8 +255,8 @@ export default function FlightLabApp({
   useEffect(() => {
     const loadSavedData = window.setTimeout(() => {
       try {
-        const savedPlanes = JSON.parse(window.localStorage.getItem("flight-lab-v2-planes") ?? "[]") as PlaneRecord[];
-        const savedThrows = JSON.parse(window.localStorage.getItem("flight-lab-v2-throws") ?? "[]") as ThrowRecord[];
+        const savedPlanes = readRecords<PlaneRecord>(window.localStorage, "flight-lab-v2-planes");
+        const savedThrows = readRecords<ThrowRecord>(window.localStorage, "flight-lab-v2-throws");
         if (!Array.isArray(savedPlanes) || !Array.isArray(savedThrows)) throw new Error("Invalid saved records");
         const savedActivePlaneId = Number(window.localStorage.getItem(activePlaneStorageKey));
         setPlanes(savedPlanes);
@@ -274,18 +275,29 @@ export default function FlightLabApp({
     return () => window.clearTimeout(loadSavedData);
   }, []);
 
-  useEffect(() => {
-    if (savedDataLoaded) window.localStorage.setItem("flight-lab-v2-planes", JSON.stringify(planes));
-  }, [planes, savedDataLoaded]);
-  useEffect(() => {
-    if (savedDataLoaded) window.localStorage.setItem("flight-lab-v2-throws", JSON.stringify(throws));
-  }, [throws, savedDataLoaded]);
-  useEffect(() => {
-    if (!savedDataLoaded) return;
-    if (activePlaneId === null) window.localStorage.removeItem(activePlaneStorageKey);
-    else window.localStorage.setItem(activePlaneStorageKey, String(activePlaneId));
-  }, [activePlaneId, savedDataLoaded]);
-  useEffect(() => { window.localStorage.setItem("flight-lab-v3-height", String(heightInches)); }, [heightInches]);
+  function persistHangar(nextPlanes: PlaneRecord[], nextThrows: ThrowRecord[], nextId: number | null) {
+    if (!savedDataLoaded || savedDataError) { reportSaveError("Saved records are not ready. Reload or restore a backup before editing."); return false; }
+    try {
+      const latestPlanes = readRecords<PlaneRecord>(window.localStorage, "flight-lab-v2-planes");
+      const latestThrows = readRecords<ThrowRecord>(window.localStorage, "flight-lab-v2-throws");
+      if (JSON.stringify(latestPlanes) !== JSON.stringify(planes) || JSON.stringify(latestThrows) !== JSON.stringify(throws)) {
+        setPlanes(latestPlanes); setThrows(latestThrows);
+        throw new Error("Records changed in another view. Review the refreshed records and try again.");
+      }
+      writeAtomically(window.localStorage, {
+        "flight-lab-v2-planes": JSON.stringify(nextPlanes), "flight-lab-v2-throws": JSON.stringify(nextThrows),
+        [activePlaneStorageKey]: nextId === null ? "" : String(nextId),
+      });
+      setPlanes(nextPlanes); setThrows(nextThrows); setActivePlaneId(nextId);
+      window.dispatchEvent(new CustomEvent("flight-lab-planes-updated"));
+      return true;
+    } catch (error) { reportSaveError(error instanceof Error ? error.message : undefined); return false; }
+  }
+  function selectPlane(planeId: number) {
+    if (!saveValue(activePlaneStorageKey, String(planeId))) return;
+    setActivePlaneId(planeId);
+    window.dispatchEvent(new CustomEvent("flight-lab-planes-updated"));
+  }
   useEffect(() => {
     if (sharedProPass) return;
     let active = true;
@@ -350,8 +362,7 @@ export default function FlightLabApp({
     const presetName = planePresets.find((preset) => preset.id === newPlanePreset)?.name;
     const name = newPlaneName.trim() || presetName || "My Plane";
     const plane: PlaneRecord = { id: Date.now(), name, createdAt: "Just now", image: newPlaneImage, preset: newPlanePreset };
-    setPlanes((current) => [...current, plane]);
-    setActivePlaneId(plane.id);
+    if (!persistHangar([...planes, plane], throws, plane.id)) return;
     setNewPlaneName("");
     setNewPlaneImage(planePresets[0].image);
     setNewPlanePreset("dart");
@@ -364,9 +375,7 @@ export default function FlightLabApp({
     if (!window.confirm(`Delete ${plane.name}${historyNote}? This cannot be undone.`)) return;
 
     const remainingPlanes = planes.filter((item) => item.id !== plane.id);
-    setPlanes(remainingPlanes);
-    setThrows((current) => current.filter((item) => item.planeId !== plane.id));
-    if (activePlaneId === plane.id) setActivePlaneId(remainingPlanes[0]?.id ?? null);
+    if (!persistHangar(remainingPlanes, throws.filter((item) => item.planeId !== plane.id), activePlaneId === plane.id ? remainingPlanes[0]?.id ?? null : activePlaneId)) return;
     setReport(null);
   }
 
@@ -550,7 +559,7 @@ export default function FlightLabApp({
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
     watchId.current = null;
     stopMotionCounter();
-    setThrows((current) => [{ id: Date.now(), planeId: activePlane.id, distance: Math.round(distance * 10) / 10, createdAt: "Just now" }, ...current]);
+    if (!persistHangar(planes, [{ id: Date.now(), planeId: activePlane.id, distance: Math.round(distance * 10) / 10, createdAt: "Just now" }, ...throws], activePlane.id)) { setMeasureError("Throw was not saved. Your measurement is still here; retry after resolving the storage issue."); return; }
     setMeasureOpen(false);
     setMeasureMethod("choose");
     setMeasureStage("ready");
@@ -564,11 +573,12 @@ export default function FlightLabApp({
   function updateHeightDraft(value: string) {
     setHeightDraft(value);
     const nextHeight = Number(value);
-    if (nextHeight >= 36 && nextHeight <= 96) setHeightInches(nextHeight);
+    if (nextHeight >= 36 && nextHeight <= 96 && saveValue("flight-lab-v3-height", String(nextHeight))) setHeightInches(nextHeight);
   }
 
   function commitHeight() {
     const nextHeight = clamp(Number(heightDraft) || heightInches, 36, 96);
+    if (!saveValue("flight-lab-v3-height", String(nextHeight))) return;
     setHeightInches(nextHeight);
     setHeightDraft(String(nextHeight));
   }
@@ -636,7 +646,7 @@ export default function FlightLabApp({
         detail: `${photoAdvice} This recommendation comes from the measured outline and fold contrast in your top photo.`,
         observations,
         steps: [photoAdvice, behaviorTips[behavior], "Make that one change, then measure three throws and compare the new average."],
-        estimatedRange: `${lowEstimate}–${highEstimate} ft`,
+        estimatedRange: `${lowEstimate}–${highEstimate} ft`, measuredBaseline: average > 0 ? average : null, measuredCount: activeThrows.length,
         aiNote,
       });
     } catch (error) {
@@ -689,11 +699,11 @@ export default function FlightLabApp({
       <section className="hangar" id="hangar">
         <div><p className="kicker">Your hangar</p><h2>My planes</h2></div>
         <button className="add-plane-card" type="button" onClick={() => setPlaneModalOpen(true)}><span>＋</span><b>Add a plane</b><small>Name a new design and start testing</small></button>
-        {planes.map((plane) => <div key={plane.id} className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`}><button className="plane-card-select" type="button" onClick={() => setActivePlaneId(plane.id)} aria-label={`Use ${plane.name}`}>{plane.image ? <img className="plane-card-image" src={plane.image} alt="" /> : <span className="mini-plane" aria-hidden="true">➤</span>}<b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button><button className="plane-delete" type="button" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`} title={`Delete ${plane.name}`}>Delete</button></div>)}
+        {planes.map((plane) => <div key={plane.id} className={`plane-card ${activePlaneId === plane.id ? "selected" : ""}`}><button className="plane-card-select" type="button" onClick={() => selectPlane(plane.id)} aria-label={`Use ${plane.name}`}>{plane.image ? <img className="plane-card-image" src={plane.image} alt="" /> : <span className="mini-plane" aria-hidden="true">➤</span>}<b>{plane.name}</b><small>{throws.filter((item) => item.planeId === plane.id).length} throws</small></button><button className="plane-delete" type="button" onClick={() => deletePlane(plane)} aria-label={`Delete ${plane.name}`} title={`Delete ${plane.name}`}>Delete</button></div>)}
       </section>
 
       <section className="performance" id="performance">
-        <div className="section-heading"><div><p className="kicker">Current plane</p><h2>{activePlane?.name ?? "No plane yet"}</h2></div>{activePlane && planes.length > 1 && <select className="plane-select" value={activePlaneId ?? ""} onChange={(event) => setActivePlaneId(Number(event.target.value))} aria-label="Choose a plane">{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select>}</div>
+        <div className="section-heading"><div><p className="kicker">Current plane</p><h2>{activePlane?.name ?? "No plane yet"}</h2></div>{activePlane && planes.length > 1 && <select className="plane-select" value={activePlaneId ?? ""} onChange={(event) => selectPlane(Number(event.target.value))} aria-label="Choose a plane">{planes.map((plane) => <option key={plane.id} value={plane.id}>{plane.name}</option>)}</select>}</div>
         <div className="stat-strip"><div><span>Average distance</span><b>{average.toFixed(1)} <small>ft</small></b></div><div><span>Best throw</span><b>{best.toFixed(1)} <small>ft</small></b></div><div><span>Throws logged</span><b>{activeThrows.length}</b></div><div className="trend"><span>Flight trend</span><b>{activeThrows.length >= 3 ? "↑ Tracking" : "Needs 3 throws"}</b></div></div>
         <div className="performance-grid">
           <article className="throw-card"><div className="card-title"><div><p className="kicker">Flight log</p><h3>Flight history</h3></div><button onClick={openMeasure}>Measure throw</button></div>
@@ -726,7 +736,7 @@ export default function FlightLabApp({
         {report && <article className={`report-card ${report.kind === "rejected" ? "rejected" : ""}`} aria-live="polite">
           {report.kind === "analysis" ? <div className="report-score"><span>Top-view fold score</span><b>{report.score}<small>/100</small></b></div> : <div className="report-rejected-mark"><b>Not scored</b><span>Plane not verified</span></div>}
           <div className="report-copy"><p className="kicker">{report.kind === "analysis" ? "Analysis complete" : "Photo check stopped"}</p><h3>{report.headline}</h3><p>{report.detail}</p></div>
-          {report.kind === "analysis" && <><div className="flight-estimate"><span>Estimated next flight</span><b>{report.estimatedRange}</b><small>Estimate—not a measurement</small></div><p className="ai-note">{report.aiNote}</p><ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></>}
+          {report.kind === "analysis" && <><div className="flight-estimate"><span>{report.measuredBaseline ? "Rough next-flight estimate" : "Uncalibrated illustration"}</span><b>{report.estimatedRange}</b><small>{report.measuredBaseline ? `Based on a ${report.measuredBaseline.toFixed(1)} ft recorded average from ${report.measuredCount} throws.` : "No measured baseline. Measure three comparable throws first."} Prediction accuracy has not been established.</small></div><p className="ai-note">{report.aiNote}</p><ul className="observations">{report.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul></>}
           <ol>{report.steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol>
           <p className="prototype-note">Object detection and top-view fold analysis run on this device. Distance is estimated from design type, photo score, flight behavior, and this plane&apos;s measured history; confirm it with a real throw.</p>
         </article>}
