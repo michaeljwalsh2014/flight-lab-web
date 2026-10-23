@@ -12,6 +12,8 @@ Keep local configuration in ignored `.env.local` and production secrets in Sites
 
 AI budgets are stored atomically in D1, shared across server instances. Each account or shared pass has a ten-minute budget per feature: ten Coach requests, five scans, five video reviews. All holders of one shared pass share its budget; changing a browser client ID cannot reset it. Unavailable storage prevents paid calls. The limiter creates its dedicated table on first use, without altering user records.
 
+Pro defaults to Flight Lab 4.6 Auto (Gemini 3.8 Flash). Explicit saved model/thinking selections remain intact, and older model choices stay available.
+
 ## Free AI allowance
 
 The free page includes a light-themed Coach drawer using the existing Gemini API connection and three on-device photo inspections per day. Free sign-in ties the 20 daily Coach messages and three inspections to a verified account across devices. Both allowances reset to full every day at 6 a.m. America/Chicago time, including daylight saving transitions; unused uses do not accumulate. `free_ai_usage` is a separate D1 table with atomic counters keyed by an account hash and the local date of the most recent reset. Failed Coach requests restore the reserved message; rejected photos do not spend an inspection. Free video reviews and pricing are not included. Pro routes, access rules and existing limits are unchanged.
@@ -25,3 +27,5 @@ Planes, throws, reports, feedback and preferences remain in browser local storag
 Follow `AGENTS.md`: validate, commit and push the exact source, package that exact build, save a new Sites version, and deploy only that newly saved version. Record the Git commit and Sites version together. Preserve all existing saved versions, including at least the previous four releases, with the previous production version available for immediate rollback. Never overwrite a release. Report the saved-version number and rollback availability after publishing.
 
 Preserve model choices 3.8, 3.9 and 4.0 and the Coach Show more/Show less control. A saved v37 selection migrates to v38. Storage keys must not be cleared or renamed without migration and explicit approval.
+
+Pro Coach allows 50 messages per signed-in account each day, resetting at 6 a.m. America/Chicago. Shared-link visitors sign in for individual allowances. Free usage and review limits are unchanged.

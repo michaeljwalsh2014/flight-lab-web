@@ -21,11 +21,11 @@ const changedEvent = "flight-lab-model-changed";
 
 export function normalizeModelVersion(value: string | null): CoachModelVersion {
   if (value === "v46" || value === "v40" || value === "v39" || value === "v38") return value;
-  return value === "v37" ? "v38" : "v40";
+  return value === "v37" ? "v38" : "v46";
 }
 
 export function useModelVersion() {
-  const [model, setModel] = useState<CoachModelVersion>("v40");
+  const [model, setModel] = useState<CoachModelVersion>("v46");
   useEffect(() => {
     const sync = () => {
       const saved = readValue(storageKey);

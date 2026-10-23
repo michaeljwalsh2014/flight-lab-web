@@ -1,4 +1,4 @@
-import { allowAIUsage } from "@/app/ai-usage";
+import { reserveProMessage } from "@/app/ai-usage";
 import { NextResponse } from "next/server";
 import { findBuiltInAnswer } from "@/app/knowledge-base";
 import { getProAccess } from "@/app/pro-access";
@@ -116,7 +116,7 @@ async function hasProAccess(request: Request) {
 
 export async function GET(request: Request) {
   if (!(await hasProAccess(request))) return json({ error: "pro_access_required" }, 403);
-  const requestedModel = new URL(request.url).searchParams.get("modelVersion");
+  const requestedModel = new URL(request.url).searchParams.get("modelVersion") ?? "v46";
   const useGemini = requestedModel === "v40" || requestedModel === "v46";
   const available = useGemini ? geminiAvailable() : Boolean((process.env.OPENAI_API_KEY ?? "").trim());
   return json({ available, typedModel: requestedModel === "v46" ? GEMINI_ADVANCED_MODEL : useGemini ? GEMINI_MODEL : MODEL, voiceModel: "gpt-realtime-2.1" });
@@ -136,10 +136,13 @@ export async function POST(request: Request) {
   const coachId = typeof body.coachId === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(body.coachId) ? body.coachId : "";
   if (!message || !coachId) return json({ error: "invalid_request" }, 400);
   const identifier = await safetyIdentifier(coachId);
-  if (!await allowAIUsage("coach", 10)) return json({ error: "rate_limited", message: "Take a short break, then ask again." }, 429);
+  const allowance = await reserveProMessage();
+  if (allowance === "sign_in_required") return json({ error: allowance, message: "Sign in to use your 50 daily Pro Coach messages." }, 401);
+  if (allowance === "unavailable") return json({ error: "coach_unavailable", message: "Your allowance could not be checked. Please try again shortly." }, 503);
+  if (allowance === "exhausted") return json({ error: "daily_limit_reached", message: "You've used your 50 Pro Coach messages today. Your allowance resets at 6 a.m. Central." }, 429);
 
   const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
-  const modelVersion = body.modelVersion === "v46" || body.modelVersion === "v40" || body.modelVersion === "v38" ? body.modelVersion : "v39";
+  const modelVersion = body.modelVersion === "v46" || body.modelVersion === "v40" || body.modelVersion === "v39" || body.modelVersion === "v38" ? body.modelVersion : "v46";
   const thinkingMode = body.thinkingMode === "fast" || body.thinkingMode === "normal" || body.thinkingMode === "hard" ? body.thinkingMode : "auto";
   const tutorial = searchMode !== "search" ? findPlaneTutorialReply(message, safeHistory(body.history)) : null;
   if (tutorial) return new Response(tutorial, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "private, no-store", "X-Flight-Lab-Source": "links" } });

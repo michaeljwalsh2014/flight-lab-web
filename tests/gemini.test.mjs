@@ -8,7 +8,7 @@ function loadRoutes({ fetch, env = { GEMINI_API_KEY: "test-secret" }, owner = tr
   function load(name) {
     if (name === "next/server") return { NextResponse: { json: (value, init) => Response.json(value, init) } };
     if (name === "@/app/pro-access") return { getProAccess: async () => ({ user: owner ? { email: "owner@example.com" } : null, isOwner: owner }) };
-    if (name === "@/app/ai-usage") return { allowAIUsage: async () => true };
+    if (name === "@/app/ai-usage") return { allowAIUsage: async () => true, reserveProMessage: async () => "allowed" };
     if (name === "react") return {};
     if (cache.has(name)) return cache.get(name);
     const file = new URL(`../${name.replace("@/", "")}.ts`, import.meta.url);
@@ -185,7 +185,7 @@ test("existing OpenAI fallback and explicit web search remain available", async 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-Flight-Lab-Source"), "web");
   const fallback = loadRoutes({ env: { OPENAI_API_KEY: "existing-secret" } });
-  assert.equal((await (await fallback.coach.GET(new Request("https://flightlab.test/api"))).json()).typedModel, "gpt-5.6-terra");
+  assert.equal((await (await fallback.coach.GET(new Request("https://flightlab.test/api?modelVersion=v39"))).json()).typedModel, "gpt-5.6-terra");
 });
 
 test("Flight Lab 4.0 and 4.6 use advanced AI while 3.8 and 3.9 retain their existing provider", async () => {
@@ -194,7 +194,7 @@ test("Flight Lab 4.0 and 4.6 use advanced AI while 3.8 and 3.9 retain their exis
   assert.deepEqual(models.COACH_MODEL_OPTIONS.map((option) => option.label), ["Flight Lab 4.6 · More advanced AI", "Flight Lab 4.0 · Advanced AI", "Flight Lab 3.9 · Knowledge", "Flight Lab 3.8 · Improved context"]);
   for (const version of ["v38", "v39", "v40", "v46"]) assert.equal(models.normalizeModelVersion(version), version);
   assert.equal(models.normalizeModelVersion("v37"), "v38");
-  assert.equal(models.normalizeModelVersion(null), "v40");
+  assert.equal(models.normalizeModelVersion(null), "v46");
   for (const version of ["v38", "v39"]) {
     const status = await coach.GET(new Request(`https://flightlab.test/api?modelVersion=${version}`));
     assert.deepEqual(await status.json(), { available: false, typedModel: "gpt-5.6-terra", voiceModel: "gpt-realtime-2.1" });
@@ -356,4 +356,23 @@ test("requests for adjustments and another test still reach the conversational A
     assert.equal(response.headers.get("X-Flight-Lab-Source"), "cloud");
   }
   assert.equal(calls, 3);
+});
+
+test("new/default Pro Auto sessions use Gemini 3.8 Flash without overriding explicit legacy choices", async () => {
+  let calls = 0;
+  const { coach, models } = loadRoutes({ fetch: async (url, init) => {
+    calls++; assert.match(url, /gemini-3\.8-flash:/);
+    const payload = JSON.parse(init.body);
+    assert.equal(payload.generationConfig.thinkingConfig.thinkingLevel, "low");
+    return completion("Use one small reversible change.");
+  } });
+  assert.equal(models.normalizeModelVersion(null), "v46");
+  assert.equal(models.normalizeModelVersion("unknown"), "v46");
+  assert.equal(models.normalizeModelVersion("v40"), "v40");
+  assert.equal(models.normalizeModelVersion("v37"), "v38");
+  const status = await (await coach.GET(new Request("https://flightlab.test/api"))).json();
+  assert.equal(status.typedModel, "gemini-3.8-flash");
+  const response = await coach.POST(request({ modelVersion: undefined, coachId: "default-auto-model", message: "Help me plan a flight test" }));
+  assert.equal(response.status, 200); assert.equal(response.headers.get("X-Flight-Lab-Model"), "gemini-3.8-flash");
+  assert.equal(calls, 1);
 });

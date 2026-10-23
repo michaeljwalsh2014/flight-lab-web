@@ -42,7 +42,7 @@ const level = (model: CoachModelVersion, mode: CoachThinkingMode): CoachLevelOpt
 });
 const allModes = (model: CoachModelVersion) => (["fast", "auto", "normal", "hard"] as CoachThinkingMode[]).map((mode) => level(model, mode));
 const COACH_LEVEL_OPTIONS: Record<CoachModelGroup, CoachLevelOption[]> = {
-  default: [level("v38", "auto"), level("v40", "fast"), level("v40", "auto"), level("v40", "hard"), level("v46", "auto")],
+  default: [level("v38", "auto"), level("v46", "fast"), level("v46", "auto"), level("v46", "normal"), level("v46", "hard")],
   v38: allModes("v38"),
   v39: allModes("v39"),
   v40: allModes("v40"),
@@ -677,6 +677,7 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
           </div>
           <div className="coach-horizontal-labels" style={{ gridTemplateColumns: `repeat(${coachOptions.length}, minmax(0, 1fr))` }} aria-hidden="true">{coachOptions.map((option, level) => <b key={`${option.model}-${option.mode}`} className={level === coachLevel ? "current" : ""}>{option.shortLabel}</b>)}</div>
         </section>}
+        <p className="coach-allowance">50 messages per day · Resets at 6 a.m. Central. <a href={`/signin-with-chatgpt?return_to=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/pro")}`}>Sign in for your allowance</a></p>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Flight Lab Coach</label>
           <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything…" />
