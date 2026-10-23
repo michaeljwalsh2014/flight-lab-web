@@ -1,5 +1,6 @@
 "use client";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { scrollToReplyStart } from "./coach-scroll";
 import type { FreeUsage } from "./free-usage";
 export const FREE_USAGE_EVENT = "flight-lab-free-usage-updated";
 export function useFreeAllowance(enabled = true) {
@@ -38,11 +39,14 @@ export default function FreeCoach({ context }: { context: string }) {
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
   const { usage, error: allowanceError, setUsage } = useFreeAllowance();
-  const end = useRef<HTMLDivElement>(null);
+  const messageList = useRef<HTMLDivElement>(null);
+  const latestReply = useRef<HTMLParagraphElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (window.location.hash === "#free-coach") setOpen(true); }, []);
-  useEffect(() => { if (open) end.current?.scrollIntoView({ block: "nearest" }); }, [open, messages, busy]);
+  useLayoutEffect(() => {
+    if (open && messageList.current && latestReply.current) scrollToReplyStart(messageList.current, latestReply.current);
+  }, [open, messages]);
   useEffect(() => {
     if (!open) return;
     textarea.current?.focus();
@@ -67,7 +71,7 @@ export default function FreeCoach({ context }: { context: string }) {
     {open && <section id="free-coach-panel" className="free-coach-panel" role="dialog" aria-label="Flight Lab Coach">
       <header><div><span className="kicker">Your flying partner</span><h2>Flight Lab Coach</h2></div><button type="button" aria-label="Close free Coach" onClick={() => { setOpen(false); launcher.current?.focus(); }}>×</button></header>
       <p className="free-coach-allowance">{usage?.authenticated ? `${usage.messagesRemaining} of 20 messages left today` : "20 Coach messages every day, free."}</p>
-      <div className="free-coach-messages" aria-live="polite"><p className="assistant">Hi! Ask me about a flight, a fold, or your next experiment. We can chat without a photo.</p>{messages.map((item, index) => <p className={item.role} key={index}><small>{item.role === "user" ? "You" : "Coach"}</small>{item.text}</p>)}{busy && <p role="status">Coach is thinking…</p>}<div ref={end} /></div>
+      <div ref={messageList} className="free-coach-messages" aria-live="polite"><p className="assistant">Hi! Ask me about a flight, a fold, or your next experiment. We can chat without a photo.</p>{messages.map((item, index) => <p ref={item.role === "assistant" && index === messages.length - 1 ? latestReply : undefined} className={item.role} key={index}><small>{item.role === "user" ? "You" : "Coach"}</small>{item.text}</p>)}{busy && <p role="status">Coach is thinking…</p>}</div>
       <button type="button" className="free-coach-more" aria-expanded={expanded} aria-controls="free-coach-details" onClick={() => setExpanded(value => !value)}>{expanded ? "Show less" : "Show more"}</button>
       {expanded && <div id="free-coach-details"><p>Includes 20 messages and three photo inspections every day. Both reset at 6 a.m. Central, with daylight saving time handled automatically.</p>{usage?.authenticated && <p>{usage.photosRemaining} inspections remaining. Resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}<p>Photo checks run on your device. Coach receives your question and a brief summary of the current plane.</p></div>}
       {usage && !usage.authenticated && <p className="free-coach-signin"><a href="/signin-with-chatgpt?return_to=%2F%23free-coach">Sign in free to start</a><small>Your allowance follows your account across devices.</small></p>}
@@ -75,6 +79,6 @@ export default function FreeCoach({ context }: { context: string }) {
       {(error || allowanceError) && <p role="alert" className="free-coach-error">{error || allowanceError}</p>}
       <form onSubmit={send}><label className="sr-only" htmlFor="free-coach-question">Ask the free Coach</label><textarea ref={textarea} id="free-coach-question" rows={2} maxLength={600} value={input} onChange={event => setInput(event.target.value)} placeholder="Ask about your next flight…" disabled={busy || !usage?.authenticated || usage.messagesRemaining === 0} /><button type="submit" disabled={busy || !input.trim() || !usage?.authenticated || usage.messagesRemaining === 0}>{busy ? "Thinking…" : "Send"}</button></form>
     </section>}
-    <button ref={launcher} id="free-coach" type="button" className="free-coach-launcher" aria-expanded={open} aria-controls="free-coach-panel" onClick={() => setOpen(value => !value)}><span aria-hidden="true">✦</span>{open ? "Close Coach" : "Talk to Coach"}</button>
+    <button ref={launcher} id="free-coach" type="button" className="free-coach-launcher" aria-expanded={open} aria-controls="free-coach-panel" onClick={() => setOpen(value => !value)}><svg className="free-coach-plane-icon" aria-hidden="true" viewBox="0 0 32 32" fill="none"><path d="M3 14.5 28 4l-8.5 24-5-9-11.5-4.5Z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/><path d="m14.5 19 13.5-15M14.5 19l-2 8 7-5" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"/></svg>{open ? "Close Coach" : "Talk to Coach"}</button>
   </aside>;
 }
