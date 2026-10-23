@@ -1,3 +1,4 @@
+import { exhaustedUsageMessage } from "@/app/usage-message";
 import { reserveProMessage } from "@/app/ai-usage";
 import { NextResponse } from "next/server";
 import { findBuiltInAnswer } from "@/app/knowledge-base";
@@ -139,7 +140,7 @@ export async function POST(request: Request) {
   const allowance = await reserveProMessage();
   if (allowance === "sign_in_required") return json({ error: allowance, message: "Sign in to use your 50 daily Pro Coach messages." }, 401);
   if (allowance === "unavailable") return json({ error: "coach_unavailable", message: "Your allowance could not be checked. Please try again shortly." }, 503);
-  if (allowance === "exhausted") return json({ error: "daily_limit_reached", message: "You've used your 50 Pro Coach messages today. Your allowance resets at 6 a.m. Central." }, 429);
+  if (allowance === "exhausted") return json({ error: "daily_limit_reached", message: exhaustedUsageMessage("Pro Coach messages"), retryable: false }, 429);
 
   const searchMode = body.searchMode === "search" ? "search" : body.searchMode === "answer" ? "answer" : "auto";
   const modelVersion = body.modelVersion === "v46" || body.modelVersion === "v40" || body.modelVersion === "v39" || body.modelVersion === "v38" ? body.modelVersion : "v46";

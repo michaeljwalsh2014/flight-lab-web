@@ -8,7 +8,7 @@ function loadRoutes({ fetch, env = { GEMINI_API_KEY: "test-secret" }, owner = tr
   function load(name) {
     if (name === "next/server") return { NextResponse: { json: (value, init) => Response.json(value, init) } };
     if (name === "@/app/pro-access") return { getProAccess: async () => ({ user: owner ? { email: "owner@example.com" } : null, isOwner: owner }) };
-    if (name === "@/app/ai-usage") return { allowAIUsage: async () => true, reserveProMessage: async () => "allowed" };
+    if (name === "@/app/ai-usage") return { allowAIUsage: async () => true, reserveProMessage: async () => "allowed", reserveProReview: async () => "allowed", refundProReview: async () => {} };
     if (name === "react") return {};
     if (cache.has(name)) return cache.get(name);
     const file = new URL(`../${name.replace("@/", "")}.ts`, import.meta.url);

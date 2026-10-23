@@ -579,10 +579,11 @@ function ProPlaneCoach({ level }: { level: InterfaceLevel }) {
           });
           const payload = await response.json() as { analysis?: VisionScanReport; model?: string; message?: string };
           checkCurrent();
+          if (response.status === 429 || response.status === 401) throw new Error(payload.message || "Sign in to check your daily review allowance.");
           if (response.ok && payload.analysis?.recognizable) { vision = { ...payload.analysis, model: payload.model }; deepInspection = "used"; }
           else if (useGemini) throw new Error(response.ok ? payload.analysis?.inspectionSummary || "Advanced AI could not identify a paper airplane in these photos." : payload.message || "Advanced AI could not analyze these photos. Please try again.");
         } catch (error) {
-          if (useGemini) throw error;
+          if (useGemini || (error instanceof Error && /run out of|Sign in/.test(error.message))) throw error;
           /* Older versions retain their on-device fallback. */
         }
       }

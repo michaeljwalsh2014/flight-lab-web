@@ -1,4 +1,5 @@
 "use client";
+import { exhaustedUsageMessage } from "./usage-message";
 /* eslint-disable @next/next/no-img-element */
 
 import { readRecords, writeAtomically, saveValue, reportSaveError } from "./storage-safety";
@@ -609,7 +610,7 @@ export default function FlightLabApp({
     if (analyzing) return;
     setFreePhotoError("");
     if (!sharedProPass && !freeUsage?.authenticated) { setFreePhotoError("Sign in free to use your three daily photo inspections."); return; }
-    if (!sharedProPass && freeUsage && freeUsage.photosRemaining <= 0) { setFreePhotoError("Your three free inspections have been used today. They reset at 6 a.m. Central."); return; }
+    if (!sharedProPass && freeUsage && freeUsage.photosRemaining <= 0) { setFreePhotoError(exhaustedUsageMessage("Free photo inspections", freeUsage.resetsAt)); return; }
     if (!photo) { openPhotoSource(); return; }
     setAnalyzing(true);
     setReport(null);

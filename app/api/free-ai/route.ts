@@ -1,3 +1,4 @@
+import { exhaustedUsageMessage } from "@/app/usage-message";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { generateGeminiResult, geminiAvailable, publicAIError } from "@/app/gemini-server";
 import { freeUsageDb, freeIdentity, freePeriod, usageView, readFreeUsage, reserveFreeUsage, refundFreeMessage } from "@/app/free-usage";
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     const identity = await freeIdentity(user.email);
     const started = new Date();
     const row = await reserveFreeUsage(db, identity, feature, started);
-    if (!row) return json({ error: "allowance_exhausted", message: feature === "messages" ? "You have used today's 20 free Coach messages. Your allowance resets at 6 a.m. Central." : "You have used today's three free photo inspections. Your allowance resets at 6 a.m. Central.", usage: await readFreeUsage(db, identity, started) }, 429);
+    if (!row) return json({ error: "allowance_exhausted", message: exhaustedUsageMessage(feature === "messages" ? "Free Coach messages" : "Free photo inspections", freePeriod(started).resetsAt), usage: await readFreeUsage(db, identity, started) }, 429);
     if (feature === "photos") return json({ usage: usageView(row.messages, row.photos, started) });
     try {
       const history = Array.isArray(body.history) ? body.history.slice(-10).filter((item): item is { role: "user" | "assistant"; text: string } => !!item && typeof item === "object" && ["user", "assistant"].includes(item.role) && typeof item.text === "string").map(item => ({ role: item.role === "assistant" ? "model" as const : "user" as const, parts: [{ text: item.text.slice(0, 1000) }] })) : [];

@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { scrollToReplyStart } from "./coach-scroll";
+import { exhaustedUsageMessage } from "./usage-message";
 import type { FreeUsage } from "./free-usage";
 export const FREE_USAGE_EVENT = "flight-lab-free-usage-updated";
 export function useFreeAllowance(enabled = true) {
@@ -73,7 +74,7 @@ export default function FreeCoach({ context }: { context: string }) {
       <div ref={messageList} className="free-coach-messages" aria-live="polite"><p className="assistant">Hi! Ask me about a flight, a fold, or your next experiment. We can chat without a photo.</p>{messages.map((item, index) => <p ref={item.role === "assistant" && index === messages.length - 1 ? latestReply : undefined} className={item.role} key={index}><small>{item.role === "user" ? "You" : "Coach"}</small>{item.text}</p>)}{busy && <p role="status">Coach is thinking…</p>}</div>
       <div id="free-coach-details"><p>Includes 20 messages and three photo inspections every day. Both reset at 6 a.m. Central, with daylight saving time handled automatically.</p>{usage?.authenticated && <p>{usage.photosRemaining} inspections remaining. Resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}<p>Photo checks run on your device. Coach receives your question and a brief summary of the current plane.</p></div>
       {usage && !usage.authenticated && <p className="free-coach-signin"><a href="/signin-with-chatgpt?return_to=%2F%23free-coach">Sign in free to start</a><small>Your allowance follows your account across devices.</small></p>}
-      {usage?.authenticated && usage.messagesRemaining === 0 && <p role="status">You’ve used your 20 messages. Your free allowance resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}
+      {usage?.authenticated && usage.messagesRemaining === 0 && <p role="status">{exhaustedUsageMessage("Free Coach messages", usage.resetsAt)}</p>}
       {(error || allowanceError) && <p role="alert" className="free-coach-error">{error || allowanceError}</p>}
       <form onSubmit={send}><label className="sr-only" htmlFor="free-coach-question">Ask the free Coach</label><textarea ref={textarea} id="free-coach-question" rows={2} maxLength={600} value={input} onChange={event => setInput(event.target.value)} placeholder="Ask about your next flight…" disabled={busy || !usage?.authenticated || usage.messagesRemaining === 0} /><button type="submit" disabled={busy || !input.trim() || !usage?.authenticated || usage.messagesRemaining === 0}>{busy ? "Thinking…" : "Send"}</button></form>
     </section>}

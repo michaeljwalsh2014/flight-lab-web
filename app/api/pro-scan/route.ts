@@ -1,4 +1,5 @@
-import { allowAIUsage } from "@/app/ai-usage";
+import { exhaustedUsageMessage } from "@/app/usage-message";
+import { reserveProReview, refundProReview } from "@/app/ai-usage";
 import { NextResponse } from "next/server";
 import { getProAccess } from "@/app/pro-access";
 import { geminiAvailable, generateGeminiResult, publicAIError, type GeminiPart } from "@/app/gemini-server";
@@ -83,6 +84,7 @@ function extractOutput(payload: unknown) {
 }
 
 export async function POST(request: Request) {
+  const started = new Date();
   const { user, isOwner } = await getProAccess();
   if (!(user && isOwner) && !validSharePath(request)) return json({ error: "pro_access_required" }, 403);
   let body: RequestBody;
@@ -93,7 +95,14 @@ export async function POST(request: Request) {
   const images = safeImages(body.images, requestedViews);
   if (!coachId || !images) return json({ error: "invalid_scan" }, 400);
   const identifier = await safetyIdentifier(coachId);
-  if (!await allowAIUsage("scan", 5)) return json({ error: "rate_limited", message: "Wait a few minutes before running another cloud scan." }, 429);
+  const allowance = await reserveProReview(started);
+  if (allowance === "sign_in_required") return json({ error: allowance, message: "Sign in to use your seven daily Pro AI reviews." }, 401);
+  if (allowance === "unavailable") return json({ error: "unavailable", message: "Your review allowance could not be checked. Try again shortly." }, 503);
+  if (allowance === "exhausted") return json({ error: "daily_limit_reached", message: exhaustedUsageMessage("Pro AI reviews"), retryable: false }, 429);
+  const result = await runReview(images).catch(() => json({ error: "vision_unavailable", message: "The AI review could not finish. Please try again." }, 502));
+  if (!result.ok) await refundProReview(started);
+  return result;
+  async function runReview(images: NonNullable<ReturnType<typeof safeImages>>) {
   if (useGemini) {
     if (!geminiAvailable()) return json({ error: "vision_unavailable" }, 503);
     try {
@@ -166,5 +175,6 @@ export async function POST(request: Request) {
     return json({ analysis, model: MODEL });
   } catch {
     return json({ error: "vision_unavailable" }, 502);
+  }
   }
 }

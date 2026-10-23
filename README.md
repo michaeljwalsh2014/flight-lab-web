@@ -28,4 +28,4 @@ Follow `AGENTS.md`: validate, commit and push the exact source, package that exa
 
 Preserve model choices 3.8, 3.9 and 4.0 and the Coach Show more/Show less control. A saved v37 selection migrates to v38. Storage keys must not be cleared or renamed without migration and explicit approval.
 
-Pro Coach allows 50 messages per signed-in account each day, resetting at 6 a.m. America/Chicago. Shared-link visitors sign in for individual allowances. Free usage and review limits are unchanged.
+Pro Coach allows 50 messages per signed-in account each day, resetting at 6 a.m. America/Chicago. Shared-link visitors sign in for individual allowances. Pro includes seven AI reviews shared across photo and video analysis per account each day. All daily allowances reset at 6 a.m. Central; exhausted Coach and inspection allowances show the next reset date. Failed Pro AI reviews restore their review slot.

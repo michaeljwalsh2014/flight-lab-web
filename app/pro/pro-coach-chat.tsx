@@ -177,7 +177,6 @@ async function askCloudCoach(message: string, history: ChatMessage[], context: C
       body: JSON.stringify({ message, history: history.filter((item) => item.source !== "error"), context, searchMode, modelVersion, thinkingMode, coachId: getCoachClientId() }),
     });
     if (!response.ok) {
-      if (!usesAdvancedAI(modelVersion)) return null;
       const failure = await response.json().catch(() => null) as { message?: string; retryable?: boolean } | null;
       return { text: failure?.message ?? (response.status === 403 ? "Your Pro session has expired. Refresh the page and sign in again." : "The AI connection is temporarily unavailable. Please try again."), source: "error", retryable: failure?.retryable ?? response.status >= 500 };
     }
