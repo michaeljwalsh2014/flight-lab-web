@@ -12,6 +12,10 @@ Keep local configuration in ignored `.env.local` and production secrets in Sites
 
 AI budgets are stored atomically in D1, shared across server instances. Each account or shared pass has a ten-minute budget per feature: ten Coach requests, five scans, five video reviews. All holders of one shared pass share its budget; changing a browser client ID cannot reset it. Unavailable storage prevents paid calls. The limiter creates its dedicated table on first use, without altering user records.
 
+## Free AI allowance
+
+The free page includes a light-themed Coach drawer using the existing Gemini API connection and three on-device photo inspections per day. Free sign-in ties the 20 daily Coach messages and three inspections to a verified account across devices. Both allowances reset to full every day at 6 a.m. America/Chicago time, including daylight saving transitions; unused uses do not accumulate. `free_ai_usage` is a separate D1 table with atomic counters keyed by an account hash and the local date of the most recent reset. Failed Coach requests restore the reserved message; rejected photos do not spend an inspection. Free video reviews and pricing are not included. Pro routes, access rules and existing limits are unchanged.
+
 ## Saved data
 
 Planes, throws, reports, feedback and preferences remain in browser local storage under their existing keys. Active AI evidence uses session storage. Download a backup before moving browsers or devices. Version-1 backups merge new records while retaining local conflicts, and include measurement setup and layout preferences. Original unfinished photo/video files are not included. Saved reports reopen as historical analysis; estimates and illustrated paths do not establish physical accuracy.

@@ -4,6 +4,7 @@
 import { readRecords, writeAtomically, saveValue, reportSaveError } from "./storage-safety";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import FreeCoach, { useFreeAllowance, FREE_USAGE_EVENT } from "./free-coach";
 import { WaitingProgress } from "./pro/pro-ui";
 
 type PlanePreset = "dart" | "glider" | "custom";
@@ -207,6 +208,8 @@ export default function FlightLabApp({
 }: {
   sharedProPass?: boolean;
 }) {
+  const { usage: freeUsage, error: freeUsageError, setUsage: setFreeUsage } = useFreeAllowance(!sharedProPass);
+  const [freePhotoError, setFreePhotoError] = useState("");
   const [planes, setPlanes] = useState<PlaneRecord[]>([]);
   const [activePlaneId, setActivePlaneId] = useState<number | null>(null);
   const [throws, setThrows] = useState<ThrowRecord[]>([]);
@@ -603,6 +606,10 @@ export default function FlightLabApp({
   }
 
   async function analyzePhoto() {
+    if (analyzing) return;
+    setFreePhotoError("");
+    if (!sharedProPass && !freeUsage?.authenticated) { setFreePhotoError("Sign in free to use your three daily photo inspections."); return; }
+    if (!sharedProPass && freeUsage && freeUsage.photosRemaining <= 0) { setFreePhotoError("Your three free inspections have been used today. They reset at 6 a.m. Central."); return; }
     if (!photo) { openPhotoSource(); return; }
     setAnalyzing(true);
     setReport(null);
@@ -639,6 +646,13 @@ export default function FlightLabApp({
       const lowEstimate = Math.max(5, Math.round(centerEstimate * .82));
       const highEstimate = Math.max(lowEstimate + 2, Math.round(centerEstimate * 1.18));
       const aiNote = "The on-device silhouette and fold analyzer completed this report without uploading the photo.";
+      if (!sharedProPass) {
+        const response = await fetch("/api/free-ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "photo" }) });
+        const allowance = await response.json() as { usage?: import("./free-usage").FreeUsage; message?: string };
+        if (allowance.usage) setFreeUsage(allowance.usage);
+        if (!response.ok) { setFreePhotoError(allowance.message || "Your photo allowance could not be checked. Please try again shortly."); return; }
+        window.dispatchEvent(new Event(FREE_USAGE_EVENT));
+      }
       setReport({
         kind: "analysis",
         score,
@@ -684,7 +698,7 @@ export default function FlightLabApp({
         <div className="hero-copy">
           <p className="eyebrow"><span /> Ready for takeoff</p>
           <h1>Throw.<br />Measure. <em>Improve.</em></h1>
-          <p className="lede">Create a plane, measure every flight from any phone or iPad, and turn your results into a better design. No download or account required.</p>
+          <p className="lede">Create a plane, measure every flight from any phone or iPad, and turn your results into a better design. No download required. Save and measure flights without an account.</p>
           <div className="hero-actions">
             <button className="primary-action" type="button" onClick={openMeasure}><span aria-hidden="true">＋</span> Measure a throw</button>
             <button className="secondary-action" type="button" onClick={() => setPlaneModalOpen(true)}>Add a plane</button>
@@ -730,6 +744,7 @@ export default function FlightLabApp({
             </select>
             {!photo ? <p className="photo-requirement">Add one top-view photo before analysis. Obvious non-airplane photos will be rejected instead of scored.</p> : null}
             {analyzing && <WaitingProgress label={analysisStage || "Analyzing the top view"} expectedDurationMs={2500} />}
+            {!sharedProPass && <div className="free-photo-allowance" aria-live="polite">{freeUsage?.authenticated ? <p>{freeUsage.photosRemaining} of 3 free inspections left today · resets at 6 a.m. Central on {new Date(freeUsage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}</p> : <p>Three free photo inspections every day. Resets at 6 a.m. Central. <a href="/signin-with-chatgpt?return_to=%2F%23analyzer">Sign in free</a> to use your allowance.</p>}{(freePhotoError || freeUsageError) && <p role="alert">{freePhotoError || freeUsageError}</p>}</div>}
             <button type="button" className="analyze-button" onClick={analyzePhoto} disabled={analyzing || !photo}>{analyzing ? analysisStage || "Analyzing the top view…" : "Analyze this plane"}</button>
           </div>
         </div>
@@ -839,6 +854,7 @@ export default function FlightLabApp({
       {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">Top view</p><h2 id="source-title">Add one plane photo</h2><p className="source-help">Lay the plane normally on a plain surface, point its nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take top photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose top photo</b><small>Select a photo you already took</small></button></section></div>}
 
       {proModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProModalOpen(false); }}><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><p className="pro-kicker">Flight Lab Pro</p><h2 id="pro-title">{sharedProPass ? "Pro is unlocked." : ownerHasPro ? "Lifetime Pro is active." : "Owner access"}</h2><p className="pro-modal-lede">{sharedProPass ? "This Pro Pass unlocks every Flight Lab tool without an account." : ownerHasPro ? `Welcome, ${proAccess.displayName}. This owner account has permanent Pro access at no cost.` : "Sign in with the ChatGPT account that owns Flight Lab to activate free Lifetime Pro."}</p><ul><li><b>Video analyzer</b><span>Trace airtime, curves, flight shape, stability, and relative speed.</span></li><li><b>On-device analysis</b><span>Your selected video stays on your device and is not uploaded.</span></li><li><b>Flight-path report</b><span>See a visual trace and repeatable scores for comparing throws.</span></li></ul><div className={`owner-rule ${ownerHasPro ? "confirmed" : ""}`}><b>{sharedProPass ? "Pro Pass confirmed" : ownerHasPro ? "Owner confirmed" : "Access rule"}</b><span>{sharedProPass ? "Anyone with this exact private link receives Pro access automatically." : ownerHasPro ? "Your Lifetime Pro entitlement is active. You will not be charged for Flight Lab Pro." : proAccess.status === "visitor" ? "This signed-in account is not the Flight Lab owner account. Sign out, then use the owner account." : "The Flight Lab owner gets Lifetime Pro for free. Other accounts remain on the standard version while paid subscriptions are unavailable."}</span></div><p className="billing-note">{sharedProPass ? "No account, payment, or sign-in is required." : ownerHasPro ? "Owner access is tied to your signed-in account and works on any device." : "Flight Lab does not collect payment information."}</p>{ownerHasPro ? <button className="pro-primary" type="button" onClick={openProVideoLab}>Open Pro video analyzer</button> : proAccess.status === "visitor" ? <button className="pro-primary" type="button" onClick={signOutOfPro}>Sign out and switch account</button> : <button className="pro-primary" type="button" onClick={openProAccess}>Sign in with ChatGPT</button>}</section></div>}
+      {!sharedProPass && <FreeCoach context={JSON.stringify({ plane: activePlane?.name ?? "No plane selected", throws: activeThrows.length, averageFeet: Number(average.toFixed(1)), bestFeet: best, photo: report?.kind === "analysis" ? { headline: report.headline, observations: report.observations, note: "On-device heuristic photo checks, not measured accuracy" } : null })} />}
     </main>
   );
 }
