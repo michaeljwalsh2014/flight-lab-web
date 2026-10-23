@@ -36,7 +36,6 @@ export default function FreeCoach({ context }: { context: string }) {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
   const { usage, error: allowanceError, setUsage } = useFreeAllowance();
   const messageList = useRef<HTMLDivElement>(null);
@@ -72,8 +71,7 @@ export default function FreeCoach({ context }: { context: string }) {
       <header><div><span className="kicker">Your flying partner</span><h2>Flight Lab Coach</h2></div><button type="button" aria-label="Close free Coach" onClick={() => { setOpen(false); launcher.current?.focus(); }}>×</button></header>
       <p className="free-coach-allowance">{usage?.authenticated ? `${usage.messagesRemaining} of 20 messages left today` : "20 Coach messages every day, free."}</p>
       <div ref={messageList} className="free-coach-messages" aria-live="polite"><p className="assistant">Hi! Ask me about a flight, a fold, or your next experiment. We can chat without a photo.</p>{messages.map((item, index) => <p ref={item.role === "assistant" && index === messages.length - 1 ? latestReply : undefined} className={item.role} key={index}><small>{item.role === "user" ? "You" : "Coach"}</small>{item.text}</p>)}{busy && <p role="status">Coach is thinking…</p>}</div>
-      <button type="button" className="free-coach-more" aria-expanded={expanded} aria-controls="free-coach-details" onClick={() => setExpanded(value => !value)}>{expanded ? "Show less" : "Show more"}</button>
-      {expanded && <div id="free-coach-details"><p>Includes 20 messages and three photo inspections every day. Both reset at 6 a.m. Central, with daylight saving time handled automatically.</p>{usage?.authenticated && <p>{usage.photosRemaining} inspections remaining. Resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}<p>Photo checks run on your device. Coach receives your question and a brief summary of the current plane.</p></div>}
+      <div id="free-coach-details"><p>Includes 20 messages and three photo inspections every day. Both reset at 6 a.m. Central, with daylight saving time handled automatically.</p>{usage?.authenticated && <p>{usage.photosRemaining} inspections remaining. Resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}<p>Photo checks run on your device. Coach receives your question and a brief summary of the current plane.</p></div>
       {usage && !usage.authenticated && <p className="free-coach-signin"><a href="/signin-with-chatgpt?return_to=%2F%23free-coach">Sign in free to start</a><small>Your allowance follows your account across devices.</small></p>}
       {usage?.authenticated && usage.messagesRemaining === 0 && <p role="status">You’ve used your 20 messages. Your free allowance resets at 6 a.m. Central on {new Date(usage.resetsAt).toLocaleDateString("en-US", { timeZone: "America/Chicago" })}.</p>}
       {(error || allowanceError) && <p role="alert" className="free-coach-error">{error || allowanceError}</p>}
