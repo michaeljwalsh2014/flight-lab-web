@@ -763,8 +763,9 @@ export default function FlightLabApp({
           <p className="pro-kicker">Flight Lab Pro · Version 3.9</p>
           <h2>See the whole flight,<br /><em>not just the landing.</em></h2>
           <p>Record a throw for traced flight paths, airtime, curves, stall and dive detection—then ask the 3.9 Coach questions using built-in knowledge before any live search.</p>
+          <p><strong>Higher AI usage limits:</strong> Get 50 Coach messages and seven AI photo or video reviews per day with Pro. Your allowance resets at 6 a.m. Central.</p>
           <button className="pro-primary" type="button" onClick={openProAccess}>{sharedProPass ? "Open Pro tools" : ownerHasPro ? "Open Flight Lab Pro" : "Upgrade to Pro"}</button>
-          <small>{sharedProPass ? "This Pro Pass includes every premium analyzer—no sign-in needed." : ownerHasPro ? `Pro is active for ${proAccess.displayName}.` : "Unlock advanced tracking, calibrated measurement, and deeper flight analysis."}</small>
+          <small>{sharedProPass ? "This Pro Pass includes every premium analyzer. Sign in for your daily AI allowance." : ownerHasPro ? `Pro is active for ${proAccess.displayName}.` : "Unlock advanced tracking, calibrated measurement, and deeper flight analysis."}</small>
         </div>
         <div className={`video-lab-card ${ownerHasPro ? "unlocked" : ""}`} aria-label={ownerHasPro ? "Owner access to the Pro video lab" : "Locked preview of Pro video analysis"}>
             <div className="video-lab-top"><span>Pro video lab</span><b>{sharedProPass ? "Pro Pass" : ownerHasPro ? "Owner access" : "Locked"}</b></div>
