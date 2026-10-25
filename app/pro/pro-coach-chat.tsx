@@ -676,7 +676,7 @@ export default function ProCoachChat({ interfaceLevel }: { interfaceLevel: "begi
           </div>
           <div className="coach-horizontal-labels" style={{ gridTemplateColumns: `repeat(${coachOptions.length}, minmax(0, 1fr))` }} aria-hidden="true">{coachOptions.map((option, level) => <b key={`${option.model}-${option.mode}`} className={level === coachLevel ? "current" : ""}>{option.shortLabel}</b>)}</div>
         </section>}
-        <p className="coach-allowance">50 messages per day · Resets at 6 a.m. Central. <a href={`/signin-with-chatgpt?return_to=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/pro")}`}>Sign in for your allowance</a></p>
+        <p className="coach-allowance"><span>50 messages per day · Resets at 6 a.m. Central.</span><a href={`/signin-with-chatgpt?return_to=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/pro")}`}>Sign in for your allowance</a></p>
         <form onSubmit={submit}>
           <label className="sr-only" htmlFor="pro-coach-input">Ask the Flight Lab Coach</label>
           <textarea id="pro-coach-input" rows={2} maxLength={600} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask me anything…" />
