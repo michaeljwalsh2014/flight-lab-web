@@ -1106,7 +1106,7 @@ export default function ProDashboard({
       </section>}
       {level !== "beginner" && <section className="pro-tool-deck" aria-label="Flight Lab Pro tools">
         <a href="#plane-coach"><span>01</span><b>Plane Intelligence</b><small>Personal range estimate</small></a>
-        <a href="#video-lab"><span>02</span><b>Flight Path Viewer</b><small>Illustrative 3D path</small></a>
+        <a href="#video-lab"><span>02</span><b>Flight Path Viewer</b><small>Fixed side-view trace</small></a>
         <a href="#smart-measure"><span>03</span><b>Smart Measure</b><small>Calibrated walking distance</small></a>
         <a hidden={level !== "pro"} href="#experiment-lab"><span>04</span><b>Experiment Lab</b><small>Controlled improvement plan</small></a>
       </section>}

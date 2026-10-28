@@ -115,14 +115,11 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   assert.match(dashboard, /pro-hero-plane-photo/);
   assert.match(videoLab, /accept="video\/\*"/);
   assert.match(videoLab, /analyzeVideo/);
-  assert.match(videoLab, /Drag to rotate/);
-  assert.match(videoLab, /pinch or scroll to zoom/);
-  assert.match(videoLab, /Top map/);
-  assert.match(videoLab, /Removing camera shake and false turns/);
-  assert.match(videoLab, /turnPenalty/);
-  assert.match(videoLab, /forwardFiltered/);
-  assert.match(videoLab, /straightness/);
-  assert.match(videoLab, /Tracked airtime/);
+  assert.match(videoLab, /Fixed side view/);
+  assert.doesNotMatch(videoLab, /onPointerDown|onWheel|Top map/);
+  assert.match(videoLab, /Checking motion continuity/);
+  assert.match(videoLab, /Dashed orange sections/);
+  assert.match(videoLab, /Visible tracked time/);
   assert.match(videoLab, /Flight curve/);
   assert.match(videoLab, /Path stability/);
   assert.match(videoLab, /Relative speed/);
@@ -363,7 +360,9 @@ test("lets Pro users record a new video or choose one already in Photos", async 
   assert.match(styles, /\.pro-video-source-picker/);
   assert.match(videoLab, /releaseStrength/);
   assert.match(videoLab, /observations\.slice\(0, 2\)/);
-  assert.match(videoLab, /let y = clampNumber\(\(first\.y - point\.y\)/);
+  assert.match(videoLab, /Fixed side view/);
+  assert.match(videoLab, /projectSidePath/);
+  assert.doesNotMatch(videoLab, /onPointerDown|onWheel|3D view|Top map/);
   assert.doesNotMatch(videoLab, /point\.y \* \(1 - correction\)/);
 });
 
