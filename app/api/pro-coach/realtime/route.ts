@@ -11,12 +11,7 @@ When Flight Lab evidence is supplied in the conversation, use it conservatively.
 Keep spoken answers short unless the user asks for more detail. Do not repeat the same invitation or advice.
 Never suggest throwing near people, animals, roads, windows, or fragile objects.`;
 
-function validSharePath(request: Request) {
-  const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
-  const suppliedPath = request.headers.get("x-flight-lab-pro-path") ?? "";
-  const supplied = suppliedPath.match(/^\/pro\/share\/([^/?#]+)\/?$/)?.[1] ?? "";
-  return Boolean(expected && supplied && supplied === expected);
-}
+
 
 async function safetyIdentifier(value: string) {
   const data = new TextEncoder().encode(value);
@@ -39,8 +34,8 @@ function failure(error: string, status: number) {
 }
 
 export async function POST(request: Request) {
-  const { user, isOwner } = await getProAccess();
-  if (!(user && isOwner) && !validSharePath(request)) return failure("pro_access_required", 403);
+  const { hasPro } = await getProAccess();
+  if (!hasPro) return failure("pro_access_required", 403);
 
   const coachId = new URL(request.url).searchParams.get("coachId") ?? "";
   if (!/^[a-zA-Z0-9-]{8,80}$/.test(coachId)) return failure("invalid_request", 400);

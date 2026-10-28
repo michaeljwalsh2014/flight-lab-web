@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export type ChatGPTUser = {
+  id?: string;
   displayName: string;
   email: string;
   fullName: string | null;
@@ -29,6 +30,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
       : null;
 
   return {
+    id: requestHeaders.get("oai-authenticated-user-id") ?? undefined,
     displayName: fullName ?? email,
     email,
     fullName,

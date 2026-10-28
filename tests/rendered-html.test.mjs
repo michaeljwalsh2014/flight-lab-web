@@ -81,18 +81,18 @@ test("offers a normal Pro upgrade and recognizes the owner account", async () =>
   const videoLab = await readFile(new URL("../app/pro/pro-video-lab.tsx", import.meta.url), "utf8");
   assert.match(page, /Upgrade to Pro/);
   assert.doesNotMatch(page, />Owner sign in</);
-  assert.match(page, /Lifetime Pro is active/);
+  assert.match(page, /\/pricing/);
   assert.match(page, /Pro video lab/);
   assert.match(page, /Video path tracking/);
-  assert.match(page, /You will not be charged for Flight Lab Pro/);
+  assert.match(accessHelper, /hasPro/);
   assert.match(page, /signin-with-chatgpt/);
-  assert.match(page, /Open Pro video analyzer/);
+  assert.match(page, /View Pro options/);
   assert.match(accessHelper, /FLIGHT_LAB_OWNER_EMAIL/);
   assert.match(accessRoute, /Cache-Control/);
   assert.doesNotMatch(accessHelper, /@gmail\.com|@outlook\.com|@icloud\.com/);
   assert.match(proPage, /getProAccess/);
   assert.match(proPage, /ProDashboard/);
-  assert.match(proPage, /redirect\("\/#pro"\)/);
+  assert.match(proPage, /redirect\("\/pricing"\)/);
   assert.match(dashboard, /Rate my plane/);
   assert.match(dashboard, /href="#smart-measure">Measure a throw/);
   assert.doesNotMatch(dashboard, /href="#video-lab">Analyze a flight/);
@@ -151,12 +151,11 @@ test("keeps Pro mobile layout vertical and uses full-size controls", async () =>
   assert.match(styles, /select \{[\s\S]*?appearance: none;[\s\S]*?border-radius: 999px !important;[\s\S]*?background-position: right 18px center;/);
 });
 
-test("supports the same no-sign-in Pro Pass route for the dedicated dashboard", async () => {
+test("retires bearer links in favor of account-based Pro access", async () => {
   const sharePage = await readFile(new URL("../app/pro/share/[token]/page.tsx", import.meta.url), "utf8");
   const dashboard = await readFile(new URL("../app/pro/pro-dashboard.tsx", import.meta.url), "utf8");
-  assert.match(sharePage, /FLIGHT_LAB_PRO_SHARE_TOKEN/);
-  assert.match(sharePage, /ProDashboard/);
-  assert.match(sharePage, /sharedPass/);
+  assert.match(sharePage, /redirect\("\/pricing"\)/);
+  assert.doesNotMatch(sharePage, /FLIGHT_LAB_PRO_SHARE_TOKEN|ProDashboard/);
   assert.match(dashboard, /Pro Pass active/);
   assert.match(dashboard, /ProVideoLab/);
 });

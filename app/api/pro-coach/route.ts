@@ -52,12 +52,7 @@ function reliableAnswer(answer: NonNullable<ReturnType<typeof findBuiltInAnswer>
   } });
 }
 
-function validSharePath(request: Request) {
-  const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
-  const suppliedPath = request.headers.get("x-flight-lab-pro-path") ?? "";
-  const supplied = suppliedPath.match(/^\/pro\/share\/([^/?#]+)\/?$/)?.[1] ?? "";
-  return Boolean(expected && supplied && supplied === expected);
-}
+
 
 function safeHistory(value: unknown): SafeMessage[] {
   if (!Array.isArray(value)) return [];
@@ -111,8 +106,8 @@ async function safetyIdentifier(value: string) {
 
 
 async function hasProAccess(request: Request) {
-  const { user, isOwner } = await getProAccess();
-  return Boolean((user && isOwner) || validSharePath(request));
+  const { hasPro } = await getProAccess();
+  return hasPro;
 }
 
 export async function GET(request: Request) {

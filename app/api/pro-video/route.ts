@@ -26,10 +26,8 @@ function json(body: object, status = 200) {
 
 export async function POST(request: Request) {
   const started = new Date();
-  const { user, isOwner } = await getProAccess();
-  const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
-  const token = (request.headers.get("x-flight-lab-pro-path") ?? "").match(/^\/pro\/share\/([^/?#]+)\/?$/)?.[1];
-  if (!(user && isOwner) && !(expected && token === expected)) return json({ error: "pro_access_required", message: "Refresh the page and sign in to Pro again." }, 403);
+  const { hasPro } = await getProAccess();
+  if (!hasPro) return json({ error: "pro_access_required", message: "Sign in to an account with Pro access." }, 403);
   if (Number(request.headers.get("content-length") ?? 0) > 7_000_000) return json({ error: "video_too_large", message: "Use a shorter video." }, 413);
   let body: Record<string, unknown>;
   try {

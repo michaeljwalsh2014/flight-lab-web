@@ -1390,3 +1390,19 @@ html:has(.pro-dashboard.device-ipad), body:has(.pro-dashboard.device-ipad) { ove
 .free-photo-allowance p { margin: 0; }
 .free-photo-allowance a { color: #1255c9; text-decoration: underline; font-weight: 700; }
 @media (max-width: 480px) { .free-coach-panel { padding: 16px; } .free-coach-launcher { font-size: 13px !important; padding: 10px 12px; } }
+
+.pricing-page { min-height: 100vh; background: #f1f6fa; color: #122c45; padding: 24px 20px 70px; }
+.pricing-nav { max-width: 1040px; margin: 0 auto 36px; display: flex; justify-content: space-between; gap: 20px; font-weight: 700; }
+.pricing-card { max-width: 680px; margin: auto; background: white; padding: clamp(24px, 5vw, 52px); border: 1px solid #dbe6ef; border-radius: 28px; box-shadow: 0 18px 60px #122c4510; }
+.pricing-eyebrow { color: #1368c4; font-weight: 800; letter-spacing: .15em; font-size: 12px; }
+.pricing-card h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 16px 0 20px; }
+.pricing-card p { line-height: 1.6; }
+.pricing-price { font-size: 54px; font-weight: 800; margin-top: 25px; }.pricing-price span { font-size: 16px; font-weight: 500; }
+.pricing-fine { font-size: 13px; color: #526779; }.pricing-card ul { padding-left: 21px; line-height: 2; margin: 24px 0; }
+.pricing-primary { display: block; text-align: center; width: 100%; padding: 16px; border: 0; border-radius: 12px; background: #1266c5; color: white; font-weight: 750; text-decoration: none; }
+.pricing-primary:disabled { background: #dce6ef; color: #526779; }.pricing-card button { cursor: pointer; }.pricing-card button:disabled { cursor: default; }
+.pricing-more { display: block; margin: 22px 0 10px; border: 0; background: transparent; font-weight: 700; color: #1266c5; padding: 12px 0; }
+.pricing-code, .pricing-subscription { border-top: 1px solid #dbe6ef; margin-top: 20px; padding-top: 20px; }.pricing-code h2 { font-size: 21px; }.pricing-code label { display: block; font-weight: 700; }
+.pricing-code input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #8a9daf; border-radius: 10px; color: #122c45; background: white; font-size: 18px; }
+.pricing-code button, .pricing-subscription button { padding: 12px 18px; border: 1px solid #1266c5; border-radius: 10px; background: white; color: #1266c5; font-weight: 700; }
+.pricing-active, .pricing-message { padding: 14px; border-radius: 10px; background: #edf5ff; }.pricing-issued { overflow-wrap: anywhere; padding: 14px; background: #edf5ff; }

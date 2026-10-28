@@ -8,9 +8,9 @@ Use Node 22.13 or newer. Install dependencies with `pnpm install`, run `pnpm dev
 
 ## Configuration
 
-Keep local configuration in ignored `.env.local` and production secrets in Sites settings. `FLIGHT_LAB_OWNER_EMAIL` identifies the owner; `FLIGHT_LAB_PRO_SHARE_TOKEN` enables the shared Pro pass. Provider configuration lives in `app/gemini-server.ts`; optional OpenAI fallback uses `OPENAI_API_KEY`. Never commit credentials. `.openai/hosting.json` declares the existing Site identity and D1 `DB` binding.
+Keep local configuration in ignored `.env.local` and production secrets in Sites settings. `FLIGHT_LAB_OWNER_EMAIL` identifies the owner; Legacy shared bearer links now redirect to `/pricing`; free passes are account-based code grants. Provider configuration lives in `app/gemini-server.ts`; optional OpenAI fallback uses `OPENAI_API_KEY`. Never commit credentials. `.openai/hosting.json` declares the existing Site identity and D1 `DB` binding.
 
-AI budgets are stored atomically in D1, shared across server instances. Each account or shared pass has a ten-minute budget per feature: ten Coach requests, five scans, five video reviews. All holders of one shared pass share its budget; changing a browser client ID cannot reset it. Unavailable storage prevents paid calls. The limiter creates its dedicated table on first use, without altering user records.
+AI budgets are stored atomically in D1, shared across server instances. Each Pro account has a ten-minute budget per feature: ten Coach requests, five scans, five video reviews. Paid and code-granted accounts each have their own budget; changing a browser client ID cannot reset it. Unavailable storage prevents paid calls. The limiter creates its dedicated table on first use, without altering user records.
 
 Pro defaults to Flight Lab 4.6 Auto (Gemini 3.8 Flash). Explicit saved model/thinking selections remain intact, and older model choices stay available.
 

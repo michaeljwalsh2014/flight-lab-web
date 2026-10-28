@@ -5,16 +5,11 @@ export const dynamic = "force-dynamic";
 
 const requestWindows = new Map<string, number[]>();
 
-function validSharePath(request: Request) {
-  const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
-  const suppliedPath = request.headers.get("x-flight-lab-pro-path") ?? "";
-  const supplied = suppliedPath.match(/^\/pro\/share\/([^/?#]+)\/?$/)?.[1] ?? "";
-  return Boolean(expected && supplied && supplied === expected);
-}
+
 
 async function hasProAccess(request: Request) {
-  const { user, isOwner } = await getProAccess();
-  return Boolean((user && isOwner) || validSharePath(request));
+  const { hasPro } = await getProAccess();
+  return hasPro;
 }
 
 function withinRateLimit(identifier: string) {

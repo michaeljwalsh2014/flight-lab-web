@@ -3,8 +3,9 @@ import { getProAccess } from "./pro-access";
 /** D1 atomically budgets each account or shared pass across Worker instances. */
 export async function allowAIUsage(kind: string, limit: number): Promise<boolean> {
   try {
-    const { user, isOwner } = await getProAccess();
-    const identity = user && isOwner ? `owner:${user.email.toLowerCase()}` : `pass:${process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? ""}`;
+    const { user, account, hasPro } = await getProAccess();
+    if (!user || !account || !hasPro) return false;
+    const identity = `pro:${account}`;
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
     const key = `${kind}:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
     const { env } = await import("cloudflare:workers");

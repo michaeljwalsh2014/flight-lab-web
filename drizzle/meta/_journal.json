@@ -8,6 +8,20 @@
       "when": 1788911107138,
       "tag": "0000_real_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793202156492,
+      "tag": "0001_empty_mauler",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793202286299,
+      "tag": "0002_youthful_iron_man",
+      "breakpoints": true
     }
   ]
 }

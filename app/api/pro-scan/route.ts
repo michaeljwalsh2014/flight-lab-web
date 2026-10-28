@@ -38,12 +38,7 @@ function json(body: object, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 }
 
-function validSharePath(request: Request) {
-  const expected = (process.env.FLIGHT_LAB_PRO_SHARE_TOKEN ?? "").trim();
-  const suppliedPath = request.headers.get("x-flight-lab-pro-path") ?? "";
-  const supplied = suppliedPath.match(/^\/pro\/share\/([^/?#]+)\/?$/)?.[1] ?? "";
-  return Boolean(expected && supplied && supplied === expected);
-}
+
 
 function safeImages(value: unknown, requiredViews: ScanView[] = viewOrder): Record<ScanView, string> | null {
   if (!value || typeof value !== "object") return null;
@@ -85,8 +80,8 @@ function extractOutput(payload: unknown) {
 
 export async function POST(request: Request) {
   const started = new Date();
-  const { user, isOwner } = await getProAccess();
-  if (!(user && isOwner) && !validSharePath(request)) return json({ error: "pro_access_required" }, 403);
+  const { hasPro } = await getProAccess();
+  if (!hasPro) return json({ error: "pro_access_required" }, 403);
   let body: RequestBody;
   try { body = await request.json() as RequestBody; } catch { return json({ error: "invalid_request" }, 400); }
   const coachId = typeof body.coachId === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(body.coachId) ? body.coachId : "";

@@ -20,7 +20,7 @@ type ProAccess =
   | { status: "loading" }
   | { status: "anonymous" }
   | { status: "visitor" }
-  | { status: "owner"; displayName: string };
+  | { status: "owner" | "member"; displayName: string };
 export type ImageSignals = {
   recognizable: boolean;
   reason: string;
@@ -308,12 +308,12 @@ export default function FlightLabApp({
     fetch("/api/pro-access", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Access check failed");
-        return response.json() as Promise<{ authenticated: boolean; isOwner: boolean; displayName: string | null }>;
+        return response.json() as Promise<{ authenticated: boolean; isOwner: boolean; hasPro: boolean; displayName: string | null }>;
       })
       .then((access) => {
         if (!active) return;
-        if (access.isOwner) {
-          setProAccess({ status: "owner", displayName: access.displayName || "Flight Lab Owner" });
+        if (access.hasPro) {
+          setProAccess({ status: access.isOwner ? "owner" : "member", displayName: access.displayName || "Flight Lab member" });
         } else {
           setProAccess({ status: access.authenticated ? "visitor" : "anonymous" });
         }
@@ -333,7 +333,7 @@ export default function FlightLabApp({
   const activeThrows = useMemo(() => throws.filter((item) => item.planeId === activePlaneId), [throws, activePlaneId]);
   const average = activeThrows.length ? activeThrows.reduce((sum, item) => sum + item.distance, 0) / activeThrows.length : 0;
   const best = activeThrows.length ? Math.max(...activeThrows.map((item) => item.distance)) : 0;
-  const ownerHasPro = proAccess.status === "owner";
+  const ownerHasPro = proAccess.status === "owner" || proAccess.status === "member";
 
   function scrollToProWorkspace() {
     const workspace = document.getElementById("pro-video-workspace");
@@ -343,15 +343,7 @@ export default function FlightLabApp({
   }
 
   function openProAccess() {
-    if (proAccess.status === "anonymous") {
-      window.location.assign("/signin-with-chatgpt?return_to=%2Fpro");
-      return;
-    }
-    if (proAccess.status === "owner") {
-      if (!scrollToProWorkspace()) window.location.assign("/pro");
-      return;
-    }
-    setProModalOpen(true);
+    window.location.assign(ownerHasPro ? "/pro" : "/pricing");
   }
 
   function signOutOfPro() {
@@ -855,7 +847,7 @@ export default function FlightLabApp({
 
       {sourceOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSourceOpen(false); }}><section className="source-modal" role="dialog" aria-modal="true" aria-labelledby="source-title"><button className="modal-close" type="button" onClick={() => setSourceOpen(false)} aria-label="Close">×</button><p className="kicker">Top view</p><h2 id="source-title">Add one plane photo</h2><p className="source-help">Lay the plane normally on a plain surface, point its nose toward the top of the picture, and include both wingtips and the tail.</p><button className="source-choice" type="button" onClick={() => cameraRef.current?.click()}><span>CAM</span><b>Take top photo</b><small>Open your camera now</small></button><button className="source-choice" type="button" onClick={() => libraryRef.current?.click()}><span>LIB</span><b>Choose top photo</b><small>Select a photo you already took</small></button></section></div>}
 
-      {proModalOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setProModalOpen(false); }}><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><p className="pro-kicker">Flight Lab Pro</p><h2 id="pro-title">{sharedProPass ? "Pro is unlocked." : ownerHasPro ? "Lifetime Pro is active." : "Owner access"}</h2><p className="pro-modal-lede">{sharedProPass ? "This Pro Pass unlocks every Flight Lab tool without an account." : ownerHasPro ? `Welcome, ${proAccess.displayName}. This owner account has permanent Pro access at no cost.` : "Sign in with the ChatGPT account that owns Flight Lab to activate free Lifetime Pro."}</p><ul><li><b>Video analyzer</b><span>Trace airtime, curves, flight shape, stability, and relative speed.</span></li><li><b>On-device analysis</b><span>Your selected video stays on your device and is not uploaded.</span></li><li><b>Flight-path report</b><span>See a visual trace and repeatable scores for comparing throws.</span></li></ul><div className={`owner-rule ${ownerHasPro ? "confirmed" : ""}`}><b>{sharedProPass ? "Pro Pass confirmed" : ownerHasPro ? "Owner confirmed" : "Access rule"}</b><span>{sharedProPass ? "Anyone with this exact private link receives Pro access automatically." : ownerHasPro ? "Your Lifetime Pro entitlement is active. You will not be charged for Flight Lab Pro." : proAccess.status === "visitor" ? "This signed-in account is not the Flight Lab owner account. Sign out, then use the owner account." : "The Flight Lab owner gets Lifetime Pro for free. Other accounts remain on the standard version while paid subscriptions are unavailable."}</span></div><p className="billing-note">{sharedProPass ? "No account, payment, or sign-in is required." : ownerHasPro ? "Owner access is tied to your signed-in account and works on any device." : "Flight Lab does not collect payment information."}</p>{ownerHasPro ? <button className="pro-primary" type="button" onClick={openProVideoLab}>Open Pro video analyzer</button> : proAccess.status === "visitor" ? <button className="pro-primary" type="button" onClick={signOutOfPro}>Sign out and switch account</button> : <button className="pro-primary" type="button" onClick={openProAccess}>Sign in with ChatGPT</button>}</section></div>}
+      {proModalOpen && <div className="modal-backdrop"><section className="pro-modal" role="dialog" aria-modal="true" aria-labelledby="pro-title"><button className="modal-close" type="button" onClick={() => setProModalOpen(false)} aria-label="Close">×</button><h2 id="pro-title">Flight Lab Pro</h2><p>Get Pro for $2.99/month, or redeem your free access code.</p><a className="pro-primary" href="/pricing">View Pro options</a></section></div>}
       {!sharedProPass && <FreeCoach context={JSON.stringify({ plane: activePlane?.name ?? "No plane selected", throws: activeThrows.length, averageFeet: Number(average.toFixed(1)), bestFeet: best, photo: report?.kind === "analysis" ? { headline: report.headline, observations: report.observations, note: "On-device heuristic photo checks, not measured accuracy" } : null })} />}
     </main>
   );
