@@ -1029,7 +1029,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pro-dashboard .pro-scan-view-grid button b { font-size: 14px; line-height: 1.35; }
 .pro-dashboard .pro-scan-view-grid button small { font-size: 12px; line-height: 1.5; }
 .pro-dashboard :is(.pro-test-feedback, .pro-history-tabs, .path-toolbar, .measure-button-row) button { padding: 14px 16px; border-radius: 20px; line-height: 1.4; }
-.pro-dashboard .pro-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pro-dashboard .pro-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.pro-dashboard .pro-form-grid > label { align-content: start; min-width: 0; }
 .pro-dashboard .pro-coach-plane-bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; }
 .pro-dashboard .pro-coach-plane-bar label { min-width: 0; }
 .pro-dashboard .pro-model-field { margin-bottom: 24px; }
