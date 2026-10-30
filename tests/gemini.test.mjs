@@ -109,7 +109,7 @@ test("v40 always sends factual questions to Gemini instead of the built-in pack"
 
 test("video review sends chronological real frames and rejects invalid or unauthorized requests", async () => {
   const frames = [0, 1, 2, 3].map((time) => ({ time, image: images.top }));
-  const review = { canReview: false, summary: "No motion evidence.", observations: ["Identical images."], uncertainties: ["Flight is not visible."], nextTest: "Film a complete throw.", releaseStrength: "uncertain", releaseConfidence: 10 };
+  const review = { coverage: { launch: "uncertain", landing: "uncertain", continuity: "uncertain", confidence: 10, evidence: "Sparse samples do not confirm release and ground contact." }, canReview: false, summary: "No motion evidence.", observations: ["Identical images."], uncertainties: ["Flight is not visible."], nextTest: "Review the original replay.", releaseStrength: "uncertain", releaseConfidence: 10 };
   let count = 0;
   const { video } = loadRoutes({ fetch: async (_url, init) => {
     count++;
@@ -231,7 +231,7 @@ test("Flight Lab 4.6 photo and video reviews use the newer visual model", async 
   assert.equal((await scanResponse.json()).model, "gemini-3.8-flash");
 
   const frames = [0, 1, 2, 3].map((time) => ({ time, image: images.top }));
-  const review = { canReview: true, summary: "Flight visible.", observations: ["The release is visible."], uncertainties: [], nextTest: "Repeat the throw.", releaseStrength: "normal", releaseConfidence: 70 };
+  const review = { coverage: { launch: "uncertain", landing: "uncertain", continuity: "uncertain", confidence: 10, evidence: "Sparse samples do not confirm release and ground contact." }, canReview: true, summary: "Flight visible.", observations: ["The release is visible."], uncertainties: [], nextTest: "Repeat the throw.", releaseStrength: "normal", releaseConfidence: 70 };
   const video = loadRoutes({ fetch: async (url) => {
     assert.match(url, /gemini-3\.8-flash:/);
     return completion(JSON.stringify(review));

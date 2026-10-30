@@ -64,6 +64,7 @@ export type ProAiContext = {
     uncertainties: string[]; nextTest: string; sampledFrames: number;
     releaseStrength: "gentle" | "normal" | "strong" | "uncertain";
     releaseConfidence: number;
+    coverage?: import("./video-coverage").FlightCoverage;
   } | null;
 };
 

@@ -1406,3 +1406,19 @@ html:has(.pro-dashboard.device-ipad), body:has(.pro-dashboard.device-ipad) { ove
 .pricing-code input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #8a9daf; border-radius: 10px; color: #122c45; background: white; font-size: 18px; }
 .pricing-code button, .pricing-subscription button { padding: 12px 18px; border: 1px solid #1266c5; border-radius: 10px; background: white; color: #1266c5; font-weight: 700; }
 .pricing-active, .pricing-message { padding: 14px; border-radius: 10px; background: #edf5ff; }.pricing-issued { overflow-wrap: anywhere; padding: 14px; background: #edf5ff; }
+
+/* Video coverage and optional scale calibration. */
+.video-coverage, .video-estimates { margin: 20px 0; padding: 20px; border: 1px solid var(--pro-line); border-radius: 20px; background: #0a2138; color: #d9e8f5; }
+.video-coverage h3, .video-estimates h4 { margin: 0 0 12px; }
+.video-coverage p, .video-estimates p { line-height: 1.6; font-size: 14px; }
+.video-coverage[data-coverage="partial"] { border-color: #ffb248; }
+.video-coverage[data-coverage="complete"] { border-color: #8cb63c; }
+.pro-dashboard .video-confirm { display: flex; align-items: flex-start; gap: 12px; margin: 16px 0; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.pro-dashboard .video-confirm input { width: 22px; height: 22px; min-height: 22px; margin: 0; flex: 0 0 22px; accent-color: var(--lime); }
+.video-estimates details { margin: 18px 0; }
+.video-estimates summary { cursor: pointer; padding: 12px 0; color: var(--cyan); }
+.video-estimates video, .video-estimates canvas { display: block; width: 100%; height: auto; margin: 14px 0; }
+.video-estimates canvas { cursor: crosshair; touch-action: pan-y; }
+.video-estimates button { min-height: 44px; padding: 10px 18px; border: 1px solid var(--pro-line); color: #d9e8f5; background: #103251; }
+.video-reference-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.video-reference-actions [aria-pressed="true"] { border-color: var(--lime); color: var(--lime); }

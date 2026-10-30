@@ -5,6 +5,8 @@ import { publishProAiContext, currentPlaneId, type ProAiContext } from "./pro-ai
 import { AnalysisLoader } from "./pro-ui";
 import { COACH_MODEL_NUMBER, COACH_MODEL_OPTIONS, useModelVersion } from "./model-version";
 
+import { coverageDecision, coverageMessage, reviewFrameTimes } from "./video-coverage";
+import { VideoEstimates } from "./video-estimates";
 import { evidenceLabel } from "./evidence-label";
 
 import { buildBestTrack, cleanTrack, projectSidePath, isTrackingGap, type TrackPoint, type Candidate } from "./flight-tracking";
@@ -25,7 +27,7 @@ type VideoReport = {
 
 type VideoInspection = NonNullable<ProAiContext["videoInspection"]>;
 
-async function sampleVideoForReview(url: string) {
+async function sampleVideoForReview(url: string, points: TrackPoint[] = []) {
   const video = document.createElement("video");
   video.muted = true; video.playsInline = true; video.preload = "auto";
   video.src = url;
@@ -41,8 +43,7 @@ async function sampleVideoForReview(url: string) {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("This browser could not prepare video frames.");
     const frames: Array<{ time: number; image: string }> = [];
-    for (let index = 0; index < 12; index++) {
-      const time = (duration - .025) * index / 11;
+    for (const time of reviewFrameTimes(duration, points)) {
       await seekVideo(video, time);
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       frames.push({ time, image: canvas.toDataURL("image/jpeg", .72) });
@@ -367,6 +368,8 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [traceConfirmed, setTraceConfirmed] = useState(false);
+  useEffect(() => { setTraceConfirmed(false); }, [report, videoUrl, selectedModel]);
   const [inspection, setInspection] = useState<VideoInspection | null>(null);
   const reviewGeneration = useRef(0);
   const reportGeneration = useRef(-1);
@@ -454,6 +457,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
     setStage("Preparing the flight");
     try {
       let localError = "";
+      let trackedPoints: TrackPoint[] = [];
       try {
         const nextReport = await analyzeVideo(videoUrl, (nextProgress, nextStage) => {
           if (!isCurrent()) return;
@@ -463,6 +467,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
         if (!isCurrent()) return;
         reportGeneration.current = generation;
         setReport(nextReport);
+        trackedPoints = nextReport.points;
       } catch (failure) {
         if (selectedModel !== "v40" && selectedModel !== "v46") throw failure;
         localError = failure instanceof Error ? failure.message : "Local tracking was unavailable.";
@@ -470,7 +475,7 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
       if (selectedModel === "v40" || selectedModel === "v46") {
         if (!isCurrent()) return;
         setProgress(65); setStage("Preparing frames for advanced review");
-        const sampled = await sampleVideoForReview(videoUrl);
+        const sampled = await sampleVideoForReview(videoUrl, trackedPoints);
         if (!isCurrent()) return;
         setProgress(80); setStage("Reviewing the visible flight with AI");
         const storageKey = "flight-lab-pro-coach-id";
@@ -528,12 +533,19 @@ export default function ProVideoLab({ displayName }: { displayName: string }) {
 
       {analyzing && <AnalysisLoader progress={progress} label={stage} />}
 
+      {(report || inspection) && <section className="video-coverage" data-coverage={coverageDecision(inspection?.coverage, traceConfirmed)} aria-live="polite">
+        <h3>{coverageDecision(inspection?.coverage, traceConfirmed) === "complete" ? "Full flight confirmed" : coverageDecision(inspection?.coverage, traceConfirmed) === "partial" ? "Only part of the flight is visible" : "Flight coverage not confirmed"}</h3>
+        <p>{coverageMessage(inspection?.coverage, traceConfirmed)}</p>
+        {inspection?.coverage?.evidence && <p><b>AI visual evidence:</b> {inspection.coverage.evidence}</p>}
+        {!inspection && <small>Local motion tracking cannot verify release or ground contact. Advanced AI can review the visible evidence, or you can confirm the replay below.</small>}
+      </section>}
       {inspection && <section className="pro-video-ai-review compact" aria-live="polite"><span>Flight Lab {COACH_MODEL_NUMBER[selectedModel]} · Quick review</span><h3>{inspection.canReview ? inspection.summary : "More visual evidence needed"}</h3><ul>{inspection.observations.slice(0, 2).map((item) => <li key={item}>{item}</li>)}</ul><p><b>Release:</b> {inspection.releaseStrength}{inspection.releaseStrength !== "uncertain" ? " · AI interpretation" : ""} <b>Next:</b> {inspection.nextTest}</p>{inspection.uncertainties.length > 0 && <small>Uncertain: {inspection.uncertainties.slice(0, 1).join(" ")}</small>}</section>}
 
       {report && videoUrl && <div className="pro-video-report" aria-live="polite">
         <div className="pro-report-heading"><div><span>Analysis complete</span><h3>{report.profile}</h3></div><div><b>{evidenceLabel(report.confidence)}</b><small>{trackQuality}</small></div></div>
         <VideoPathReplay url={videoUrl} report={report} />
         <SideFlightPath report={report} />
+        <VideoEstimates key={videoUrl} url={videoUrl} points={report.points} aspect={report.frameAspect} interval={report.sampleInterval} confirmed={traceConfirmed} onConfirm={setTraceConfirmed} />
         <div className="pro-report-metrics compact"><article><span>Visible tracked time</span><b>{report.airtime.toFixed(2)} <small>sec</small></b></article><article><span>Flight curve</span><b>{report.curve}<small>/100</small></b></article><article><span>Path stability</span><b>{report.stability}<small>/100</small></b></article></div>
         <p className="pro-video-summary"><b>On-device coach observations:</b> {report.observations[0]} <span>Relative speed: {report.relativeSpeed.toFixed(2)} screen/sec.</span></p>
         <p className="pro-report-note">{report.sampledFrames} frames sampled · orange points are uncertain · dashed sections mark missed samples. Screen motion, not real-world distance; evidence labels are heuristic checks, not measured accuracy.</p>
