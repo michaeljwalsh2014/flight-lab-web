@@ -89,7 +89,7 @@ test("anonymous Pro access page offers code entry without sign-in or payments", 
  const response = await worker.fetch(new Request("http://localhost/pricing", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
  assert.equal(response.status, 200);
  const html = await response.text();
- assert.match(html, /Enter your Pro code/); assert.match(html, /No sign-in or payment is needed/); assert.match(html, /Unlock Pro/); assert.doesNotMatch(html, /Sign in to get Pro|Subscribe for/);
+ assert.match(html, /Enter code/); assert.match(html, /No sign-in or payment is needed/); assert.match(html, /Unlock Pro/); assert.doesNotMatch(html, /Sign in to get Pro|Subscribe for/);
 });
 
 
@@ -135,4 +135,25 @@ test("additional code generation is disabled", async () => {
  const response = await load("./api/billing/codes/route").POST(new Request("https://flight-lab-airplane.mikewalsh3119.chatgpt.site/api/billing/codes", { method: "POST", headers: { origin: "https://flight-lab-airplane.mikewalsh3119.chatgpt.site" } }));
  assert.equal(response.status, 409);
  assert.equal((await response.json()).code, undefined);
+});
+
+test("lockout status survives reload checks without spending attempts or extending expiry", async () => {
+ const { store, sql, load } = setup();
+ const request = new Request("https://flight-lab-airplane.mikewalsh3119.chatgpt.site/api/billing/redeem", { headers: { "cf-connecting-ip": "192.0.2.55" } });
+ const identity = await store.codeAttemptIdentity(null, request.headers);
+ const now = Date.now();
+ assert.equal(await store.readCodeLockout(identity, now), 0);
+ await store.redeemCode(identity, "wrong", now, false);
+ assert.equal(await store.readCodeLockout(identity, now), 0);
+ const second = await store.redeemCode(identity, "wrong", now + 1, false);
+ for (let reload = 0; reload < 3; reload++) {
+  const response = await load("./api/billing/redeem/route").GET(request);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.equal((await response.json()).retryAt, second.retryAt);
+ }
+ const row = sql.prepare("SELECT attempts, resets_at FROM pro_code_attempts WHERE account = ?").get(identity);
+ assert.equal(row.attempts, 2); assert.equal(row.resets_at, second.retryAt);
+ assert.equal(await store.readCodeLockout(identity, second.retryAt - 1), second.retryAt);
+ assert.equal(await store.readCodeLockout(identity, second.retryAt), 0);
 });

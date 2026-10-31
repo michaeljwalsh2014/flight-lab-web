@@ -26,6 +26,14 @@ export const RESERVE_CODE_ATTEMPT = `INSERT INTO pro_code_attempts (account, att
  ON CONFLICT(account) DO UPDATE SET attempts = CASE WHEN resets_at <= ? THEN 1 ELSE attempts + 1 END,
  resets_at = CASE WHEN resets_at <= ? OR attempts = 1 THEN ? ELSE resets_at END
  WHERE resets_at <= ? OR attempts < 2 RETURNING attempts, resets_at`;
+export async function codeAttemptIdentity(account: string | null, requestHeaders: Pick<Headers, "get">) {
+  return account ?? await sha256(`anonymous-pro-code:${requestHeaders.get("cf-connecting-ip") ?? "shared"}`);
+}
+export async function readCodeLockout(account: string, now = Date.now()) {
+  const db = await billingDb();
+  const row = await db.prepare("SELECT attempts, resets_at FROM pro_code_attempts WHERE account = ?").bind(account).first<{ attempts: number; resets_at: number }>();
+  return row && row.attempts >= 2 && row.resets_at > now ? row.resets_at : 0;
+}
 export async function redeemCode(account: string, code: string, now = Date.now(), persistentGrant = true) {
   const db = await billingDb();
   const attempt = await db.prepare(RESERVE_CODE_ATTEMPT).bind(account, now + LOCKOUT_MS, now, now, now + LOCKOUT_MS, now).first<{ attempts: number; resets_at: number }>();
