@@ -6,11 +6,11 @@ import ts from "typescript";
 test("Pro daily allowance is atomic, per verified account, and resets at 6 a.m. Central", async () => {
  const sql = new DatabaseSync(":memory:");
  const db = { prepare(query) { const bind = (...args) => ({ first: async () => sql.prepare(query).get(...args), run: async () => sql.prepare(query).run(...args) }); return { bind, ...bind() }; } };
- let user = { email: "first@example.com" };
+ let user = { email: "first@example.com" }, passIdentity = null;
  const cache = new Map();
  function load(name) {
   name = name.replace("@/app/", "./");
-  if (name === "./pro-access") return { getProAccess: async () => ({ user }) };
+  if (name === "./pro-access") return { getProAccess: async () => ({ user, passIdentity }) };
   if (name === "cloudflare:workers") return { env: { DB: db } };
   if (cache.has(name)) return cache.get(name);
   const source = ts.transpileModule(readFileSync(new URL(`../app/${name.replace("./", "")}.ts`, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -31,6 +31,12 @@ test("Pro daily allowance is atomic, per verified account, and resets at 6 a.m. 
  assert.equal(await reserveProReview(before), "exhausted");
  assert.equal(await reserveProReview(new Date("2026-10-23T11:00:00Z")), "allowed");
  user = null; assert.equal(await reserveProMessage(before), "sign_in_required");
+ passIdentity = "browser-pass:fixture";
+ const passReviews = await Promise.all(Array.from({ length: 10 }, () => reserveProReview(before)));
+ assert.equal(passReviews.filter(x => x === "allowed").length, 7);
+ assert.equal(passReviews.filter(x => x === "exhausted").length, 3);
+ await refundProReview(before); assert.equal(await reserveProReview(before), "allowed");
+ assert.equal(await reserveProMessage(before), "allowed");
 });
 
 test("usage messages show the actual next reset date, including before 6 a.m.", () => {

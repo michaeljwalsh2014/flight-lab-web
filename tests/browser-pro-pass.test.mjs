@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+const source = ts.transpileModule(readFileSync(new URL("../app/browser-pro-pass.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const pass = {};
+let cookie = "";
+new Function("require", "exports", source)(name => { assert.equal(name, "next/headers"); return { headers: async () => new Headers({ cookie }) }; }, pass);
+test("a browser pass needs no user identity, survives reload and rejects tampering/expiry", async () => {
+ process.env.FLIGHT_LAB_BROWSER_PASS_SECRET = "fixture-secret-not-for-production";
+ process.env.FLIGHT_LAB_BROWSER_CODE_HASH = "a".repeat(64);
+ const now = Date.now(); const token = await pass.makeBrowserPass(now);
+ assert.equal(await pass.verifyBrowserPass(token, now), true);
+ assert.equal(await pass.verifyBrowserPass(token + "extra", now), false);
+ assert.equal(await pass.verifyBrowserPass(token, now + (pass.PASS_SECONDS + 1) * 1000), false);
+ cookie = `${pass.PRO_PASS_COOKIE}=${token}`;
+ assert.equal(await pass.readBrowserPass(), `browser-pass:${"a".repeat(64)}`);
+ cookie = ""; assert.equal(await pass.readBrowserPass(), null);
+ process.env.FLIGHT_LAB_BROWSER_CODE_HASH = "b".repeat(64);
+ assert.equal(await pass.verifyBrowserPass(token, now), false);
+ delete process.env.FLIGHT_LAB_BROWSER_CODE_HASH; delete process.env.FLIGHT_LAB_BROWSER_PASS_SECRET;
+});

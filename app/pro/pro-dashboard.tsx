@@ -1073,7 +1073,7 @@ export default function ProDashboard({
       <header className="pro-nav">
         <a className="pro-brand" href="#pro-top"><span>➤</span><b>Flight Lab</b><em>PRO</em></a>
         <nav aria-label="Pro tools"><a href="#plane-hangar">Planes</a><a href="#plane-coach"><span className="pro-tablet-label">Plane AI</span><span className="pro-phone-label">Inspect</span></a><a hidden={level === "beginner"} href="#video-lab"><span className="pro-tablet-label">Flight path</span><span className="pro-phone-label">Video</span></a><a href="#smart-measure"><span className="pro-tablet-label">Smart Measure</span><span className="pro-phone-label">Measure</span></a><a hidden={level !== "pro"} href="#experiment-lab"><span className="pro-tablet-label">Experiments</span><span className="pro-phone-label">Tests</span></a></nav>
-        <div className="pro-nav-actions">{level !== "beginner" && <a className="pro-measure-shortcut" href="#smart-measure">Measure</a>}<a className="back-to-lab" href="/pricing">Manage Pro</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
+        <div className="pro-nav-actions">{level !== "beginner" && <a className="pro-measure-shortcut" href="#smart-measure">Measure</a>}<a className="back-to-lab" href="/pricing">Access code</a><a className="back-to-lab" href="/">Free Flight Lab</a></div>
       </header>
 
       <section className="pro-interface-panel" aria-label="Choose your interface">

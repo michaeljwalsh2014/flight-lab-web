@@ -12,13 +12,15 @@ function setup() {
  }, async batch(statements) { sql.exec("BEGIN"); try { const results = []; for (const statement of statements) results.push(await statement.run()); sql.exec("COMMIT"); return results; } catch (error) { sql.exec("ROLLBACK"); throw error; } } };
  const cache = new Map();
  const load = name => {
+  if (name === "@/app/pro-access") return { getProAccess: async () => ({ account: null }) };
+  if (name === "next/headers") return { headers: async () => new Headers() };
   if (name === "cloudflare:workers") return { env: { DB: db } };
   name = name.replace("@/app/", "./");
   if (cache.has(name)) return cache.get(name);
   const source = ts.transpileModule(readFileSync(new URL(`../app/${name.replace("./", "")}.ts`, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const result = {}; cache.set(name, result); new Function("require", "exports", source)(load, result); return result;
  };
- return { store: load("./billing-store"), stripe: load("./stripe-server"), sql };
+ return { store: load("./billing-store"), stripe: load("./stripe-server"), sql, load };
 }
 test("second incorrect guess locks the correct code out for exactly 24 hours", async () => {
  const { store } = setup(); const code = await store.issueCode(); const now = 100000;
@@ -76,10 +78,28 @@ test("checkout stays disabled without explicit live credentials and activation",
  const { stripe } = setup(); assert.equal(stripe.checkoutReady(), false);
 });
 
-test("anonymous pricing page offers sign-in and code options without taking payments", async () => {
+test("anonymous Pro access page offers code entry without sign-in or payments", async () => {
  const { default: worker } = await import(new URL(`../dist/server/index.js?billing=${Date.now()}`, import.meta.url));
  const response = await worker.fetch(new Request("http://localhost/pricing", { headers: { accept: "text/html" } }), { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } }, { waitUntil() {}, passThroughOnException() {} });
  assert.equal(response.status, 200);
  const html = await response.text();
- assert.match(html, /\$2\.99/); assert.match(html, /Sign in to get Pro/); assert.match(html, /More/); assert.match(html, /Subscriptions opening soon|Payment setup is in progress/);
+ assert.match(html, /Enter your Pro code/); assert.match(html, /No sign-in or payment is needed/); assert.match(html, /Unlock Pro/); assert.doesNotMatch(html, /Sign in to get Pro|Subscribe for/);
+});
+
+
+test("anonymous code redemption sets a verified secure pass without granting a network address permanent access", async () => {
+ const { store, sql, load } = setup();
+ process.env.FLIGHT_LAB_BROWSER_CODE_HASH = await store.sha256(store.normalizeCode("FLIGHT-FIXTURE"));
+ process.env.FLIGHT_LAB_BROWSER_PASS_SECRET = "fixture-secret-only";
+ const api = load("./api/billing/redeem/route");
+ const request = origin => new Request("https://flight-lab-airplane.mikewalsh3119.chatgpt.site/api/billing/redeem", { method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": "192.0.2.1" }, body: JSON.stringify({ code: "FLIGHT-FIXTURE" }) });
+ assert.equal((await api.POST(request("https://unrelated.example"))).status, 403);
+ const response = await api.POST(request("https://flight-lab-airplane.mikewalsh3119.chatgpt.site"));
+ assert.equal(response.status, 200); assert.equal((await response.json()).ok, true);
+ const cookie = response.headers.get("set-cookie");
+ assert.match(cookie, /HttpOnly/); assert.match(cookie, /Secure/); assert.match(cookie, /SameSite=Lax/);
+ const token = cookie.split(";")[0].split("=")[1];
+ assert.equal(await load("./browser-pro-pass").verifyBrowserPass(token), true);
+ assert.equal(sql.prepare("SELECT COUNT(*) AS count FROM pro_grants").get().count, 0);
+ delete process.env.FLIGHT_LAB_BROWSER_CODE_HASH; delete process.env.FLIGHT_LAB_BROWSER_PASS_SECRET;
 });

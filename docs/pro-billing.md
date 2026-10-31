@@ -42,3 +42,7 @@ Recipients sign in, select **More → Enter a code**, and redeem it. Access is a
 Generating a replacement retires previous codes for new redemptions, while keeping existing account grants. Legacy `/pro/share/...` bearer links now redirect to `/pricing`; the old environment secret is preserved but no longer authorizes access.
 
 New tables and bounded schema-only migrations are additive. No planes, throws, photos, feedback, Coach conversations or browser preferences are deleted or migrated by this update.
+
+## Code-only testing (payments paused)
+
+`/pricing` now serves a direct code-entry screen without payment or sign-in. `FLIGHT_LAB_PAYMENTS_ENABLED` is false. The reusable test code is configured as a digest in secret `FLIGHT_LAB_BROWSER_CODE_HASH`; `FLIGHT_LAB_BROWSER_PASS_SECRET` signs 30-day, Secure, HttpOnly, SameSite=Lax browser passes. Neither plaintext code nor signing secret belongs in source control. Anonymous redemptions do not create persistent grants tied to network addresses. Two failed guesses are limited in D1 by verified account or Cloudflare-supplied network identity (a shared anonymous bucket if that header is unavailable). Anonymous code holders share the code's existing AI budgets; changing browser client IDs cannot reset them. Signed-in accounts retain their existing daily allowance identities.

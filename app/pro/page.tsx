@@ -5,11 +5,8 @@ import ProDashboard from "./pro-dashboard";
 export const dynamic = "force-dynamic";
 
 export default async function ProPage() {
-  const { user, isOwner, hasPro, freePass, displayName } = await getProAccess();
+  const { isOwner, hasPro, freePass, displayName } = await getProAccess();
 
-  if (!user) {
-    redirect("/signin-with-chatgpt?return_to=%2Fpro");
-  }
   if (!hasPro) {
     redirect("/pricing");
   }

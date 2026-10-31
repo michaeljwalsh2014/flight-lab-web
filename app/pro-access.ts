@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { readBrowserPass } from "./browser-pro-pass";
 import { readEntitlement, sha256 } from "./billing-store";
 
 export async function getProAccess() {
@@ -13,5 +14,7 @@ export async function getProAccess() {
     try { const entitlement = await readEntitlement(account); hasPro = entitlement.hasPro; freePass = entitlement.grant; }
     catch { unavailable = true; }
   }
-  return { user, account, isOwner, hasPro, freePass, unavailable, displayName: user?.displayName ?? null };
+  const passIdentity = await readBrowserPass();
+  if (passIdentity) { hasPro = true; freePass = true; unavailable = false; }
+  return { user, account, passIdentity, isOwner, hasPro, freePass, unavailable, displayName: user?.displayName ?? (passIdentity ? "Pro Pass" : null) };
 }
