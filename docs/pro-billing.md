@@ -35,11 +35,9 @@ Checkout validates the configured price, currency, billing interval and live mod
 
 ## Free Pro codes
 
-Sign in as the Flight Lab owner and open `/pricing`. Expand **Owner: free Pro pass code**, then generate a code. It is a randomly generated reusable code displayed only in the response to that owner action. Save it privately. Only its SHA-256 digest is stored in D1.
+Only the one code verified against `FLIGHT_LAB_BROWSER_CODE_HASH` is accepted. Stored legacy codes are not consulted, and `/api/billing/codes` cannot generate additional codes. The plaintext code is not stored in source or the database. Existing grants and browser passes remain intact; an existing grant never causes a wrong code to be reported as valid.
 
-Recipients sign in, select **More → Enter a code**, and redeem it. Access is attached to the verified account and persists across devices. Each account gets two guesses. The second incorrect guess locks entry for 24 hours; the server atomically reserves attempts before comparing a digest. Clearing browser data cannot reset the lockout. Locks do not block payment or Free features. Blank inputs do not consume an attempt.
-
-Generating a replacement retires previous codes for new redemptions, while keeping existing account grants. Legacy `/pro/share/...` bearer links now redirect to `/pricing`; the old environment secret is preserved but no longer authorizes access.
+Recipients enter the code at `/pricing` without signing in. Two incorrect guesses trigger the existing 24-hour server-side lockout. Legacy `/pro/share/...` bearer links redirect to the code-entry page.
 
 New tables and bounded schema-only migrations are additive. No planes, throws, photos, feedback, Coach conversations or browser preferences are deleted or migrated by this update.
 

@@ -28,26 +28,15 @@ export const RESERVE_CODE_ATTEMPT = `INSERT INTO pro_code_attempts (account, att
  WHERE resets_at <= ? OR attempts < 2 RETURNING attempts, resets_at`;
 export async function redeemCode(account: string, code: string, now = Date.now(), persistentGrant = true) {
   const db = await billingDb();
-  if (persistentGrant && await db.prepare("SELECT account FROM pro_grants WHERE account = ?").bind(account).first()) return { ok: true };
   const attempt = await db.prepare(RESERVE_CODE_ATTEMPT).bind(account, now + LOCKOUT_MS, now, now, now + LOCKOUT_MS, now).first<{ attempts: number; resets_at: number }>();
   if (!attempt) {
     const locked = await db.prepare("SELECT resets_at FROM pro_code_attempts WHERE account = ?").bind(account).first<{ resets_at: number }>();
     return { ok: false, remaining: 0, retryAt: locked?.resets_at ?? now + LOCKOUT_MS };
   }
   const digest = await sha256(normalizeCode(code));
-  const valid = await db.prepare("SELECT digest FROM pro_codes WHERE digest = ? AND active = 1").bind(digest).first();
   const browserCodeMatches = Boolean(process.env.FLIGHT_LAB_BROWSER_CODE_HASH && digest === process.env.FLIGHT_LAB_BROWSER_CODE_HASH);
-  if (!valid && !browserCodeMatches) return { ok: false, remaining: 2 - attempt.attempts, retryAt: attempt.attempts === 2 ? attempt.resets_at : null };
+  if (!browserCodeMatches) return { ok: false, remaining: 2 - attempt.attempts, retryAt: attempt.attempts === 2 ? attempt.resets_at : null };
   if (persistentGrant) await db.prepare("INSERT OR IGNORE INTO pro_grants (account, created_at) VALUES (?, ?)").bind(account, now).run();
   await db.prepare("DELETE FROM pro_code_attempts WHERE account = ?").bind(account).run();
   return { ok: true };
-}
-export async function issueCode() {
-  const code = "FL-" + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
-  const db = await billingDb();
-  await db.batch([
-    db.prepare("UPDATE pro_codes SET active = 0 WHERE active = 1"),
-    db.prepare("INSERT INTO pro_codes (digest, active, created_at) VALUES (?, 1, ?)").bind(await sha256(normalizeCode(code)), Date.now()),
-  ]);
-  return code;
 }

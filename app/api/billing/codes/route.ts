@@ -1,9 +1,7 @@
-import { getProAccess } from "@/app/pro-access";
-import { issueCode } from "@/app/billing-store";
 import { billingJson as json, sameOrigin } from "@/app/billing-http";
+// Code issuance is intentionally disabled: only the existing configured code
+// can redeem Pro. Keep historical code/grant records intact.
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return json({ message: "Refresh the page and try again." }, 403);
-  if (!(await getProAccess()).isOwner) return json({ message: "Owner access required." }, 403);
-  try { return json({ code: await issueCode(), message: "Share this code privately. It is shown only now. Previous codes stop accepting new redemptions; people already granted Pro keep it." }); }
-  catch { return json({ message: "The code could not be created. Try again later." }, 503); }
+  return json({ message: "Creating additional codes is disabled. Use the existing Pro access code." }, 409);
 }

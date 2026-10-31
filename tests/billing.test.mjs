@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import ts from "typescript";
+beforeEach(() => { delete process.env.FLIGHT_LAB_BROWSER_CODE_HASH; });
+async function configureCode(store) {
+ const code = `FL-FIXTURE-${crypto.randomUUID()}`;
+ process.env.FLIGHT_LAB_BROWSER_CODE_HASH = await store.sha256(store.normalizeCode(code));
+ return code;
+}
 function setup() {
  const sql = new DatabaseSync(":memory:");
  for (const file of readdirSync(new URL("../drizzle", import.meta.url)).filter(f => f.endsWith(".sql")).sort()) sql.exec(readFileSync(new URL(`../drizzle/${file}`, import.meta.url), "utf8").replaceAll("--> statement-breakpoint", ""));
@@ -23,7 +29,7 @@ function setup() {
  return { store: load("./billing-store"), stripe: load("./stripe-server"), sql, load };
 }
 test("second incorrect guess locks the correct code out for exactly 24 hours", async () => {
- const { store } = setup(); const code = await store.issueCode(); const now = 100000;
+ const { store } = setup(); const code = await configureCode(store); const now = 100000;
  assert.equal((await store.redeemCode("alice", "wrong", now)).remaining, 1);
  const second = await store.redeemCode("alice", "wrong", now + 1000);
  assert.equal(second.remaining, 0); assert.equal(second.retryAt, now + 1000 + store.LOCKOUT_MS);
@@ -31,13 +37,13 @@ test("second incorrect guess locks the correct code out for exactly 24 hours", a
  assert.equal((await store.redeemCode("alice", code, second.retryAt)).ok, true);
 });
 test("one code works for multiple accounts and only hashes are stored", async () => {
- const { store, sql } = setup(); const code = await store.issueCode();
+ const { store, sql } = setup(); const code = await configureCode(store);
  assert.equal((await store.redeemCode("alice", code.toLowerCase())).ok, true);
  assert.equal((await store.redeemCode("bob", code)).ok, true);
  assert.equal((await store.readEntitlement("alice")).hasPro, true);
  assert.equal((await store.readEntitlement("charlie")).hasPro, false);
  assert.ok(!JSON.stringify(sql.prepare("SELECT * FROM pro_codes").all()).includes(code));
- const replacement = await store.issueCode();
+ const replacement = await configureCode(store);
  assert.equal((await store.redeemCode("charlie", code)).ok, false);
  assert.equal((await store.redeemCode("charlie", replacement)).ok, true);
  assert.equal((await store.readEntitlement("alice")).hasPro, true);
@@ -102,4 +108,31 @@ test("anonymous code redemption sets a verified secure pass without granting a n
  assert.equal(await load("./browser-pro-pass").verifyBrowserPass(token), true);
  assert.equal(sql.prepare("SELECT COUNT(*) AS count FROM pro_grants").get().count, 0);
  delete process.env.FLIGHT_LAB_BROWSER_CODE_HASH; delete process.env.FLIGHT_LAB_BROWSER_PASS_SECRET;
+});
+
+
+test("legacy active codes are rejected even for an account that already has a grant", async () => {
+ const { store, sql } = setup();
+ const configured = await configureCode(store);
+ const legacy = "FL-OLD-CODE";
+ sql.prepare("INSERT INTO pro_codes (digest, active, created_at) VALUES (?, 1, 1)").run(await store.sha256(store.normalizeCode(legacy)));
+ sql.prepare("INSERT INTO pro_grants (account, created_at) VALUES ('existing', 1)").run();
+ assert.equal((await store.redeemCode("existing", legacy)).ok, false);
+ assert.equal((await store.readEntitlement("existing")).hasPro, true);
+ assert.equal((await store.redeemCode("new-browser", legacy, Date.now(), false)).ok, false);
+ assert.equal((await store.redeemCode("new-browser", configured, Date.now(), false)).ok, true);
+ assert.equal(sql.prepare("SELECT COUNT(*) AS count FROM pro_codes").get().count, 1);
+});
+
+test("missing configured code never falls back to stored legacy codes", async () => {
+ const { store, sql } = setup();
+ sql.prepare("INSERT INTO pro_codes (digest, active, created_at) VALUES (?, 1, 1)").run(await store.sha256(store.normalizeCode("LEGACY")));
+ assert.equal((await store.redeemCode("test", "LEGACY")).ok, false);
+});
+
+test("additional code generation is disabled", async () => {
+ const { load } = setup();
+ const response = await load("./api/billing/codes/route").POST(new Request("https://flight-lab-airplane.mikewalsh3119.chatgpt.site/api/billing/codes", { method: "POST", headers: { origin: "https://flight-lab-airplane.mikewalsh3119.chatgpt.site" } }));
+ assert.equal(response.status, 409);
+ assert.equal((await response.json()).code, undefined);
 });
